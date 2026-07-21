@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 200" font-family="Segoe UI, system-ui, sans-serif" font-size="13">
+  <defs>
+    <marker id="a3" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#475569"/>
+    </marker>
+    <filter id="s3" x="-2%" y="-2%" width="104%" height="104%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <text x="440" y="24" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">Alur 3: Sensor → ClickHouse (Historical Store)</text>
+
+  <!-- Step 1: Sensor -->
+  <rect x="20" y="50" width="120" height="55" rx="8" fill="#ecfdf5" stroke="#86efac" stroke-width="1.5" filter="url(#s3)"/>
+  <text x="80" y="74" text-anchor="middle" font-weight="700" fill="#166534">Sensor n1–n6</text>
+  <text x="80" y="90" text-anchor="middle" fill="#4b5563" font-size="10">per menit</text>
+
+  <line x1="140" y1="78" x2="185" y2="78" stroke="#475569" stroke-width="1.5" marker-end="url(#a3)"/>
+
+  <!-- Step 2: EMQX -->
+  <rect x="190" y="50" width="100" height="55" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5" filter="url(#s3)"/>
+  <text x="240" y="74" text-anchor="middle" font-weight="700" fill="#1e40af">EMQX</text>
+  <text x="240" y="90" text-anchor="middle" fill="#4b5563" font-size="10">Broker</text>
+
+  <line x1="290" y1="78" x2="335" y2="78" stroke="#475569" stroke-width="1.5" marker-end="url(#a3)"/>
+
+  <!-- Step 3: Consumer Buffer -->
+  <rect x="340" y="42" width="180" height="72" rx="8" fill="#fefce8" stroke="#fbbf24" stroke-width="1.5" filter="url(#s3)"/>
+  <text x="430" y="64" text-anchor="middle" font-weight="700" fill="#92400e">Consumer Buffer</text>
+  <text x="430" y="82" text-anchor="middle" fill="#4b5563" font-size="10">Kumpulkan baris data</text>
+  <text x="430" y="98" text-anchor="middle" fill="#9ca3af" font-size="9">flush: 100 baris / 5 detik</text>
+
+  <line x1="520" y1="78" x2="590" y2="78" stroke="#475569" stroke-width="1.5" marker-end="url(#a3)"/>
+  <text x="555" y="70" text-anchor="middle" fill="#6b7280" font-size="9">batch</text>
+  <text x="555" y="82" text-anchor="middle" fill="#6b7280" font-size="9">INSERT</text>
+
+  <!-- Step 4: ClickHouse -->
+  <rect x="595" y="42" width="260" height="72" rx="8" fill="#faf5ff" stroke="#c084fc" stroke-width="1.5" filter="url(#s3)"/>
+  <text x="725" y="64" text-anchor="middle" font-weight="700" fill="#7e22ce">ClickHouse — sensor_data</text>
+  <text x="725" y="82" text-anchor="middle" fill="#4b5563" font-size="10">MergeTree · PARTITION by month</text>
+  <text x="725" y="98" text-anchor="middle" fill="#4b5563" font-size="10">ORDER BY (device_id, timestamp)</text>
+  <text x="725" y="110" text-anchor="middle" fill="#9ca3af" font-size="9">TTL 90 hari</text>
+
+  <!-- Use cases -->
+  <rect x="595" y="135" width="260" height="50" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="725" y="155" text-anchor="middle" font-weight="600" fill="#334155" font-size="11">Kegunaan Data Historis</text>
+  <text x="725" y="172" text-anchor="middle" fill="#4b5563" font-size="10">Grafik 24h/7d · Analisis tren · Audit trail</text>
+</svg>

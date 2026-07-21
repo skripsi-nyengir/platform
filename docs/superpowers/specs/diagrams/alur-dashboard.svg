@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 280" font-family="Segoe UI, system-ui, sans-serif" font-size="13">
+  <defs>
+    <marker id="a1" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#475569"/>
+    </marker>
+    <filter id="s1" x="-2%" y="-2%" width="104%" height="104%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <text x="440" y="24" text-anchor="middle" font-size="15" font-weight="700" fill="#0f172a">Alur 1: Sensor → Dashboard (Real-Time Display)</text>
+
+  <!-- Step 1: Sensor -->
+  <rect x="20" y="50" width="140" height="60" rx="8" fill="#ecfdf5" stroke="#86efac" stroke-width="1.5" filter="url(#s1)"/>
+  <text x="90" y="75" text-anchor="middle" font-weight="700" fill="#166534">Sensor n1–n6</text>
+  <text x="90" y="92" text-anchor="middle" fill="#4b5563" font-size="10">setiap menit</text>
+
+  <line x1="160" y1="80" x2="210" y2="80" stroke="#475569" stroke-width="1.5" marker-end="url(#a1)"/>
+  <text x="185" y="72" text-anchor="middle" fill="#6b7280" font-size="9">MQTT</text>
+
+  <!-- Step 2: EMQX -->
+  <rect x="215" y="50" width="120" height="60" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5" filter="url(#s1)"/>
+  <text x="275" y="75" text-anchor="middle" font-weight="700" fill="#1e40af">EMQX</text>
+  <text x="275" y="92" text-anchor="middle" fill="#4b5563" font-size="10">MQTT Broker</text>
+
+  <line x1="335" y1="80" x2="385" y2="80" stroke="#475569" stroke-width="1.5" marker-end="url(#a1)"/>
+  <text x="360" y="72" text-anchor="middle" fill="#6b7280" font-size="9">subscribe</text>
+
+  <!-- Step 3: Consumer -->
+  <rect x="390" y="42" width="160" height="76" rx="8" fill="#fefce8" stroke="#fbbf24" stroke-width="1.5" filter="url(#s1)"/>
+  <text x="470" y="65" text-anchor="middle" font-weight="700" fill="#92400e">Consumer</text>
+  <text x="470" y="82" text-anchor="middle" fill="#4b5563" font-size="10">1. Parse JSON</text>
+  <text x="470" y="95" text-anchor="middle" fill="#4b5563" font-size="10">2. SET Redis</text>
+  <text x="470" y="108" text-anchor="middle" fill="#9ca3af" font-size="9">3. Buffer → ClickHouse</text>
+
+  <!-- Arrow to Redis -->
+  <line x1="470" y1="118" x2="470" y2="158" stroke="#475569" stroke-width="1.5" marker-end="url(#a1)"/>
+  <text x="484" y="142" fill="#6b7280" font-size="9">write</text>
+
+  <!-- Step 4: Redis -->
+  <rect x="390" y="160" width="160" height="55" rx="8" fill="#faf5ff" stroke="#c084fc" stroke-width="1.5" filter="url(#s1)"/>
+  <text x="470" y="182" text-anchor="middle" font-weight="700" fill="#7e22ce">Redis</text>
+  <text x="470" y="198" text-anchor="middle" fill="#4b5563" font-size="10">sensor:n1:latest</text>
+  <text x="470" y="210" text-anchor="middle" fill="#9ca3af" font-size="9">TTL 5 min</text>
+
+  <!-- Arrow to Laravel -->
+  <line x1="390" y1="188" x2="210" y2="188" stroke="#475569" stroke-width="1.5" marker-end="url(#a1)" stroke-dasharray="5,3"/>
+  <text x="300" y="180" text-anchor="middle" fill="#6b7280" font-size="9">poll (10s)</text>
+
+  <!-- Step 5: Laravel -->
+  <rect x="20" y="155" width="185" height="65" rx="8" fill="#f0fdf4" stroke="#4ade80" stroke-width="1.5" filter="url(#s1)"/>
+  <text x="112" y="178" text-anchor="middle" font-weight="700" fill="#166534">Laravel Dashboard</text>
+  <text x="112" y="195" text-anchor="middle" fill="#4b5563" font-size="10">GET /api/sensors/latest</text>
+  <text x="112" y="208" text-anchor="middle" fill="#9ca3af" font-size="9">6 device cards · polling</text>
+
+  <!-- Detail box -->
+  <rect x="590" y="42" width="270" height="185" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" filter="url(#s1)"/>
+  <text x="725" y="64" text-anchor="middle" font-weight="600" fill="#334155" font-size="11">Detail Alur</text>
+  <line x1="610" y1="70" x2="840" y2="70" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="610" y="90" fill="#475565" font-size="10">1. Sensor publish setiap menit</text>
+  <text x="616" y="105" fill="#6b7280" font-size="9">Topic: /bpom/sensor/n1</text>
+  <text x="616" y="118" fill="#6b7280" font-size="9">Payload: {"ts","suhu","rh"}</text>
+  <text x="610" y="138" fill="#475565" font-size="10">2. Consumer → Redis SET</text>
+  <text x="616" y="153" fill="#6b7280" font-size="9">Key: sensor:n1:latest</text>
+  <text x="616" y="166" fill="#6b7280" font-size="9">Value: JSON, TTL 300s</text>
+  <text x="610" y="186" fill="#475565" font-size="10">3. Laravel poll Redis tiap 10s</text>
+  <text x="616" y="201" fill="#6b7280" font-size="9">→ React render 6 cards</text>
+  <text x="616" y="214" fill="#6b7280" font-size="9">Status: hijau/kuning/merah</text>
+</svg>
