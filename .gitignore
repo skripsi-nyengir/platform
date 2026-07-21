@@ -1,0 +1,15 @@
+# Local agent and browser artifacts
+.omo/
+.playwright-mcp/
+.superpowers/
+
+# Frontend dependencies and generated output
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+
+# Root-level visual QA scratch output
+/*.png
+/action-first-dashboard-*.md
+/researched-layout-options-*.md
