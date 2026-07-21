@@ -1,0 +1,56 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:production": "node --test tests/production/verify-dist.test.mjs"
+  },
+  "dependencies": {
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.1",
+    "@fontsource/ibm-plex-mono": "5.2.7",
+    "@fontsource/inter": "5.2.8",
+    "@mui/material": "9.2.0",
+    "@mui/x-charts": "9.10.0",
+    "@mui/x-data-grid": "9.10.0",
+    "@tanstack/react-query": "5.101.2",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-router-dom": "7.18.1",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.61.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "eslint": "10.7.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.3",
+    "globals": "17.7.0",
+    "jsdom": "29.1.1",
+    "msw": "2.15.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "8.64.0",
+    "vite": "^8.1.1",
+    "vitest": "4.1.10"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public-dev"
+    ]
+  }
+}
