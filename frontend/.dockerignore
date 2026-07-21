@@ -1,0 +1,7 @@
+node_modules
+dist
+.git
+.gitignore
+playwright-report
+test-results
+*.log
