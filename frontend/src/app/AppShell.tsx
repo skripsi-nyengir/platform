@@ -14,7 +14,7 @@ import { navigationItems, type NavigationItem } from './navigation'
 
 const routeIconPaths: Record<NavigationItem['path'], string> = {
   '/': 'M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z',
-  '/sensors/n1': 'M7.76 16.24A5.98 5.98 0 0 1 6 12c0-1.66.67-3.16 1.76-4.24l1.41 1.41A4 4 0 0 0 8 12c0 1.1.45 2.1 1.17 2.83l-1.41 1.41Zm8.48 0-1.41-1.41A4 4 0 0 0 16 12c0-1.1-.45-2.1-1.17-2.83l1.41-1.41A5.98 5.98 0 0 1 18 12c0 1.66-.67 3.16-1.76 4.24ZM4.93 19.07A9.97 9.97 0 0 1 2 12c0-2.76 1.12-5.26 2.93-7.07l1.42 1.42A7.96 7.96 0 0 0 4 12c0 2.21.9 4.21 2.35 5.65l-1.42 1.42Zm14.14 0-1.42-1.42A7.96 7.96 0 0 0 20 12c0-2.21-.9-4.21-2.35-5.65l1.42-1.42A9.97 9.97 0 0 1 22 12c0 2.76-1.12 5.26-2.93 7.07ZM12 14a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z',
+  '/sensors/b02f3872-ruang-produksi': 'M7.76 16.24A5.98 5.98 0 0 1 6 12c0-1.66.67-3.16 1.76-4.24l1.41 1.41A4 4 0 0 0 8 12c0 1.1.45 2.1 1.17 2.83l-1.41 1.41Zm8.48 0-1.41-1.41A4 4 0 0 0 16 12c0-1.1-.45-2.1-1.17-2.83l1.41-1.41A5.98 5.98 0 0 1 18 12c0 1.66-.67 3.16-1.76 4.24ZM4.93 19.07A9.97 9.97 0 0 1 2 12c0-2.76 1.12-5.26 2.93-7.07l1.42 1.42A7.96 7.96 0 0 0 4 12c0 2.21.9 4.21 2.35 5.65l-1.42 1.42Zm14.14 0-1.42-1.42A7.96 7.96 0 0 0 20 12c0-2.21-.9-4.21-2.35-5.65l1.42-1.42A9.97 9.97 0 0 1 22 12c0 2.76-1.12 5.26-2.93 7.07ZM12 14a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z',
   '/alerts': 'M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm6-6v-5a6 6 0 0 0-5-5.91V4a1 1 0 1 0-2 0v1.09A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2Z',
   '/eda': 'M3 3v18h18v-2H5V3H3Zm4 12h3v2H7v-2Zm0-4h7v2H7v-2Zm0-4h11v2H7V7Zm9 4h2v6h-2v-6Zm-4 3h2v3h-2v-3Z',
   '/model-evaluation': 'M4 3h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5l-3 3-3-3H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 12 3-4 3 2 4-6 2 1-5 8-3-2-2 3-2-2Z',
@@ -83,7 +83,7 @@ export function AppShell() {
         <Box component="nav" aria-label="Primary navigation" sx={{ pb: 4 }}>
           <List sx={{ py: 0 }}>
             {navigationItems.map((item) => {
-              const selected = item.path === '/sensors/n1'
+              const selected = item.path === '/sensors/b02f3872-ruang-produksi'
                 ? pathname.startsWith('/sensors/')
                 : pathname === item.path
 

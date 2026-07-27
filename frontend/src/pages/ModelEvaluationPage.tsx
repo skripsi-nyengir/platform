@@ -1,167 +1,53 @@
-import { Box, Paper, Stack, Typography } from '@mui/material'
-import { useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Alert, Paper, Stack, Typography } from '@mui/material'
 import { ApiErrorPanel } from '../components/states/ApiErrorPanel'
-import { EmptyState } from '../components/states/EmptyState'
 import { PanelSkeleton } from '../components/states/PanelSkeleton'
-import { LabeledMetricsPanels } from '../features/modelEvaluation/LabeledMetricsPanels'
-import { MetricsPanel } from '../features/modelEvaluation/MetricsPanel'
-import {
-  normalizeModelEvaluationVersion,
-  useModelEvaluationQuery,
-  useModelEvaluationsQuery,
-} from '../features/modelEvaluation/queries'
-import { VersionSelect } from '../features/modelEvaluation/VersionSelect'
-import { updateUrlFilters } from '../features/filters/urlFilters'
-import { tokens } from '../theme/tokens'
-
-const technicalTextSx = {
-  fontFamily: tokens.font.data,
-  fontVariantNumeric: 'tabular-nums',
-  overflowWrap: 'anywhere',
-} as const
+import { useModelEvaluationsQuery } from '../features/modelEvaluation/queries'
+import { ModelRegistryPanel } from '../features/preview/ModelRegistryPanel'
+import { ReplayPanel } from '../features/preview/ReplayPanel'
 
 export function ModelEvaluationPage() {
-  const [params, setParams] = useSearchParams()
-  const listing = useModelEvaluationsQuery()
-  const versions = listing.data?.items ?? []
-  const requestedVersion = params.get('model_version')
-  const selectedVersion = normalizeModelEvaluationVersion(versions, requestedVersion)
-  const detail = useModelEvaluationQuery(selectedVersion)
-
-  useEffect(() => {
-    if (selectedVersion === undefined || requestedVersion === selectedVersion) return
-    setParams(updateUrlFilters(params, { modelVersion: selectedVersion }), { replace: true })
-  }, [params, requestedVersion, selectedVersion, setParams])
+  const pilot = useModelEvaluationsQuery({ page: 1, pageSize: 25 })
 
   return (
     <Stack spacing={6}>
-      <Typography variant="h1">Model Evaluation</Typography>
-      {listing.data === undefined ? (
-        listing.isError ? (
-          <ApiErrorPanel error={listing.error} onRetry={() => void listing.refetch()} />
+      <Stack spacing={0.5}>
+        <Typography variant="h1">Model Evaluation</Typography>
+        <Typography color="text.secondary">Registry preview dan snapshot evaluasi Dandy dipisahkan.</Typography>
+      </Stack>
+
+      <ModelRegistryPanel />
+
+      <Stack component="section" aria-labelledby="pilot-heading" spacing={2}>
+        <Typography id="pilot-heading" variant="h2">Reported Dandy pilot</Typography>
+        <Alert severity="warning">
+          Snapshot ini berasal dari satu run; test sudah diamati, bukan evaluasi independen atau hasil
+          final. Seluruh model gagal skenario stuck.
+        </Alert>
+        {pilot.data === undefined ? (
+          pilot.isError ? <ApiErrorPanel error={pilot.error} onRetry={() => void pilot.refetch()} />
+            : <PanelSkeleton label="Loading Dandy pilot snapshot" />
         ) : (
-          <PanelSkeleton label="Loading evaluation artifacts" />
-        )
-      ) : versions.length === 0 ? (
-        <EmptyState
-          title="No evaluation artifact exists"
-          detail="Live scores do not establish model quality."
-        />
-      ) : (
-        <>
-          <Box sx={{ width: '100%', maxWidth: 280, minWidth: 0, '& > *': { width: '100%' } }}>
-            <VersionSelect
-              versions={versions}
-              value={selectedVersion}
-              onChange={(modelVersion) =>
-                setParams(updateUrlFilters(params, { modelVersion }))
-              }
-            />
-          </Box>
-          {detail.data === undefined ? (
-            detail.isError ? (
-              <ApiErrorPanel error={detail.error} onRetry={() => void detail.refetch()} />
-            ) : (
-              <PanelSkeleton label="Loading selected evaluation artifact" />
-            )
-          ) : (
-            <Stack component="section" aria-label={`Evaluation artifact ${detail.data.version}`} spacing={2}>
-              <Paper
-                component="section"
-                aria-label="Artifact identity and metadata"
-                variant="outlined"
-                sx={{ maxWidth: '84ch', minWidth: 0, p: 4 }}
-              >
-                <Stack spacing={2}>
-                  <Typography variant="h2">Artifact identity and metadata</Typography>
-                  <Box
-                    component="dl"
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                      gap: 2,
-                      m: 0,
-                      minWidth: 0,
-                    }}
-                  >
-                    <Box component="div" sx={{ minWidth: 0 }}>
-                      <Typography component="dt" variant="caption" color="text.secondary">
-                        Selected version:
-                      </Typography>
-                      {' '}
-                      <Typography component="dd" variant="body1" sx={{ ...technicalTextSx, m: 0, minWidth: 0 }}>
-                        {detail.data.version}
-                      </Typography>
-                    </Box>
-                    <Box component="div" sx={{ minWidth: 0 }}>
-                      <Typography component="dt" variant="caption" color="text.secondary">
-                        Created at:
-                      </Typography>
-                      {' '}
-                      <Typography component="dd" variant="body1" sx={{ ...technicalTextSx, m: 0, minWidth: 0 }}>
-                        {detail.data.created_at}
-                      </Typography>
-                    </Box>
-                    <Box component="div" sx={{ minWidth: 0 }}>
-                      <Typography component="dt" variant="caption" color="text.secondary">
-                        Evaluation period:
-                      </Typography>
-                      {' '}
-                      <Typography component="dd" variant="body1" sx={{ ...technicalTextSx, m: 0, minWidth: 0 }}>
-                        {detail.data.evaluation_period}
-                      </Typography>
-                    </Box>
-                    {detail.data.model_hash === null ? null : (
-                      <Box component="div" sx={{ minWidth: 0 }}>
-                        <Typography component="dt" variant="caption" color="text.secondary">
-                          Model hash:
-                        </Typography>
-                        {' '}
-                        <Typography component="dd" variant="body1" sx={{ ...technicalTextSx, m: 0, minWidth: 0 }}>
-                          {detail.data.model_hash}
-                        </Typography>
-                      </Box>
-                    )}
-                    {detail.data.preprocessing_hash === null ? null : (
-                      <Box component="div" sx={{ minWidth: 0 }}>
-                        <Typography component="dt" variant="caption" color="text.secondary">
-                          Preprocessing hash:
-                        </Typography>
-                        {' '}
-                        <Typography component="dd" variant="body1" sx={{ ...technicalTextSx, m: 0, minWidth: 0 }}>
-                          {detail.data.preprocessing_hash}
-                        </Typography>
-                      </Box>
-                    )}
-                    {detail.data.threshold_hash === null ? null : (
-                      <Box component="div" sx={{ minWidth: 0 }}>
-                        <Typography component="dt" variant="caption" color="text.secondary">
-                          Threshold hash:
-                        </Typography>
-                        {' '}
-                        <Typography component="dd" variant="body1" sx={{ ...technicalTextSx, m: 0, minWidth: 0 }}>
-                          {detail.data.threshold_hash}
-                        </Typography>
-                      </Box>
-                    )}
-                  </Box>
-                </Stack>
-              </Paper>
-              <MetricsPanel
-                availableMetrics={detail.data.available_metrics}
-                metrics={detail.data.metrics}
-              />
-              <LabeledMetricsPanels artifact={detail.data} />
-              {detail.data.notes === null ? null : (
+          <Stack spacing={1}>
+            {pilot.data.items.map((item) => (
+              <Paper key={item.version} variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="h3">{item.model}</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Notes: {detail.data.notes}
+                  {item.label} · stuck: gagal
                 </Typography>
-              )}
-            </Stack>
-          )}
-        </>
-      )}
+                <Typography variant="body2" color="text.secondary">
+                  Test diamati: {item.test_observed ? 'ya' : 'tidak'} · Evaluasi final independen:{' '}
+                  {item.independent_final ? 'ya' : 'tidak'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+                  Sumber: {item.source_path ?? 'tidak tersedia'} · commit {item.source_commit ?? 'tidak tersedia'}
+                </Typography>
+              </Paper>
+            ))}
+          </Stack>
+        )}
+      </Stack>
+
+      <ReplayPanel />
     </Stack>
   )
 }

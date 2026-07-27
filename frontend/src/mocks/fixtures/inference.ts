@@ -1,37 +1,48 @@
+import { publicDeviceId, type SensorId } from '../../contracts/common'
 import type { InferencePoint } from '../../contracts/inference'
 
-export const fixtureModelVersion = 'model-v1'
-export const fixtureModelHash = 'sha256:model-v1'
-export const fixturePreprocessingHash = 'sha256:preprocessing-v1'
-export const fixtureThresholdHash = 'sha256:threshold-v1'
+export const previewThresholds = Object.freeze({
+  [publicDeviceId]: 1,
+} satisfies Record<SensorId, number>)
+export const armBThresholds = previewThresholds
+export const fixtureModelVersion = 'preview-lstm-ae-v1'
 
 function inferencePoint(
-  window_start_ts: string,
-  window_end_ts: string,
+  windowStart: string,
+  windowEnd: string,
   score: number,
-  is_anomaly = false,
 ): Readonly<InferencePoint> {
   return Object.freeze({
-    window_start_ts,
-    window_end_ts,
+    window_start_ts: windowStart,
+    window_end_ts: windowEnd,
+    score_ts: windowEnd,
     score,
-    threshold: 0.8,
-    is_anomaly,
+    threshold: 1,
+    is_anomaly: score > 1,
     model_version: fixtureModelVersion,
-    model_hash: fixtureModelHash,
-    preprocessing_hash: fixturePreprocessingHash,
-    threshold_hash: fixtureThresholdHash,
+    score_provenance: 'simulated_preview',
   })
 }
 
-export const normalInferencePoints = Object.freeze([
-  inferencePoint('2026-07-19T10:00:00Z', '2026-07-19T10:05:00Z', 0.18),
-  inferencePoint('2026-07-19T10:05:00Z', '2026-07-19T10:10:00Z', 0.24),
-  inferencePoint('2026-07-19T10:10:00Z', '2026-07-19T10:15:00Z', 0.31),
-  inferencePoint('2026-07-19T10:15:00Z', '2026-07-19T10:20:00Z', 0.27),
-])
+function inferenceHistory(scores: readonly number[]): readonly Readonly<InferencePoint>[] {
+  const starts = [
+    '2026-05-31T23:47:30',
+    '2026-05-31T23:48:00',
+    '2026-05-31T23:48:30',
+    '2026-05-31T23:49:00',
+  ]
+  return Object.freeze(scores.map((score, index) =>
+    inferencePoint(starts[index] ?? starts[0], `2026-05-31T23:${49 + index}:30`, score),
+  ))
+}
 
-export const activeAnomalyInferencePoints = Object.freeze([
-  ...normalInferencePoints.slice(0, -1),
-  inferencePoint('2026-07-19T10:15:00Z', '2026-07-19T10:20:00Z', 0.96, true),
-])
+export const normalInferenceBySensor = Object.freeze({
+  [publicDeviceId]: inferenceHistory([0.31, 0.45, 0.72, 0.58]),
+} satisfies Record<SensorId, readonly InferencePoint[]>)
+
+export const activeAnomalyInferenceBySensor = Object.freeze({
+  [publicDeviceId]: inferenceHistory([0.31, 0.45, 1.22, 1.31]),
+} satisfies Record<SensorId, readonly InferencePoint[]>)
+
+export const normalInferencePoints = normalInferenceBySensor[publicDeviceId]
+export const activeAnomalyInferencePoints = activeAnomalyInferenceBySensor[publicDeviceId]

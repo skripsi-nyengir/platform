@@ -15,24 +15,24 @@ export function VersionSelect({ versions, value, onChange }: VersionSelectProps)
   return (
     <FormControl size="small">
       <InputLabel id={labelId} htmlFor={selectId}>
-        Model version
+        Evaluation track
       </InputLabel>
       <Select<string>
         native
         id={selectId}
         labelId={labelId}
-        label="Model version"
+        label="Evaluation track"
         value={value ?? ''}
         onChange={(event) => onChange(event.target.value)}
       >
         {value === undefined ? (
           <option value="" disabled>
-            Select model version
+            Select evaluation track
           </option>
         ) : null}
         {versions.map((version) => (
           <option key={version.version} value={version.version}>
-            {version.version}
+            {version.label}
           </option>
         ))}
       </Select>

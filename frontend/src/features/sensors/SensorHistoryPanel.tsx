@@ -9,10 +9,16 @@ import {
   buildTemporalSummary,
 } from '../../components/charts/temporalOptions'
 import { BoundedDataDialog } from '../../components/data/BoundedDataDialog'
+import { ProvenanceBadge } from '../../components/data/ProvenanceBadge'
+import { formatProvenance } from '../../components/data/provenance'
 import { ApiErrorPanel } from '../../components/states/ApiErrorPanel'
 import { EmptyState } from '../../components/states/EmptyState'
 import { PanelSkeleton } from '../../components/states/PanelSkeleton'
-import type { SensorId } from '../../contracts/common'
+import {
+  historicalDateTimeToDate,
+  sensorLabels,
+  type SensorId,
+} from '../../contracts/common'
 import type { UrlFilters } from '../filters/urlFilters'
 import { useAlertEventsQuery } from '../alerts/queries'
 import { useInferenceResultsQuery } from '../inference/queries'
@@ -36,6 +42,7 @@ interface HistoryTableRow extends GridValidRowModel {
   threshold?: number
   is_anomaly?: 'Yes' | 'No'
   model_version?: string
+  score_provenance?: string
 }
 
 const historyColumns: readonly GridColDef<HistoryTableRow>[] = [
@@ -49,6 +56,7 @@ const historyColumns: readonly GridColDef<HistoryTableRow>[] = [
   { field: 'threshold', headerName: 'Threshold', flex: 1 },
   { field: 'is_anomaly', headerName: 'Anomaly', flex: 1 },
   { field: 'model_version', headerName: 'Model', flex: 1 },
+  { field: 'score_provenance', headerName: 'Provenance', flex: 1 },
 ]
 
 const technicalTextSx = {
@@ -62,6 +70,7 @@ const chartHeight = tokens.size.control * 7
 export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const theme = useTheme()
+  const sensorLabel = sensorLabels[sensorId]
   const limit = filters.bucket === 'raw' ? 5_000 : 2_000
   const telemetry = useTelemetryHistoryQuery({
     deviceId: sensorId,
@@ -80,8 +89,6 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
   })
   const alertEvents = useAlertEventsQuery({
     deviceId: sensorId,
-    from: filters.from,
-    to: filters.to,
     limit: 200,
   })
   const telemetryPoints = telemetry.data?.points ?? []
@@ -99,11 +106,12 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
     ...inferencePoints.map((point) => ({
       id: `inference:${point.window_start_ts}:${point.window_end_ts}`,
       record_type: 'Inference' as const,
-      timestamp: `${point.window_start_ts} – ${point.window_end_ts}`,
+      timestamp: point.score_ts,
       score: point.score,
       threshold: point.threshold,
       is_anomaly: point.is_anomaly ? 'Yes' as const : 'No' as const,
       model_version: point.model_version,
+      score_provenance: formatProvenance(point.score_provenance),
     })),
   ]
   const chartInput = {
@@ -138,6 +146,9 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
     >
       <Stack spacing={2}>
         <Typography variant="h2">Telemetry and inference history</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Score timestamp dan provenance dipertahankan pada tabel hasil · Asia/Jakarta (WIB)
+        </Typography>
         <Box
           sx={{
             display: 'grid',
@@ -162,7 +173,7 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
               ) : telemetry.data.points.length === 0 ? (
                 <EmptyState
                   title="No telemetry history"
-                  detail="No telemetry records were returned for the selected range."
+                  detail="Tidak ada sampel corpus historis pada rentang WIB yang dipilih."
                 />
               ) : (
                 <Typography variant="body2" sx={technicalTextSx}>
@@ -189,7 +200,7 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
               ) : inference.data.points.length === 0 ? (
                 <EmptyState
                   title="No inference history"
-                  detail="No inference records were returned for the selected range."
+                  detail="Belum ada hasil replay untuk versi model dan rentang WIB yang dipilih."
                 />
               ) : (
                 <Typography variant="body2" sx={technicalTextSx}>
@@ -207,7 +218,7 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
             </Typography>
             <Box
               role="group"
-              aria-label={`Temporal charts for sensor ${sensorId}`}
+              aria-label={`Temporal charts for sensor ${sensorLabel}`}
               sx={{
                 display: 'grid',
                 gap: 2,
@@ -219,7 +230,7 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
                   <Typography variant="h3">Temperature</Typography>
                   <Box
                     role="img"
-                    aria-label={`Temperature chart for sensor ${sensorId}`}
+                    aria-label={`Temperature chart for sensor ${sensorLabel}`}
                     aria-description={temperatureDescription}
                   >
                      <LineChart
@@ -236,8 +247,8 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
                            data: chartData.temperature.map((point) => point.x),
                            label: 'Date',
                            scaleType: 'time',
-                           min: new Date(filters.from),
-                           max: new Date(filters.to),
+                            min: historicalDateTimeToDate(filters.from),
+                            max: historicalDateTimeToDate(filters.to),
                          },
                       ]}
                       yAxis={[{ id: 'temperature-y-axis', label: 'Temperature (°C)' }]}
@@ -265,7 +276,7 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
                   <Typography variant="h3">Relative humidity</Typography>
                   <Box
                     role="img"
-                    aria-label={`Relative humidity chart for sensor ${sensorId}`}
+                    aria-label={`Relative humidity chart for sensor ${sensorLabel}`}
                     aria-description={humidityDescription}
                   >
                      <LineChart
@@ -282,8 +293,8 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
                            data: chartData.humidity.map((point) => point.x),
                            label: 'Date',
                            scaleType: 'time',
-                           min: new Date(filters.from),
-                           max: new Date(filters.to),
+                            min: historicalDateTimeToDate(filters.from),
+                            max: historicalDateTimeToDate(filters.to),
                          },
                       ]}
                       yAxis={[{ id: 'humidity-y-axis', label: 'Relative humidity (%)' }]}
@@ -308,10 +319,15 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
 
               <Paper component="article" variant="outlined" sx={{ minWidth: 0, p: 2 }}>
                 <Stack spacing={1} sx={{ minWidth: 0 }}>
-                  <Typography variant="h3">Anomaly score / threshold</Typography>
+                  <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+                    <Typography variant="h3">Anomaly score / threshold</Typography>
+                    {inference.data?.points[0] === undefined ? null : (
+                      <ProvenanceBadge provenance={inference.data.points[0].score_provenance} />
+                    )}
+                  </Stack>
                   <Box
                     role="img"
-                    aria-label={`Anomaly score and threshold chart for sensor ${sensorId}`}
+                    aria-label={`Anomaly score and threshold chart for sensor ${sensorLabel}`}
                     aria-description={scoreDescription}
                   >
                      <LineChart
@@ -327,8 +343,8 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
                            data: chartData.scores.map((point) => point.x),
                            label: 'Date',
                            scaleType: 'time',
-                           min: new Date(filters.from),
-                           max: new Date(filters.to),
+                            min: historicalDateTimeToDate(filters.from),
+                            max: historicalDateTimeToDate(filters.to),
                          },
                       ]}
                       yAxis={[{ id: 'score-y-axis', label: 'Score' }]}
@@ -378,7 +394,7 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
             </Button>
             <BoundedDataDialog
               open={dialogOpen}
-              title={`History data for ${sensorId}`}
+              title={`History data for ${sensorLabel}`}
               rows={rows}
               returnedCount={rows.length}
               columns={historyColumns}

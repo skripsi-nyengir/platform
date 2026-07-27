@@ -4,9 +4,12 @@ import {
   type Locator,
   type Page,
 } from '@playwright/test'
-import type { MockScenario } from '../../src/mocks/scenario'
+import type { AppMockScenario } from '../../src/mocks/scenario'
 
 export const fixedNow = '2026-07-19T10:30:00Z'
+export const b02DeviceId = 'b02f3872-ruang-produksi'
+export const b02From = '2026-02-01T00:00:00'
+export const b02To = '2026-03-01T00:00:00'
 
 type DateArguments =
   | []
@@ -51,18 +54,34 @@ function setFixedDate(timestamp: number): void {
   })
 }
 
-interface Task13Fixtures {
+interface E2eFixtures {
   appErrorGuard: void
+  httpErrorGuard: {
+    allow: (status: number) => void
+    has: (status: number) => boolean
+  }
 }
 
-export const test = base.extend<Task13Fixtures>({
-  appErrorGuard: [async ({ page }, use) => {
+export const test = base.extend<E2eFixtures>({
+  // eslint-disable-next-line no-empty-pattern -- Playwright parses this destructuring pattern to build the fixture dependency graph; a plain identifier fails at load time
+  httpErrorGuard: async ({}, runFixture) => {
+    const allowed = new Set<number>()
+    await runFixture({
+      allow: (status) => allowed.add(status),
+      has: (status) => allowed.has(status),
+    })
+  },
+  appErrorGuard: [async ({ page, httpErrorGuard }, use) => {
     const errors: string[] = []
     page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`))
     page.on('console', (message) => {
       if (message.type() !== 'error') return
       const text = message.text()
       if (text === 'Failed to load resource: the server responded with a status of 409 (Conflict)') return
+      const expectedHttpError = text.match(
+        /^Failed to load resource: the server responded with a status of (\d+)/,
+      )
+      if (expectedHttpError?.[1] !== undefined && httpErrorGuard.has(Number(expectedHttpError[1]))) return
       errors.push(`console: ${text}`)
     })
     await page.addInitScript(setFixedDate, Date.parse(fixedNow))
@@ -75,7 +94,7 @@ export const test = base.extend<Task13Fixtures>({
 
 export { expect }
 
-export function scenarioUrl(route: string, scenario: MockScenario): string {
+export function scenarioUrl(route: string, scenario: AppMockScenario): string {
   const url = new URL(route, 'http://127.0.0.1:5173')
   url.searchParams.set('__scenario', scenario)
   return `${url.pathname}?${url.searchParams}`
@@ -84,7 +103,7 @@ export function scenarioUrl(route: string, scenario: MockScenario): string {
 export async function gotoScenario(
   page: Page,
   route: string,
-  scenario: MockScenario,
+  scenario: AppMockScenario,
 ): Promise<void> {
   await page.goto(scenarioUrl(route, scenario))
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
@@ -114,10 +133,27 @@ export async function failNextAppFetch(page: Page, pathname: string): Promise<vo
   }, pathname)
 }
 
-export async function refetchAppQuery(page: Page, queryKey: readonly string[]): Promise<void> {
+export async function refetchAppQuery(page: Page, queryKey: readonly unknown[]): Promise<void> {
   const serializedKey = JSON.stringify(queryKey)
   await page.evaluate(
     `import('/src/app/queryClient.ts').then(({ queryClient }) => queryClient.refetchQueries({ queryKey: ${serializedKey} }))`,
+  )
+}
+
+export async function resetAppQuery(page: Page, queryKey: readonly unknown[]): Promise<void> {
+  const serializedKey = JSON.stringify(queryKey)
+  await page.evaluate(
+    `import('/src/app/queryClient.ts').then(({ queryClient }) => queryClient.resetQueries({ queryKey: ${serializedKey}, exact: true }))`,
+  )
+}
+
+export async function setMockScenarioOnPage(
+  page: Page,
+  scenario: AppMockScenario,
+): Promise<void> {
+  const serializedScenario = JSON.stringify(scenario)
+  await page.evaluate(
+    `import('/src/mocks/state.ts').then(({ setMockScenario }) => setMockScenario(${serializedScenario}))`,
   )
 }
 

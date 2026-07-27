@@ -1,5 +1,10 @@
 import { Box, List, ListItem, Paper, Stack, Typography } from '@mui/material'
-import type { AlertStatus, SensorId } from '../../contracts/common'
+import {
+  sensorLabels,
+  type AlertStatus,
+  type SensorId,
+} from '../../contracts/common'
+import { ProvenanceBadge } from '../../components/data/ProvenanceBadge'
 import { EmptyState } from '../../components/states/EmptyState'
 import { ApiErrorPanel } from '../../components/states/ApiErrorPanel'
 import { PanelSkeleton } from '../../components/states/PanelSkeleton'
@@ -31,12 +36,16 @@ export function AlertEventHistory({
   from,
   to,
 }: AlertEventHistoryProps) {
-  const history = useAlertEventsQuery({ alertId, deviceId, from, to, limit: 200 })
+  const history = useAlertEventsQuery({
+    alertId,
+    ...(alertId === undefined ? { deviceId } : {}),
+    limit: 200,
+  })
 
   return (
     <Paper
       component="section"
-      aria-label="Immutable alert event history"
+      aria-label="Alert event history"
       variant="outlined"
       sx={{ p: 2 }}
     >
@@ -45,8 +54,14 @@ export function AlertEventHistory({
           <Typography variant="h2">Alert event history</Typography>
           <Typography variant="body2" color="text.secondary">
             {alertId === undefined
-              ? 'All matching immutable events'
-              : <>Immutable events for <Box component="span" sx={technicalTextSx}>{alertId}</Box></>}
+               ? 'Semua event lifecycle yang cocok.'
+               : <>Event lifecycle untuk <Box component="span" sx={technicalTextSx}>{alertId}</Box>.</>}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Timestamp event dan penerimaan ditampilkan sebagai UTC.
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Lifecycle tidak dibatasi oleh rentang waktu episode {from}–{to}.
           </Typography>
         </Stack>
         {history.data === undefined ? (
@@ -73,24 +88,25 @@ export function AlertEventHistory({
                 >
                   <Stack spacing={0.5} sx={{ minWidth: 0 }}>
                     <Typography variant="h3">{eventLabels[item.event_type]}</Typography>
-                    <Typography variant="body2" sx={technicalTextSx}>{item.event_ts}</Typography>
+                    <Typography variant="body2" sx={technicalTextSx}>{item.event_at}</Typography>
                     <Typography variant="caption" color="text.secondary">
                       Alert <Box component="span" sx={technicalTextSx}>{item.alert_id}</Box>
                       {' · Sensor '}
-                      <Box component="span" sx={technicalTextSx}>{item.device_id}</Box>
+                       <Box component="span" sx={technicalTextSx}>{sensorLabels[item.device_id]}</Box>
                       {' · Actor '}
                       <Box component="span" sx={technicalTextSx}>{item.actor}</Box>
                     </Typography>
                     {item.note === null ? null : (
                       <Typography variant="body2">Note: {item.note}</Typography>
                     )}
+                    <ProvenanceBadge provenance={item.detection_basis} />
                   </Stack>
                 </ListItem>
               ))}
             </List>
             {history.data.next_cursor === null ? null : (
               <Typography variant="caption" color="text.secondary">
-                Additional immutable events are available beyond this bounded result.
+                 Event tambahan tersedia di luar hasil terbatas ini.
               </Typography>
             )}
           </>

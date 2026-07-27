@@ -1,110 +1,311 @@
-import { expect, gotoScenario, test } from './helpers'
+import type { Page } from '@playwright/test'
+import {
+  disableAppQueryRetries,
+  expect,
+  gotoScenario,
+  refetchAppQuery,
+  resetAppQuery,
+  setMockScenarioOnPage,
+  test,
+} from './helpers'
 
-const from = '2026-07-19T10:00:00Z'
-const to = '2026-07-19T10:30:00Z'
+const canonicalRunId = 'run-b02-canonical-v3'
+const cachedRunId = 'run-b02-custom-cache'
+const publishedRunId = 'run-b02-custom-published'
+const customFrom = '2026-02-10T00:00:00'
+const customTo = '2026-02-11T00:00:00'
+const cachedFrom = '2026-02-01T00:00:00'
+const cachedTo = '2026-02-02T00:00:00'
 
-test('examiner changes bounded EDA filters and sample controls', async ({ page }) => {
+const sectionHeadings = [
+  'Kualitas Data',
+  'Pola Temporal',
+  'Hubungan Suhu-RH',
+  'Struktur Temporal dan Perubahan Rezim',
+  'Metadata Audit dan Akses Data',
+] as const
+
+const panelHeadings = [
+  'Audit pairing timestamp',
+  'Kepadatan gabungan Suhu–RH',
+  'Diagnostik univariat',
+  'Excerpt kejadian kualitas',
+  'Integritas kualitas',
+  'Cakupan kalender temporal',
+  'Cakupan hari × jam',
+  'Distribusi temporal Suhu dan RH',
+  'Ringkasan asosiasi Suhu–RH',
+  'Korelasi Pearson bergulir',
+  'Ketidakpastian bootstrap asosiasi',
+  'Kelayakan struktur temporal',
+  'Autokorelasi ACF dan PACF',
+  'Spektrum frekuensi',
+  'Dekomposisi STL',
+  'Kandidat perubahan rezim',
+] as const
+
+function trackEdaRequests(page: Page): string[] {
+  const requests: string[] = []
+  page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (url.pathname.startsWith('/api/eda/')) {
+      requests.push(`${request.method()} ${url.pathname}${url.search}`)
+    }
+  })
+  return requests
+}
+
+function countRequests(requests: readonly string[], prefix: string): number {
+  return requests.filter((request) => request.startsWith(prefix)).length
+}
+
+async function gotoCustomScenario(
+  page: Page,
+  scenario: Parameters<typeof gotoScenario>[2],
+  from = customFrom,
+  to = customTo,
+): Promise<void> {
   await gotoScenario(
     page,
-    `/eda?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&bucket=5m`,
-    'data-gap',
+    `/eda?mode=custom&period_kind=monthly&from=${from}&to=${to}&run=run-b02-monthly-2026-02`,
+    scenario,
   )
+  await expect(page.getByRole('button', { name: 'Hitung EDA' })).toBeEnabled()
+}
 
-  await page.getByRole('combobox', { name: 'Sensor' }).selectOption('n5')
-  await page.getByRole('spinbutton', { name: 'Sample size' }).fill('5000')
-  await page.getByRole('combobox', { name: 'X field' }).selectOption('relative_humidity_pct')
+function panel(page: Page, heading: string) {
+  return page.getByRole('heading', { name: heading }).locator('xpath=ancestor::section[1]')
+}
 
-  await expect(page.getByRole('combobox', { name: 'Sensor' })).toHaveValue('n5')
-  await expect(page.getByRole('spinbutton', { name: 'Sample size' })).toHaveValue('5000')
-  await expect(page.getByRole('combobox', { name: 'X field' })).toHaveValue('relative_humidity_pct')
-  await expect(page.getByRole('combobox', { name: 'Y field' })).toHaveValue('temperature_c')
-  await expect(page.getByText('1 absent sample')).toBeVisible()
-  await expect(page.getByText('1 cadence gap')).toBeVisible()
-  await expect(page.getByText('5 telemetry points returned')).toBeVisible()
-  await expect(page.getByText('4 inference points returned')).toBeVisible()
-  await expect(page.getByRole('img', {
-    name: /relative_humidity_pct by temperature_c scatter/i,
-  })).toBeVisible()
+test('latest precompute falls back monthly → weekly and keeps every first-class panel visible', async ({ page }) => {
+  await gotoScenario(page, '/eda', 'eda-latest-fallback')
 
-  const url = new URL(page.url())
-  expect(url.searchParams.get('sensor')).toBe('n5')
-  expect(url.searchParams.get('from')).toBe(from)
-  expect(url.searchParams.get('to')).toBe(to)
-  expect(url.searchParams.get('bucket')).toBe('5m')
-  expect(url.searchParams.has('sampleSize')).toBe(false)
+  await expect(page).toHaveURL(/period_kind=weekly/)
+  await expect(page).toHaveURL(/run=run-b02-weekly-latest/)
+  await expect(page.getByText('Komputasi rentang setara-algoritme')).toBeVisible()
+  for (const heading of sectionHeadings) {
+    await expect(page.getByRole('heading', { name: heading })).toBeVisible()
+  }
+  for (const heading of panelHeadings) {
+    await expect(page.getByRole('heading', { name: heading })).toBeVisible()
+  }
 })
 
-test('examiner switches model versions and sees only declared panel types', async ({ page }) => {
-  await gotoScenario(page, '/model-evaluation?model_version=model-v2', 'active-anomaly')
+test('canonical and custom not-eligible pages preserve provenance and methodology boundaries', async ({ page }) => {
+  await gotoScenario(
+    page,
+    `/eda?mode=precompute&period_kind=monthly&run=${canonicalRunId}`,
+    'eda-canonical',
+  )
 
-  const version = page.getByRole('combobox', { name: 'Model version' })
-  const metrics = page.getByRole('region', { name: 'Artifact metrics' })
-  await expect(version).toHaveValue('model-v2')
-  await expect(metrics).toContainText('accuracy: 0.96')
-  await expect(metrics).toContainText('f1: 0.91')
-  await expect(metrics).not.toContainText('confusion_matrix:')
-  await expect(page.getByRole('table', { name: 'Confusion matrix' })).toBeVisible()
-  await expect(page.getByRole('img', { name: 'ROC curve' })).toBeVisible()
-  await expect(page.getByRole('img', { name: /Precision-recall curve/i })).toBeVisible()
+  await expect(page.getByText('Rilis v3 terpublikasi (paritas kanonik)')).toBeVisible()
+  const methodology = page.getByRole('note', { name: 'Batas metodologi EDA' })
+  await expect(methodology).toContainText('Kualitas kandidat saja')
+  await expect(methodology).toContainText('deskriptif, bukan kausal')
+  await expect(methodology).toContainText('tidak memuat bukti model atau deteksi anomali')
 
-  const confusionMatrixData = page.getByRole('button', { name: 'Lihat data Confusion matrix' })
-  const rocCurveData = page.getByRole('button', { name: 'Lihat data ROC curve' })
-  const precisionRecallCurveData = page.getByRole('button', {
-    name: 'Lihat data Precision recall curve',
-  })
-  await expect(confusionMatrixData).toHaveCount(1)
-  await expect(rocCurveData).toHaveCount(1)
-  await expect(precisionRecallCurveData).toHaveCount(1)
+  await gotoScenario(
+    page,
+    `/eda?mode=custom&from=${cachedFrom}&to=${cachedTo}&run=${cachedRunId}`,
+    'eda-custom-not-eligible',
+  )
+  await expect(page.getByText('Komputasi rentang setara-algoritme')).toBeVisible()
+  await expect(page.getByText('Kandidat perubahan belum memenuhi syarat')).toBeVisible()
+  await expect(page.getByText('Bootstrap belum memenuhi syarat')).toBeVisible()
+})
 
-  await confusionMatrixData.click()
-  const confusionMatrixDialog = page.getByRole('dialog', { name: 'Confusion matrix data' })
-  await expect(confusionMatrixDialog).toBeVisible()
-  await expect(confusionMatrixDialog.getByRole('heading', { name: 'Confusion matrix data' })).toBeVisible()
-  const confusionMatrixGrid = confusionMatrixDialog.getByRole('grid')
-  await expect(confusionMatrixGrid.getByRole('row')).toHaveCount(5)
-  await expect(confusionMatrixGrid.getByRole('columnheader', { name: 'Actual' })).toBeVisible()
-  await expect(confusionMatrixGrid.getByRole('columnheader', { name: 'Predicted' })).toBeVisible()
-  await expect(confusionMatrixGrid.getByRole('columnheader', { name: 'Count' })).toBeVisible()
-  await expect(confusionMatrixGrid.getByRole('gridcell', { name: '92' })).toBeVisible()
-  await confusionMatrixDialog.getByRole('button', { name: 'Close' }).click()
-  await expect(confusionMatrixDialog).toBeHidden()
+test('explicit Hitung EDA cache hit selects the custom run without creating or polling a job', async ({ page }) => {
+  const requests = trackEdaRequests(page)
+  await gotoCustomScenario(page, 'active-anomaly', cachedFrom, cachedTo)
 
-  await rocCurveData.click()
-  const rocCurveDialog = page.getByRole('dialog', { name: 'ROC curve data; AUC 0.97' })
-  await expect(rocCurveDialog).toBeVisible()
-  await expect(rocCurveDialog.getByRole('heading', { name: 'ROC curve data; AUC 0.97' })).toBeVisible()
-  const rocCurveGrid = rocCurveDialog.getByRole('grid')
-  await expect(rocCurveGrid.getByRole('row')).toHaveCount(4)
-  await expect(rocCurveGrid.getByRole('columnheader', { name: 'False positive rate' })).toBeVisible()
-  await expect(rocCurveGrid.getByRole('columnheader', { name: 'True positive rate' })).toBeVisible()
-  await expect(rocCurveGrid.getByRole('gridcell', { name: '0.08' })).toBeVisible()
-  await expect(rocCurveGrid.getByRole('gridcell', { name: '0.9' })).toBeVisible()
-  await rocCurveDialog.getByRole('button', { name: 'Close' }).click()
-  await expect(rocCurveDialog).toBeHidden()
+  await page.getByRole('button', { name: 'Hitung EDA' }).click()
 
-  await precisionRecallCurveData.click()
-  const precisionRecallCurveDialog = page.getByRole('dialog', {
-    name: 'Precision recall curve data; average precision 0.93',
-  })
-  await expect(precisionRecallCurveDialog).toBeVisible()
-  await expect(
-    precisionRecallCurveDialog.getByRole('heading', {
-      name: 'Precision recall curve data; average precision 0.93',
-    }),
-  ).toBeVisible()
-  const precisionRecallCurveGrid = precisionRecallCurveDialog.getByRole('grid')
-  await expect(precisionRecallCurveGrid.getByRole('row')).toHaveCount(4)
-  await expect(precisionRecallCurveGrid.getByRole('columnheader', { name: 'Recall' })).toBeVisible()
-  await expect(precisionRecallCurveGrid.getByRole('columnheader', { name: 'Precision' })).toBeVisible()
-  await expect(precisionRecallCurveGrid.getByRole('gridcell', { name: '0.9' })).toBeVisible()
-  await expect(precisionRecallCurveGrid.getByRole('gridcell', { name: '0.88' })).toBeVisible()
-  await precisionRecallCurveDialog.getByRole('button', { name: 'Close' }).click()
-  await expect(precisionRecallCurveDialog).toBeHidden()
+  await expect(page).toHaveURL(new RegExp(`run=${cachedRunId}`))
+  await expect(page.getByText('Komputasi rentang setara-algoritme')).toBeVisible()
+  expect(countRequests(requests, 'POST /api/eda/compute')).toBe(1)
+  expect(countRequests(requests, 'GET /api/eda/jobs/')).toBe(0)
+})
 
-  await version.selectOption('model-v1')
-  await expect(version).toHaveValue('model-v1')
-  await expect(page.getByText('Model hash: sha256:model-v1')).toBeVisible()
-  await expect(metrics).toContainText('accuracy: 0.94')
-  await expect(metrics).toContainText('f1: 0.88')
-  expect(new URL(page.url()).searchParams.get('model_version')).toBe('model-v1')
+test('custom compute exposes a queued state and locks duplicate submission', async ({ page }) => {
+  await gotoCustomScenario(page, 'eda-job-queued')
+  const submit = page.getByRole('button', { name: 'Hitung EDA' })
+
+  await submit.click()
+
+  await expect(page.getByText('Status perhitungan EDA: queued')).toBeVisible()
+  await expect(submit).toBeDisabled()
+})
+
+test('custom compute exposes a running state and locks duplicate submission', async ({ page }) => {
+  await gotoCustomScenario(page, 'eda-job-running')
+  const submit = page.getByRole('button', { name: 'Hitung EDA' })
+
+  await submit.click()
+
+  await expect(page.getByText('Status perhitungan EDA: running')).toBeVisible()
+  await expect(submit).toBeDisabled()
+})
+
+test('custom compute publishes the succeeded run after one deterministic job poll', async ({ page }) => {
+  const requests = trackEdaRequests(page)
+  await gotoCustomScenario(page, 'eda-job-success')
+
+  await page.getByRole('button', { name: 'Hitung EDA' }).click()
+
+  await expect(page).toHaveURL(new RegExp(`run=${publishedRunId}`))
+  await expect(page.getByText('Komputasi rentang setara-algoritme')).toBeVisible()
+  expect(countRequests(requests, 'POST /api/eda/compute')).toBe(1)
+  expect(countRequests(requests, 'GET /api/eda/jobs/')).toBe(1)
+})
+
+test('failed compute stops polling and Retry creates exactly one replacement request', async ({ page }) => {
+  const requests = trackEdaRequests(page)
+  await gotoCustomScenario(page, 'eda-job-failed')
+
+  await page.getByRole('button', { name: 'Hitung EDA' }).click()
+  const failure = page.getByRole('alert').filter({ hasText: 'Perhitungan EDA gagal setelah tiga percobaan.' })
+  await expect(failure).toBeVisible()
+  expect(countRequests(requests, 'POST /api/eda/compute')).toBe(1)
+  expect(countRequests(requests, 'GET /api/eda/jobs/')).toBe(1)
+
+  await failure.getByRole('button', { name: 'Retry' }).click()
+
+  await expect(page).toHaveURL(new RegExp(`run=${cachedRunId}`))
+  expect(countRequests(requests, 'POST /api/eda/compute')).toBe(2)
+  expect(countRequests(requests, 'GET /api/eda/jobs/')).toBe(1)
+})
+
+test('period-list Problem Details recover in place without creating compute work', async ({
+  page,
+  httpErrorGuard,
+}) => {
+  const requests = trackEdaRequests(page)
+  httpErrorGuard.allow(503)
+  await gotoScenario(page, '/eda', 'normal')
+  await expect(page).toHaveURL(/run=run-b02-monthly-2026-02/)
+  await disableAppQueryRetries(page)
+  await setMockScenarioOnPage(page, 'eda-period-error')
+  requests.length = 0
+  await refetchAppQuery(page, ['eda', 'periods'])
+  const failure = page.getByRole('group', { name: 'Kontrol run EDA' }).getByRole('alert')
+
+  await expect(failure).toContainText('EDA period list unavailable')
+  await expect(failure).toContainText('Request ID: req-eda-period-monthly')
+  await failure.getByRole('button', { name: 'Retry' }).click()
+
+  await expect(page).toHaveURL(/run=run-b02-monthly-2026-02/)
+  expect(countRequests(requests, 'GET /api/eda/periods')).toBe(6)
+  expect(countRequests(requests, 'POST /api/eda/compute')).toBe(0)
+  expect(countRequests(requests, 'GET /api/eda/jobs/')).toBe(0)
+})
+
+test('job Problem Details retry resumes the same poll without duplicating compute', async ({
+  page,
+  httpErrorGuard,
+}) => {
+  const requests = trackEdaRequests(page)
+  httpErrorGuard.allow(503)
+  await gotoCustomScenario(page, 'normal')
+  await disableAppQueryRetries(page)
+  await setMockScenarioOnPage(page, 'eda-job-error')
+  requests.length = 0
+  await page.getByRole('button', { name: 'Hitung EDA' }).click()
+  const failure = page.getByRole('group', { name: 'Kontrol run EDA' }).getByRole('alert')
+
+  await expect(failure).toContainText('EDA job status unavailable')
+  await expect(failure).toContainText('Request ID: req-eda-job-status')
+  await failure.getByRole('button', { name: 'Retry' }).click()
+
+  await expect(page).toHaveURL(new RegExp(`run=${publishedRunId}`))
+  expect(countRequests(requests, 'POST /api/eda/compute')).toBe(1)
+  expect(countRequests(requests, 'GET /api/eda/jobs/')).toBe(2)
+})
+
+test('one section Problem Details stays scoped and recovers only that section', async ({
+  page,
+  httpErrorGuard,
+}) => {
+  const requests = trackEdaRequests(page)
+  httpErrorGuard.allow(503)
+  await gotoScenario(
+    page,
+    `/eda?mode=precompute&period_kind=monthly&run=${canonicalRunId}`,
+    'eda-canonical',
+  )
+  await expect(page.getByRole('button', { name: 'Lihat data bootstrap' })).toBeVisible()
+  await disableAppQueryRetries(page)
+  await setMockScenarioOnPage(page, 'eda-section-error')
+  requests.length = 0
+  await resetAppQuery(page, [
+    'eda',
+    'run',
+    canonicalRunId,
+    'section',
+    'uncertainty',
+  ])
+  const failedPanel = panel(page, 'Ketidakpastian bootstrap asosiasi')
+  const uncertaintyPath = `GET /api/eda/runs/${canonicalRunId}/sections/uncertainty`
+
+  expect(countRequests(requests, uncertaintyPath)).toBe(1)
+  await expect(failedPanel.getByRole('alert')).toContainText('Request ID: req-eda-section-uncertainty')
+  await expect(panel(page, 'Cakupan kalender temporal').getByRole('alert')).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Audit pairing timestamp' })).toBeVisible()
+  await failedPanel.getByRole('button', { name: 'Retry' }).click()
+
+  await expect(failedPanel.getByRole('alert')).toHaveCount(0)
+  expect(countRequests(requests, uncertaintyPath)).toBe(2)
+  expect(countRequests(requests, 'POST /api/eda/compute')).toBe(0)
+})
+
+test('multiple section Problem Details remain independent and each retry issues one refetch', async ({
+  page,
+  httpErrorGuard,
+}) => {
+  const requests = trackEdaRequests(page)
+  httpErrorGuard.allow(503)
+  await gotoScenario(
+    page,
+    `/eda?mode=precompute&period_kind=monthly&run=${canonicalRunId}`,
+    'eda-canonical',
+  )
+  await expect(page.getByRole('button', { name: 'Lihat data ringkasan asosiasi' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Lihat data kelayakan struktur temporal' })).toBeVisible()
+  await disableAppQueryRetries(page)
+  await setMockScenarioOnPage(page, 'eda-multiple-section-error')
+  requests.length = 0
+  await Promise.all([
+    resetAppQuery(page, [
+      'eda',
+      'run',
+      canonicalRunId,
+      'section',
+      'relationships',
+    ]),
+    resetAppQuery(page, [
+      'eda',
+      'run',
+      canonicalRunId,
+      'section',
+      'stationarity',
+    ]),
+  ])
+  const relationship = panel(page, 'Ringkasan asosiasi Suhu–RH')
+  const stationarity = panel(page, 'Kelayakan struktur temporal')
+  const relationshipsPath = `GET /api/eda/runs/${canonicalRunId}/sections/relationships`
+  const stationarityPath = `GET /api/eda/runs/${canonicalRunId}/sections/stationarity`
+
+  expect(countRequests(requests, relationshipsPath)).toBe(1)
+  expect(countRequests(requests, stationarityPath)).toBe(1)
+  await expect(relationship.getByRole('alert')).toContainText('Request ID: req-eda-section-relationships')
+  await expect(stationarity.getByRole('alert')).toContainText('Request ID: req-eda-section-stationarity')
+  await expect(panel(page, 'Cakupan kalender temporal').getByRole('alert')).toHaveCount(0)
+
+  await relationship.getByRole('button', { name: 'Retry' }).click()
+  await stationarity.getByRole('button', { name: 'Retry' }).click()
+
+  await expect(relationship.getByRole('alert')).toHaveCount(0)
+  await expect(stationarity.getByRole('alert')).toHaveCount(0)
+  expect(countRequests(requests, relationshipsPath)).toBe(2)
+  expect(countRequests(requests, stationarityPath)).toBe(2)
+  expect(countRequests(requests, 'GET /api/eda/jobs/')).toBe(0)
 })

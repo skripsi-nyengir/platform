@@ -1,6 +1,6 @@
 import type { Theme } from '@mui/material/styles'
 import type { AlertEvent } from '../../contracts/alerts'
-import type { SensorId } from '../../contracts/common'
+import { historicalDateTimeToDate, sensorLabels, type SensorId } from '../../contracts/common'
 import type { InferencePoint } from '../../contracts/inference'
 import type { TelemetryPoint } from '../../contracts/telemetry'
 
@@ -55,7 +55,7 @@ function buildTelemetryChartData(telemetry: readonly TelemetryPoint[]): Overview
   const humidity: NullableTemporalChartPoint[] = []
 
   for (const point of telemetry) {
-    const x = new Date(point.ts)
+    const x = historicalDateTimeToDate(point.ts)
     if (point.gap_before) {
       temperature.push({ x, y: null })
       humidity.push({ x, y: null })
@@ -71,15 +71,15 @@ export function buildTemporalChartData(input: TemporalChartInput): TemporalChart
   return {
     ...buildTelemetryChartData(input.telemetry),
     scores: input.inference.map((point) => ({
-      x: new Date(point.window_end_ts),
+      x: historicalDateTimeToDate(point.score_ts),
       y: point.score,
     })),
     threshold: input.inference[0]?.threshold,
     anomalyIntervals: input.inference
       .filter((point) => point.is_anomaly)
       .map((point) => ({
-        start: new Date(point.window_start_ts),
-        end: new Date(point.window_end_ts),
+        start: historicalDateTimeToDate(point.window_start_ts),
+        end: historicalDateTimeToDate(point.window_end_ts),
       })),
   }
 }
@@ -95,7 +95,7 @@ export function buildTemporalSummary(input: TemporalChartInput): string {
   const alertCount = input.alerts.filter((event) => event.event_type === 'detected').length
 
   return [
-    `Sensor ${input.sensorId} from ${input.from} to ${input.to}.`,
+    `Sensor ${sensorLabels[input.sensorId]} from ${input.from} to ${input.to}.`,
     `${gapCount} documented gap${gapCount === 1 ? '' : 's'}.`,
     threshold === undefined ? 'Score threshold unavailable.' : `Score threshold ${threshold}.`,
     `${anomalyCount} anomaly interval${anomalyCount === 1 ? '' : 's'}.`,

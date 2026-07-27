@@ -1,78 +1,78 @@
 import {
-  EdaCorrelationQuerySchema,
-  EdaCorrelationResponseSchema,
-  EdaDistributionQuerySchema,
-  EdaDistributionResponseSchema,
-  EdaSummaryQuerySchema,
-  EdaSummaryResponseSchema,
-  type EdaCorrelationQuery,
-  type EdaCorrelationResponse,
-  type EdaDistributionQuery,
-  type EdaDistributionResponse,
-  type EdaSummaryQuery,
-  type EdaSummaryResponse,
+  EdaComputeRequestSchema,
+  EdaComputeResponseSchema,
+  EdaJobResponseSchema,
+  EdaPeriodListQuerySchema,
+  EdaPeriodListResponseSchema,
+  EdaRunResponseSchema,
+  EdaSectionNameSchema,
+  EdaSectionResponseSchema,
+  type EdaComputeRequest,
+  type EdaComputeResponse,
+  type EdaJobResponse,
+  type EdaPeriodListQuery,
+  type EdaPeriodListResponse,
+  type EdaRunResponse,
+  type EdaSectionName,
+  type EdaSectionResponse,
 } from '../contracts/eda'
 import { requestJson } from './http'
 
-export async function getEdaSummary(
-  input: EdaSummaryQuery,
-  signal?: AbortSignal,
-): Promise<EdaSummaryResponse> {
-  const queryInput = EdaSummaryQuerySchema.parse(input)
-  const query = new URLSearchParams()
-  if (queryInput.deviceId !== undefined) query.set('device_id', queryInput.deviceId)
-  query.set('from', queryInput.from)
-  query.set('to', queryInput.to)
-  query.set('bucket', queryInput.bucket)
-  return requestJson(`/api/eda/summary?${query}`, EdaSummaryResponseSchema, { signal })
+function requiredId(value: string, name: string): string {
+  if (value.length === 0) throw new Error(`${name} is required`)
+  return encodeURIComponent(value)
 }
 
-export async function getEdaDistributions(
-  input: EdaDistributionQuery,
+export function getEdaPeriods(
+  input: EdaPeriodListQuery,
   signal?: AbortSignal,
-): Promise<EdaDistributionResponse> {
-  const queryInput = EdaDistributionQuerySchema.parse(input)
+): Promise<EdaPeriodListResponse> {
+  const queryInput = EdaPeriodListQuerySchema.parse(input)
   const query = new URLSearchParams()
-  if (queryInput.deviceId !== undefined) query.set('device_id', queryInput.deviceId)
-  query.set('from', queryInput.from)
-  query.set('to', queryInput.to)
-  query.set('field', queryInput.field)
-  query.set('bins', String(queryInput.bins))
-  const responseSchema = EdaDistributionResponseSchema.superRefine((value, context) => {
-    if (value.bins.length > queryInput.bins) {
-      context.addIssue({
-        code: 'custom',
-        message: 'bins length must not exceed the requested bins',
-        path: ['bins'],
-      })
-    }
-  })
-  return requestJson(`/api/eda/distributions?${query}`, responseSchema, {
+  query.set('period_kind', queryInput.period_kind)
+  query.set('limit', String(queryInput.limit))
+  if (queryInput.cursor !== null) query.set('cursor', queryInput.cursor)
+  return requestJson(`/api/eda/periods?${query}`, EdaPeriodListResponseSchema, { signal })
+}
+
+export function computeEda(
+  input: EdaComputeRequest,
+  signal?: AbortSignal,
+): Promise<EdaComputeResponse> {
+  const body = EdaComputeRequestSchema.parse(input)
+  return requestJson('/api/eda/compute', EdaComputeResponseSchema, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
     signal,
   })
 }
 
-export async function getEdaCorrelation(
-  input: EdaCorrelationQuery,
+export function getEdaJob(jobId: string, signal?: AbortSignal): Promise<EdaJobResponse> {
+  return requestJson(
+    `/api/eda/jobs/${requiredId(jobId, 'jobId')}`,
+    EdaJobResponseSchema,
+    { signal },
+  )
+}
+
+export function getEdaRun(runId: string, signal?: AbortSignal): Promise<EdaRunResponse> {
+  return requestJson(
+    `/api/eda/runs/${requiredId(runId, 'runId')}`,
+    EdaRunResponseSchema,
+    { signal },
+  )
+}
+
+export function getEdaSection(
+  runId: string,
+  section: EdaSectionName,
   signal?: AbortSignal,
-): Promise<EdaCorrelationResponse> {
-  const queryInput = EdaCorrelationQuerySchema.parse(input)
-  const query = new URLSearchParams()
-  if (queryInput.deviceId !== undefined) query.set('device_id', queryInput.deviceId)
-  query.set('from', queryInput.from)
-  query.set('to', queryInput.to)
-  query.set('x_field', queryInput.xField)
-  query.set('y_field', queryInput.yField)
-  query.set('max_points', String(queryInput.maxPoints))
-  if (queryInput.cursor !== undefined) query.set('cursor', queryInput.cursor)
-  const responseSchema = EdaCorrelationResponseSchema.superRefine((value, context) => {
-    if (value.points.length > queryInput.maxPoints) {
-      context.addIssue({
-        code: 'custom',
-        message: 'points length must not exceed max_points',
-        path: ['points'],
-      })
-    }
-  })
-  return requestJson(`/api/eda/correlation?${query}`, responseSchema, { signal })
+): Promise<EdaSectionResponse> {
+  const parsedSection = EdaSectionNameSchema.parse(section)
+  return requestJson(
+    `/api/eda/runs/${requiredId(runId, 'runId')}/sections/${parsedSection}`,
+    EdaSectionResponseSchema,
+    { signal },
+  )
 }

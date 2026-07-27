@@ -1,8 +1,10 @@
 import { Box, Card, CardActions, CardContent, Link, Stack, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import type { CurrentAlert } from '../../contracts/alerts'
+import { sensorLabels } from '../../contracts/common'
 import { tokens } from '../../theme/tokens'
 import { ActionQueue } from './ActionQueue'
+import { ProvenanceBadge } from '../../components/data/ProvenanceBadge'
 
 export interface CurrentAlertCardProps {
   alert: CurrentAlert
@@ -21,13 +23,14 @@ const touchTargetLinkSx = {
 } as const
 
 export function CurrentAlertCard({ alert }: CurrentAlertCardProps) {
+  const sensorLabel = sensorLabels[alert.device_id]
   const sensorPath = `/sensors/${alert.device_id}?sensor=${alert.device_id}`
   const alertPath = `/alerts?sensor=${alert.device_id}`
 
   return (
     <Card
       component="section"
-      aria-label={`Current alert for ${alert.device_id}`}
+      aria-label={`Current alert for ${sensorLabel}`}
       variant="outlined"
       sx={{
         borderLeftWidth: tokens.size.activeRule,
@@ -38,20 +41,28 @@ export function CurrentAlertCard({ alert }: CurrentAlertCardProps) {
       <CardContent>
         <Stack spacing={2}>
           <Stack spacing={0.5}>
-            <Typography variant="h3">Sensor {alert.device_id}</Typography>
+            <Typography variant="h3">Sensor {sensorLabel}</Typography>
             <Typography component="p" color="error.main" variant="h4">
               Active anomaly
             </Typography>
           </Stack>
+          <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <ProvenanceBadge provenance={alert.detection_basis} />
+            <Typography variant="body2" color="text.secondary">
+              Episode replay {alert.replay_job_id}
+            </Typography>
+          </Stack>
           <Stack direction="row" spacing={3} useFlexGap sx={{ flexWrap: 'wrap', minWidth: 0 }}>
             <Typography variant="body2">
-              Score: <Box component="span" sx={technicalTextSx}>{alert.score}</Box>
+              Peak score: <Box component="span" sx={technicalTextSx}>{alert.peak_score}</Box>
             </Typography>
             <Typography variant="body2">
               Threshold: <Box component="span" sx={technicalTextSx}>{alert.threshold}</Box>
             </Typography>
             <Typography variant="body2">
-              Detected: <Box component="span" sx={technicalTextSx}>{alert.detected_at}</Box>
+              Episode (WIB): <Box component="span" sx={technicalTextSx}>{alert.episode_start_ts}</Box>
+              {' – '}
+              <Box component="span" sx={technicalTextSx}>{alert.episode_end_ts}</Box>
             </Typography>
           </Stack>
         </Stack>

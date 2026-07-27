@@ -1,9 +1,9 @@
-import { Card, CardContent, Grid, Stack, Typography } from '@mui/material'
+import { Alert, Card, CardContent, Grid, Stack, Typography } from '@mui/material'
 import { ApiErrorPanel } from '../components/states/ApiErrorPanel'
 import { EmptyState } from '../components/states/EmptyState'
 import { PanelSkeleton } from '../components/states/PanelSkeleton'
 import { PollingFailureNotice } from '../components/states/PollingFailureNotice'
-import { sensorIds } from '../contracts/common'
+import { sensorIds, sensorLabels } from '../contracts/common'
 import { CurrentAlertCard } from '../features/overview/CurrentAlertCard'
 import { SensorMatrix } from '../features/overview/SensorMatrix'
 import {
@@ -11,6 +11,7 @@ import {
   type LatestSensorScore,
 } from '../features/overview/useOverviewData'
 import { tokens } from '../theme/tokens'
+import { useDevicesQuery } from '../features/preview/queries'
 
 const technicalTextSx = {
   fontFamily: tokens.font.data,
@@ -44,7 +45,7 @@ function highestBreach(scores: readonly LatestSensorScore[]): string {
 
   return highest === undefined || highest.value <= 0
     ? 'None'
-    : `+${highest.value.toFixed(2)} · ${highest.deviceId}`
+    : `+${highest.value.toFixed(4)} · ${sensorLabels[highest.deviceId]}`
 }
 
 function SummaryCard({
@@ -76,12 +77,13 @@ function SummaryCard({
 }
 
 export function OverviewPage() {
+  const devices = useDevicesQuery()
   const { latestTelemetry, currentAlerts, latestScores } = useOverviewData()
   const activeAlerts = currentAlerts.data?.items ?? []
   const telemetrySensors = latestTelemetry.data?.sensors
-  const telemetryComplete = telemetrySensors !== undefined && sensorIds.every((sensorId) =>
-    telemetrySensors.some((sensor) => sensor.device_id === sensorId),
-  )
+  const telemetryComplete = telemetrySensors !== undefined &&
+    telemetrySensors.length === sensorIds.length &&
+    sensorIds.every((sensorId) => telemetrySensors.some((sensor) => sensor.device_id === sensorId))
   const telemetryAvailable = telemetryComplete
     ? sensorIds.filter((sensorId) => telemetrySensors.some((sensor) =>
         sensor.device_id === sensorId && sensor.availability === 'online' && sensor.ts !== null,
@@ -93,7 +95,21 @@ export function OverviewPage() {
 
   return (
     <Stack spacing={5}>
-      <Typography variant="h1">Overview</Typography>
+      <Stack spacing={0.5}>
+        <Typography variant="h1">Overview</Typography>
+        <Typography color="text.secondary">Telemetri historis nyata · Asia/Jakarta (WIB)</Typography>
+        <Typography color="text.secondary">
+          Provenance skor dan alert ditampilkan pada setiap hasil.
+        </Typography>
+      </Stack>
+
+      {devices.data?.items[0]?.import_readiness === 'ready' ? null : (
+        <Alert severity={devices.isError ? 'error' : 'info'}>
+          {devices.isError
+            ? 'Status import telemetri tidak dapat dibaca.'
+            : 'Corpus telemetri belum siap. Preview tidak menggunakan fallback fixture.'}
+        </Alert>
+      )}
 
       <section aria-label="Operational summary">
         <Grid container spacing={2}>
@@ -107,15 +123,15 @@ export function OverviewPage() {
           <Grid size={{ xs: 12, md: 6, lg: 3 }}>
             <SummaryCard
               label={telemetryComplete ? 'Telemetry available' : 'Telemetry availability unknown'}
-              value={telemetryAvailable === undefined ? 'Unknown' : `${telemetryAvailable}/6`}
+              value={telemetryAvailable === undefined ? 'Unknown' : `${telemetryAvailable}/${sensorIds.length}`}
             />
           </Grid>
           <Grid size={{ xs: 12, md: 6, lg: 3 }}>
-            <SummaryCard label="Score availability" value={`${scoreAvailability}/6`} />
+            <SummaryCard label="Score availability" value={`${scoreAvailability}/${sensorIds.length}`} />
           </Grid>
           <Grid size={{ xs: 12, md: 6, lg: 3 }}>
             <SummaryCard
-              label="Highest breach"
+              label="Highest preview score breach"
               value={highestBreachValue}
               error={highestBreachValue.startsWith('+')}
             />

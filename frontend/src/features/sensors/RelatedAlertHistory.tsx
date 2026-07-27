@@ -2,7 +2,12 @@ import { Box, Paper, Stack, Typography } from '@mui/material'
 import { ApiErrorPanel } from '../../components/states/ApiErrorPanel'
 import { EmptyState } from '../../components/states/EmptyState'
 import { PanelSkeleton } from '../../components/states/PanelSkeleton'
-import type { AlertStatus, SensorId } from '../../contracts/common'
+import {
+  sensorLabels,
+  type AlertStatus,
+  type SensorId,
+} from '../../contracts/common'
+import { ProvenanceBadge } from '../../components/data/ProvenanceBadge'
 import { tokens } from '../../theme/tokens'
 import { useAlertEventsQuery } from '../alerts/queries'
 
@@ -25,7 +30,11 @@ const technicalTextSx = {
 } as const
 
 export function RelatedAlertHistory({ sensorId, from, to }: RelatedAlertHistoryProps) {
-  const alerts = useAlertEventsQuery({ deviceId: sensorId, from, to, limit: 200 })
+  const sensorLabel = sensorLabels[sensorId]
+  const alerts = useAlertEventsQuery({
+    deviceId: sensorId,
+    limit: 200,
+  })
 
   return (
     <Paper component="section" aria-label="Related alert history" variant="outlined" sx={{ p: 2 }}>
@@ -33,7 +42,11 @@ export function RelatedAlertHistory({ sensorId, from, to }: RelatedAlertHistoryP
         <Stack spacing={0.5}>
           <Typography variant="h2">Related alert history</Typography>
           <Typography variant="body2" color="text.secondary">
-            Immutable alert events for sensor {sensorId} in the selected range.
+            Lifecycle terkait untuk {sensorLabel}; rentang episode terpilih {from}–{to} tidak
+            menyembunyikan event operasional yang terjadi kemudian.
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Episode time WIB; lifecycle time UTC.
           </Typography>
         </Stack>
         {alerts.data === undefined ? (
@@ -45,7 +58,7 @@ export function RelatedAlertHistory({ sensorId, from, to }: RelatedAlertHistoryP
         ) : alerts.data.events.length === 0 ? (
           <EmptyState
             title="No related alert history"
-            detail="No alert events were returned for this sensor and time range."
+             detail="Tidak ada episode pada rentang WIB yang dipilih."
           />
         ) : (
           <Stack spacing={1}>
@@ -69,7 +82,7 @@ export function RelatedAlertHistory({ sensorId, from, to }: RelatedAlertHistoryP
                   <Stack spacing={1}>
                     <Typography variant="h3">{eventLabels[event.event_type]}</Typography>
                     <Typography variant="body2">
-                      Event time: <Box component="span" sx={technicalTextSx}>{event.event_ts}</Box>
+                      Event time (UTC): <Box component="span" sx={technicalTextSx}>{event.event_at}</Box>
                     </Typography>
                     <Typography variant="body2">
                       Alert: <Box component="span" sx={technicalTextSx}>{event.alert_id}</Box>
@@ -77,18 +90,10 @@ export function RelatedAlertHistory({ sensorId, from, to }: RelatedAlertHistoryP
                     <Typography variant="body2">
                       Actor: <Box component="span" sx={technicalTextSx}>{event.actor}</Box>
                     </Typography>
-                    {event.inference_result_window_start_ts === null ||
-                    event.inference_result_window_end_ts === null ? null : (
-                      <Typography variant="body2">
-                        Inference window:{' '}
-                        <Box component="span" sx={technicalTextSx}>
-                          {event.inference_result_window_start_ts} – {event.inference_result_window_end_ts}
-                        </Box>
-                      </Typography>
-                    )}
                     {event.note === null ? null : (
                       <Typography variant="body2">Note: {event.note}</Typography>
                     )}
+                    <ProvenanceBadge provenance={event.detection_basis} />
                   </Stack>
                 </Paper>
               ))}

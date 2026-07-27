@@ -13,7 +13,6 @@ export function createAlertLifecycleCommand(
 ): AlertLifecycleCommand {
   const body: AlertCommandRequest = {
     command_id: crypto.randomUUID(),
-    event_ts: new Date().toISOString(),
   }
   if (note !== undefined) body.note = note
   return { alertId, action, body }

@@ -3,13 +3,15 @@ import {
   AvailabilitySchema,
   BucketSchema,
   FreshnessSchema,
-  Rfc3339Schema,
+  HistoricalDateTimeSchema,
+  OperationalInstantSchema,
   SensorIdSchema,
+  compareHistoricalDateTimes,
 } from './common'
 
 export const LatestTelemetrySensorSchema = z.strictObject({
   device_id: SensorIdSchema,
-  ts: Rfc3339Schema.nullable(),
+  ts: HistoricalDateTimeSchema.nullable(),
   temperature_c: z.number().nullable(),
   relative_humidity_pct: z.number().nullable(),
   freshness: FreshnessSchema,
@@ -20,13 +22,14 @@ export type LatestTelemetrySensor = z.infer<typeof LatestTelemetrySensorSchema>
 
 export const LatestTelemetryResponseSchema = z.strictObject({
   request_id: z.string(),
-  generated_at: Rfc3339Schema,
-  sensors: z.array(LatestTelemetrySensorSchema).max(6),
+  time_zone: z.literal('Asia/Jakarta'),
+  generated_at: OperationalInstantSchema,
+  sensors: z.array(LatestTelemetrySensorSchema).max(2),
 })
 export type LatestTelemetryResponse = z.infer<typeof LatestTelemetryResponseSchema>
 
 export const TelemetryPointSchema = z.strictObject({
-  ts: Rfc3339Schema,
+  ts: HistoricalDateTimeSchema,
   temperature_c: z.number().nullable(),
   relative_humidity_pct: z.number().nullable(),
   sample_count: z.number().int().nonnegative(),
@@ -37,14 +40,14 @@ export type TelemetryPoint = z.infer<typeof TelemetryPointSchema>
 export const TelemetryHistoryQuerySchema = z
   .strictObject({
     deviceId: SensorIdSchema,
-    from: Rfc3339Schema,
-    to: Rfc3339Schema,
+    from: HistoricalDateTimeSchema,
+    to: HistoricalDateTimeSchema,
     bucket: BucketSchema.default('raw'),
     limit: z.number().int().min(1).max(5_000).default(500),
     cursor: z.string().optional(),
   })
   .superRefine((value, context) => {
-    if (Date.parse(value.from) >= Date.parse(value.to)) {
+    if (compareHistoricalDateTimes(value.from, value.to) >= 0) {
       context.addIssue({ code: 'custom', message: 'from must be earlier than to', path: ['from'] })
     }
     if (value.bucket !== 'raw' && value.limit > 2_000) {
@@ -61,15 +64,16 @@ export const TelemetryHistoryResponseSchema = z
   .strictObject({
     request_id: z.string(),
     device_id: SensorIdSchema,
-    from: Rfc3339Schema,
-    to: Rfc3339Schema,
+    time_zone: z.literal('Asia/Jakarta'),
+    from: HistoricalDateTimeSchema,
+    to: HistoricalDateTimeSchema,
     bucket: BucketSchema,
     points: z.array(TelemetryPointSchema).max(5_000),
     next_cursor: z.string().nullable(),
     returned_count: z.number().int().nonnegative(),
   })
   .superRefine((value, context) => {
-    if (Date.parse(value.from) >= Date.parse(value.to)) {
+    if (compareHistoricalDateTimes(value.from, value.to) >= 0) {
       context.addIssue({ code: 'custom', message: 'from must be earlier than to', path: ['from'] })
     }
     if (value.bucket !== 'raw' && value.points.length > 2_000) {

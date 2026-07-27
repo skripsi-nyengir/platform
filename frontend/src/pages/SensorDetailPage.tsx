@@ -6,10 +6,11 @@ import { EmptyState } from '../components/states/EmptyState'
 import { PanelSkeleton } from '../components/states/PanelSkeleton'
 import { PollingFailureNotice } from '../components/states/PollingFailureNotice'
 import { SensorStatus } from '../components/states/SensorStatus'
-import { SensorIdSchema, type SensorId } from '../contracts/common'
+import { SensorIdSchema, sensorLabels, type SensorId } from '../contracts/common'
 import {
   parseUrlFilters,
   updateUrlFilters,
+  historicalDefaultRange,
   type UrlFilters,
 } from '../features/filters/urlFilters'
 import { useLatestTelemetryQuery } from '../features/telemetry/queries'
@@ -24,13 +25,14 @@ const technicalTextSx = {
 } as const
 
 function SensorSnapshot({ sensorId }: { sensorId: SensorId }) {
+  const sensorLabel = sensorLabels[sensorId]
   const latest = useLatestTelemetryQuery(sensorId)
   const sensor = latest.data?.sensors.find((item) => item.device_id === sensorId)
 
   return (
     <Paper
       component="section"
-      aria-label={`Sensor ${sensorId} snapshot`}
+      aria-label={`Sensor ${sensorLabel} snapshot`}
       variant="outlined"
       sx={{ minWidth: 0, p: 4 }}
     >
@@ -97,6 +99,7 @@ export function SensorDetailPage() {
   if (!parsedSensorId.success) return <Navigate to="/" replace />
 
   const sensorId = parsedSensorId.data
+  const sensorLabel = sensorLabels[sensorId]
   const filters = parseUrlFilters(params, sensorId)
   const updateFilters = (patch: Partial<UrlFilters>) => {
     const next = updateUrlFilters(params, patch)
@@ -115,7 +118,16 @@ export function SensorDetailPage() {
       <Stack spacing={0.5}>
         <Typography variant="h1">Sensor Detail &amp; History</Typography>
         <Typography color="text.secondary">
-          Selected sensor: <Box component="span" sx={technicalTextSx}>{sensorId}</Box>
+          Selected sensor: <Box component="span" sx={technicalTextSx}>{sensorLabel}</Box>
+        </Typography>
+        <Typography color="text.secondary" variant="body2">
+          Corpus range (WIB): {historicalDefaultRange.from} – {historicalDefaultRange.to}
+        </Typography>
+        <Typography color="text.secondary" variant="body2">
+          Telemetri historis nyata · Asia/Jakarta (WIB)
+        </Typography>
+        <Typography color="text.secondary" variant="body2">
+          Skor berbadge sesuai provenance API; histori menampilkan satu versi model.
         </Typography>
       </Stack>
       <TemporalFilterBar

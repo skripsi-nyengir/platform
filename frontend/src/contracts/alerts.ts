@@ -1,17 +1,24 @@
 import { z } from 'zod'
-import { AlertStatusSchema, Rfc3339Schema, SensorIdSchema } from './common'
+import {
+  AlertStatusSchema,
+  HistoricalDateTimeSchema,
+  OperationalInstantSchema,
+  SensorIdSchema,
+} from './common'
+
+export const DetectionBasisSchema = z.enum(['simulated_preview', 'artifact_backed'])
 
 export const AlertEventSchema = z.strictObject({
   event_id: z.string(),
   alert_id: z.string(),
-  event_ts: Rfc3339Schema,
+  event_at: OperationalInstantSchema,
   event_type: AlertStatusSchema,
   device_id: SensorIdSchema,
   actor: z.string(),
   note: z.string().nullable(),
-  inference_result_window_start_ts: Rfc3339Schema.nullable(),
-  inference_result_window_end_ts: Rfc3339Schema.nullable(),
+  accepted_at: OperationalInstantSchema.nullable(),
   inference_model_version: z.string().nullable(),
+  detection_basis: DetectionBasisSchema,
 })
 export type AlertEvent = z.infer<typeof AlertEventSchema>
 
@@ -19,13 +26,17 @@ export const AlertEventsQuerySchema = z
   .strictObject({
     alertId: z.string().min(1).optional(),
     deviceId: SensorIdSchema.optional(),
-    from: Rfc3339Schema.optional(),
-    to: Rfc3339Schema.optional(),
+    from: OperationalInstantSchema.optional(),
+    to: OperationalInstantSchema.optional(),
     limit: z.number().int().min(1).max(200).default(200),
     cursor: z.string().optional(),
   })
   .superRefine((value, context) => {
-    if (value.from !== undefined && value.to !== undefined && Date.parse(value.from) >= Date.parse(value.to)) {
+    if (
+      value.from !== undefined &&
+      value.to !== undefined &&
+      Date.parse(value.from) >= Date.parse(value.to)
+    ) {
       context.addIssue({ code: 'custom', message: 'from must be earlier than to', path: ['from'] })
     }
   })
@@ -34,6 +45,7 @@ export type AlertEventsQuery = z.input<typeof AlertEventsQuerySchema>
 export const AlertEventsResponseSchema = z
   .strictObject({
     request_id: z.string(),
+    time_zone: z.literal('Asia/Jakarta'),
     events: z.array(AlertEventSchema).max(200),
     next_cursor: z.string().nullable(),
     returned_count: z.number().int().nonnegative(),
@@ -49,12 +61,19 @@ export const CurrentAlertSchema = z
     alert_id: z.string(),
     device_id: SensorIdSchema,
     status: AlertStatusSchema,
-    detected_at: Rfc3339Schema,
-    latest_event_ts: Rfc3339Schema,
+    episode_start_ts: HistoricalDateTimeSchema,
+    episode_end_ts: HistoricalDateTimeSchema,
+    last_score_ts: HistoricalDateTimeSchema,
+    created_at: OperationalInstantSchema,
+    latest_event_at: OperationalInstantSchema,
     latest_event_id: z.string(),
-    score: z.number(),
+    peak_score: z.number(),
+    latest_score: z.number(),
+    anomalous_window_count: z.number().int().positive(),
+    replay_job_id: z.string(),
     threshold: z.number(),
     model_version: z.string(),
+    detection_basis: DetectionBasisSchema,
     can_acknowledge: z.boolean(),
     can_resolve: z.boolean(),
   })
@@ -92,7 +111,8 @@ export type CurrentAlertsQuery = z.input<typeof CurrentAlertsQuerySchema>
 export const CurrentAlertsResponseSchema = z
   .strictObject({
     request_id: z.string(),
-    generated_at: Rfc3339Schema,
+    time_zone: z.literal('Asia/Jakarta'),
+    generated_at: OperationalInstantSchema,
     items: z.array(CurrentAlertSchema).max(100),
     page: z.number().int().min(1),
     page_size: z.number().int().min(1).max(100),

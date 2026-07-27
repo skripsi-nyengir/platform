@@ -38,7 +38,7 @@ export function ServiceStatusTable({ services }: ServiceStatusTableProps) {
             },
           }}
         >
-          <caption>Service liveness and readiness</caption>
+          <caption>Preview component readiness</caption>
           <TableHead>
             <TableRow>
               <TableCell>Service</TableCell>

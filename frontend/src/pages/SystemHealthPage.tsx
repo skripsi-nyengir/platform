@@ -24,8 +24,10 @@ export function SystemHealthPage() {
       <Stack spacing={0.5}>
         <Typography variant="h1">System Health</Typography>
         <Typography color="text.secondary" variant="body2" sx={{ maxWidth: '68ch' }}>
-          Liveness reports whether a process is running. Readiness reports whether its required
-          dependencies are usable. Both remain independent from telemetry and status-poll freshness.
+          Status komponen preview replay untuk B02F3872.
+        </Typography>
+        <Typography color="text.secondary" variant="body2" sx={{ maxWidth: '68ch' }}>
+          Simulasi preview dipisahkan dari kesiapan artifact asli.
         </Typography>
       </Stack>
 

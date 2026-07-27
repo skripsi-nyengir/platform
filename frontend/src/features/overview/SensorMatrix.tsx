@@ -11,16 +11,17 @@ import {
   Typography,
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
-import { SparkLineChart } from '@mui/x-charts/SparkLineChart'
-import { useState } from 'react'
+import { LineChart } from '@mui/x-charts/LineChart'
 import { Link as RouterLink } from 'react-router-dom'
 import { getChartColors } from '../../components/charts/muiChartTheme'
 import { buildOverviewSparklineData } from '../../components/charts/temporalOptions'
 import { SensorStatus } from '../../components/states/SensorStatus'
+import { ProvenanceBadge } from '../../components/data/ProvenanceBadge'
 import type { CurrentAlert } from '../../contracts/alerts'
-import { sensorIds, type SensorId } from '../../contracts/common'
+import { sensorIds, sensorLabels, type SensorId } from '../../contracts/common'
 import type { LatestTelemetryResponse, LatestTelemetrySensor } from '../../contracts/telemetry'
 import { tokens } from '../../theme/tokens'
+import { historicalDefaultRange } from '../filters/urlFilters'
 import { useTelemetryHistoryQuery } from '../telemetry/queries'
 import type { LatestSensorScore } from './useOverviewData'
 
@@ -68,14 +69,6 @@ const metadataRowSx = {
   gridTemplateColumns: 'auto minmax(0, 1fr)',
 } as const
 
-function sparklineValues(points: readonly { y: number | null }[]): number[] {
-  const values = new Array<number>(points.length)
-  points.forEach((point, index) => {
-    if (point.y !== null) values[index] = point.y
-  })
-  return values
-}
-
 function SensorCard({
   sensorId,
   sensor,
@@ -87,17 +80,11 @@ function SensorCard({
   score?: LatestSensorScore
   hasDetectedAlert: boolean
 }) {
+  const sensorLabel = sensorLabels[sensorId]
   const theme = useTheme()
-  const [range] = useState(() => {
-    const to = Date.now()
-    return {
-      from: new Date(to - 30 * 60 * 1_000).toISOString(),
-      to: new Date(to).toISOString(),
-    }
-  })
   const history = useTelemetryHistoryQuery({
     deviceId: sensorId,
-    ...range,
+      ...historicalDefaultRange,
     bucket: 'raw',
     limit: 500,
   })
@@ -106,7 +93,7 @@ function SensorCard({
   const sparklineData = buildOverviewSparklineData({
     theme,
     sensorId,
-    ...range,
+      ...historicalDefaultRange,
     telemetry: historyPoints,
   })
   const priority = score?.isAnomaly === true || hasDetectedAlert
@@ -118,7 +105,7 @@ function SensorCard({
   return (
     <Card
       component="article"
-      aria-label={`Sensor ${sensorId}`}
+      aria-label={`Sensor ${sensorLabel}`}
       variant="outlined"
       sx={{
         borderLeftColor: priority ? 'error.main' : 'divider',
@@ -138,7 +125,7 @@ function SensorCard({
             useFlexGap
             sx={{ alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap' }}
           >
-            <Typography variant="h3">Sensor {sensorId}</Typography>
+            <Typography variant="h3">Sensor {sensorLabel}</Typography>
             <Stack
               direction="row"
               spacing={1}
@@ -185,7 +172,7 @@ function SensorCard({
               history.isError ? (
                 <Stack
                   role="status"
-                  aria-label={`Recent history unavailable for sensor ${sensorId}`}
+                  aria-label={`Recent history unavailable for sensor ${sensorLabel}`}
                   sx={{ height: '100%', justifyContent: 'center' }}
                 >
                   <Typography color="text.secondary" variant="body2">
@@ -196,7 +183,7 @@ function SensorCard({
                 <Box
                   role="status"
                   aria-busy="true"
-                  aria-label={`Loading recent history for sensor ${sensorId}`}
+                  aria-label={`Loading recent history for sensor ${sensorLabel}`}
                   sx={{ height: '100%' }}
                 >
                   <Skeleton animation={false} height="100%" variant="rounded" />
@@ -205,7 +192,7 @@ function SensorCard({
             ) : historyPoints.length === 0 ? (
               <Stack
                 role="status"
-                aria-label={`No recent history available for sensor ${sensorId}`}
+                aria-label={`No recent history available for sensor ${sensorLabel}`}
                 sx={{ height: '100%', justifyContent: 'center' }}
               >
                 <Typography color="text.secondary" variant="body2">
@@ -224,36 +211,62 @@ function SensorCard({
               >
                 <Box
                   role="img"
-                  aria-label={`Recent Temperature history for sensor ${sensorId}`}
-                  aria-description={`Recent temperature history for sensor ${sensorId}.`}
+                  aria-label={`Recent Temperature history for sensor ${sensorLabel}`}
+                  aria-description={`Recent temperature history for sensor ${sensorLabel}.`}
                   sx={{ height: tokens.size.sparkline, width: tokens.size.sparkline }}
                 >
-                  <SparkLineChart
-                    color={chartColors.temperature}
-                    data={sparklineValues(sparklineData.temperature)}
+                  <LineChart
+                    disableAxisListener
+                    disableKeyboardNavigation
                     height={tokens.size.sparkline}
+                    hideLegend
+                    margin={{ top: 5, right: 5, bottom: 5, left: 5 }}
+                    series={[{
+                      color: chartColors.temperature,
+                      connectNulls: false,
+                      curve: 'linear',
+                      data: sparklineData.temperature.map((point) => point.y),
+                      disableHighlight: true,
+                      showMark: false,
+                    }]}
+                    skipAnimation
                     width={tokens.size.sparkline}
-                    xAxis={{
+                    xAxis={[{
                       scaleType: 'time',
                       data: sparklineData.temperature.map((point) => point.x),
-                    }}
+                      position: 'none',
+                    }]}
+                    yAxis={[{ position: 'none' }]}
                   />
                 </Box>
                 <Box
                   role="img"
-                  aria-label={`Recent RH history for sensor ${sensorId}`}
-                  aria-description={`Recent relative humidity history for sensor ${sensorId}.`}
+                  aria-label={`Recent RH history for sensor ${sensorLabel}`}
+                  aria-description={`Recent relative humidity history for sensor ${sensorLabel}.`}
                   sx={{ height: tokens.size.sparkline, width: tokens.size.sparkline }}
                 >
-                  <SparkLineChart
-                    color={chartColors.humidity}
-                    data={sparklineValues(sparklineData.humidity)}
+                  <LineChart
+                    disableAxisListener
+                    disableKeyboardNavigation
                     height={tokens.size.sparkline}
+                    hideLegend
+                    margin={{ top: 5, right: 5, bottom: 5, left: 5 }}
+                    series={[{
+                      color: chartColors.humidity,
+                      connectNulls: false,
+                      curve: 'linear',
+                      data: sparklineData.humidity.map((point) => point.y),
+                      disableHighlight: true,
+                      showMark: false,
+                    }]}
+                    skipAnimation
                     width={tokens.size.sparkline}
-                    xAxis={{
+                    xAxis={[{
                       scaleType: 'time',
                       data: sparklineData.humidity.map((point) => point.x),
-                    }}
+                      position: 'none',
+                    }]}
+                    yAxis={[{ position: 'none' }]}
                   />
                 </Box>
               </Box>
@@ -306,6 +319,14 @@ function SensorCard({
                 <Box component="dd" sx={definitionValueSx}>{score.threshold}</Box>
               </Box>
             )}
+            {score?.provenance === undefined ? null : (
+              <Box component="div" sx={metadataRowSx}>
+                <Box component="dt" sx={definitionLabelSx}>Provenance</Box>
+                <Box component="dd" sx={definitionValueSx}>
+                  <ProvenanceBadge provenance={score.provenance} />
+                </Box>
+              </Box>
+            )}
           </Box>
         </Stack>
       </CardContent>
@@ -338,7 +359,7 @@ export function SensorMatrix({ telemetry, scores, alerts }: SensorMatrixProps) {
         </Typography>
         <Grid container spacing={2}>
           {sensorIds.map((sensorId) => (
-            <Grid key={sensorId} size={{ xs: 12, md: 6, lg: 4 }} sx={{ minWidth: 0 }}>
+            <Grid key={sensorId} size={{ xs: 12, md: 6, lg: 6 }} sx={{ minWidth: 0 }}>
               <SensorCard
                 sensorId={sensorId}
                 sensor={telemetry?.sensors.find((item) => item.device_id === sensorId)}

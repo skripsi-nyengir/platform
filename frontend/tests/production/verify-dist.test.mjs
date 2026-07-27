@@ -14,15 +14,19 @@ const forbiddenContent = [
   ['scenario parser', /scenarioFromSearch/],
   ['scenario state', /(?:set|reset)MockScenario|mockState/],
   ['mock-only scenario', /active-anomaly|data-gap|server-error/],
-  ['mock alert fixture', /alert_n4_active/],
+  ['mock alert fixture', /alert_talpha_1_active/],
   ['mock request fixture', /\breq_(?:telemetry_latest|telemetry_history|inference_results|alert_events|current_alerts|eda_summary|eda_distributions|eda_correlation|model_evaluations|system_status|server_error)\b/],
-  ['mock timestamp fixture', /2026-07-19T10:30:00Z/],
+  ['mock timestamp fixture', /2025-12-12T00:02:57/],
+  ['live inference claim', /\blive inference\b/i],
+  ['production-ready claim', /\bproduction[- ]ready\b/i],
+  ['deployed model claim', /\bmodel (?:is )?deployed\b/i],
+  ['final evaluation claim', /\b(?:independent )?final evaluation (?:result|report)\b/i],
 ]
 const requiredRelativeApiPaths = [
   '/api/telemetry/latest',
   '/api/inference-results',
   '/api/alerts/current',
-  '/api/eda/summary',
+  '/api/eda/periods',
   '/api/model-evaluations',
   '/api/system/status',
 ]

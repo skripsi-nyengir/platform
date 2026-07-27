@@ -1,36 +1,52 @@
 import { z } from 'zod'
-import { BucketSchema, Rfc3339Schema, SensorIdSchema } from './common'
+import {
+  BucketSchema,
+  HistoricalDateTimeSchema,
+  SensorIdSchema,
+  compareHistoricalDateTimes,
+} from './common'
+
+export const ScoreProvenanceSchema = z.enum(['simulated_preview', 'artifact_backed'])
 
 export const InferencePointSchema = z
   .strictObject({
-    window_start_ts: Rfc3339Schema,
-    window_end_ts: Rfc3339Schema,
+    window_start_ts: HistoricalDateTimeSchema,
+    window_end_ts: HistoricalDateTimeSchema,
+    score_ts: HistoricalDateTimeSchema,
     score: z.number(),
     threshold: z.number(),
     is_anomaly: z.boolean(),
     model_version: z.string(),
-    model_hash: z.string(),
-    preprocessing_hash: z.string(),
-    threshold_hash: z.string(),
+    score_provenance: ScoreProvenanceSchema,
   })
-  .refine((value) => Date.parse(value.window_start_ts) < Date.parse(value.window_end_ts), {
-    message: 'window_start_ts must be earlier than window_end_ts',
-    path: ['window_start_ts'],
-  })
+  .refine(
+    (value) => compareHistoricalDateTimes(value.window_start_ts, value.window_end_ts) < 0,
+    {
+      message: 'window_start_ts must be earlier than window_end_ts',
+      path: ['window_start_ts'],
+    },
+  )
+  .refine(
+    (value) => compareHistoricalDateTimes(value.window_end_ts, value.score_ts) <= 0,
+    {
+      message: 'score_ts must not be earlier than window_end_ts',
+      path: ['score_ts'],
+    },
+  )
 export type InferencePoint = z.infer<typeof InferencePointSchema>
 
 export const InferenceQuerySchema = z
   .strictObject({
     deviceId: SensorIdSchema,
-    from: Rfc3339Schema,
-    to: Rfc3339Schema,
+    from: HistoricalDateTimeSchema,
+    to: HistoricalDateTimeSchema,
     bucket: BucketSchema.default('raw'),
     limit: z.number().int().min(1).max(5_000).default(500),
     cursor: z.string().optional(),
     modelVersion: z.string().optional(),
   })
   .superRefine((value, context) => {
-    if (Date.parse(value.from) >= Date.parse(value.to)) {
+    if (compareHistoricalDateTimes(value.from, value.to) >= 0) {
       context.addIssue({ code: 'custom', message: 'from must be earlier than to', path: ['from'] })
     }
     if (value.bucket !== 'raw' && value.limit > 2_000) {
@@ -49,6 +65,7 @@ export const InferenceResponseSchema = z
   .strictObject({
     request_id: z.string(),
     device_id: SensorIdSchema,
+    time_zone: z.literal('Asia/Jakarta'),
     model_version: z.string(),
     points: z.array(InferencePointSchema).max(5_000),
     next_cursor: z.string().nullable(),
@@ -58,6 +75,13 @@ export const InferenceResponseSchema = z
     message: 'returned_count must equal points length',
     path: ['returned_count'],
   })
+  .refine(
+    (value) => value.points.every((point) => point.model_version === value.model_version),
+    {
+      message: 'all points must belong to the selected model_version',
+      path: ['points'],
+    },
+  )
 export const InferenceResultsResponseSchema = InferenceResponseSchema
 export type InferenceResponse = z.infer<typeof InferenceResponseSchema>
 export type InferenceResultsResponse = InferenceResponse

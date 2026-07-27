@@ -1,112 +1,118 @@
 import { renderHook, waitFor } from '@testing-library/react'
-import { HttpResponse, http } from 'msw'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { http, HttpResponse } from 'msw'
+import { afterEach, describe, expect, it } from 'vitest'
+import { edaPublishedCustomRun, edaReadyMonthlyRun, edaRunningCustomJob } from '../../mocks/fixtures/eda'
 import { server } from '../../mocks/node'
+import { createQueryTestHarness, type QueryTestHarness } from '../../test/queryTestUtils'
 import {
-  createQueryTestHarness,
-  type QueryTestHarness,
-} from '../../test/queryTestUtils'
-import {
-  useEdaCorrelationQuery,
-  useEdaDistributionsQuery,
-  useEdaSummaryQuery,
+  edaQueryKeys,
+  useEdaJobQuery,
+  useEdaPeriodsQuery,
+  useEdaSectionQuery,
 } from './queries'
 
-const from = '2026-07-19T10:00:00Z'
-const to = '2026-07-19T10:30:00Z'
-const origin = window.location.origin
+const harnesses: QueryTestHarness[] = []
 
-let harness: QueryTestHarness
-
-beforeEach(() => {
-  harness = createQueryTestHarness()
-})
+function harness(): QueryTestHarness {
+  const value = createQueryTestHarness()
+  harnesses.push(value)
+  return value
+}
 
 afterEach(() => {
-  harness.restore()
+  for (const value of harnesses.splice(0)) value.restore()
 })
 
 describe('EDA queries', () => {
-  it('maps URL sensor to summary deviceId, ignores modelVersion, and does not poll', async () => {
-    const query = renderHook(
-      () => useEdaSummaryQuery({ sensor: 'n2', from, to, bucket: '15m', modelVersion: 'ignored' }),
-      { wrapper: harness.wrapper },
+  it('uses stable period and section query keys', async () => {
+    const testHarness = harness()
+    const periods = renderHook(
+      () => useEdaPeriodsQuery({ period_kind: 'monthly' }),
+      { wrapper: testHarness.wrapper },
     )
-    await waitFor(() => expect(query.result.current.isSuccess).toBe(true))
 
-    const key = ['eda', 'summary', 'n2', from, to, '15m'] as const
-    const cached = harness.queryClient.getQueryCache().find({ queryKey: key })
-    expect(cached?.queryKey).toEqual(key)
-    expect(cached?.options).not.toHaveProperty('refetchInterval')
-    expect(cached?.queryKey).not.toContain('ignored')
+    await waitFor(() => expect(periods.result.current.data?.items[0]?.run_id)
+      .toBe(edaReadyMonthlyRun.run_id))
+    expect(edaQueryKeys.periods({ period_kind: 'monthly', limit: 25, cursor: null }))
+      .toEqual(['eda', 'periods', 'monthly', 25, null])
+    expect(edaQueryKeys.section(edaReadyMonthlyRun.run_id, 'quality_overview'))
+      .toEqual(['eda', 'run', edaReadyMonthlyRun.run_id, 'section', 'quality_overview'])
   })
 
-  it('normalizes distribution and correlation defaults into primitive non-polling keys', async () => {
-    const distribution = renderHook(
-      () => useEdaDistributionsQuery({ from, to, field: 'score' }),
-      { wrapper: harness.wrapper },
-    )
-    const correlation = renderHook(
-      () => useEdaCorrelationQuery({ from, to }),
-      { wrapper: harness.wrapper },
-    )
-
-    await waitFor(() => expect(distribution.result.current.isSuccess).toBe(true))
-    await waitFor(() => expect(correlation.result.current.isSuccess).toBe(true))
-
-    const distributionKey = ['eda', 'distributions', null, from, to, 'score', 20] as const
-    const correlationKey = [
-      'eda',
-      'correlation',
-      null,
-      from,
-      to,
-      'temperature_c',
-      'relative_humidity_pct',
-      1_000,
-      null,
-    ] as const
-    const distributionQuery = harness.queryClient.getQueryCache().find({ queryKey: distributionKey })
-    const correlationQuery = harness.queryClient.getQueryCache().find({ queryKey: correlationKey })
-
-    expect(distributionQuery?.options).not.toHaveProperty('refetchInterval')
-    expect(correlationQuery?.options).not.toHaveProperty('refetchInterval')
-    expect([...distributionKey, ...correlationKey].every((value) =>
-      value === null || typeof value === 'string' || typeof value === 'number',
-    )).toBe(true)
-  })
-
-  it('keeps a failed correlation request independent from a successful distribution request', async () => {
-    server.use(
-      http.get(`${origin}/api/eda/correlation`, () =>
-        HttpResponse.json(
-          {
-            type: 'https://example.invalid/problems/eda-correlation',
-            title: 'Correlation unavailable',
-            status: 503,
-            detail: 'Correlation failed independently',
-            instance: '/api/eda/correlation',
-            request_id: 'req_eda_correlation_failed',
-          },
-          { status: 503 },
-        ),
-      ),
-    )
-    const distribution = renderHook(
-      () => useEdaDistributionsQuery({ from, to, field: 'temperature_c', bins: 10 }),
-      { wrapper: harness.wrapper },
-    )
-    const correlation = renderHook(
-      () => useEdaCorrelationQuery({ from, to, maxPoints: 100 }),
-      { wrapper: harness.wrapper },
+  it('polls active jobs every second and stops after success', async () => {
+    let requests = 0
+    const succeededJob = {
+      ...edaRunningCustomJob,
+      status: 'succeeded' as const,
+      terminal: true,
+      completed_at: '2026-07-26T07:04:00Z',
+      run_id: edaPublishedCustomRun.run_id,
+    }
+    server.use(http.get('/api/eda/jobs/:jobId', () => {
+      requests += 1
+      return HttpResponse.json({
+        request_id: `req-job-${requests}`,
+        job: requests === 1 ? edaRunningCustomJob : succeededJob,
+      })
+    }))
+    const testHarness = harness()
+    const { result } = renderHook(
+      () => useEdaJobQuery(edaRunningCustomJob.job_id),
+      { wrapper: testHarness.wrapper },
     )
 
-    await waitFor(() => expect(distribution.result.current.isSuccess).toBe(true))
-    await waitFor(() => expect(correlation.result.current.isError).toBe(true))
-
-    expect(distribution.result.current.data?.sample_count).toBe(36)
-    expect(correlation.result.current.error).toMatchObject({
-      requestId: 'req_eda_correlation_failed',
+    await waitFor(() => expect(result.current.data?.job.status).toBe('succeeded'), {
+      timeout: 2_500,
     })
+    expect(requests).toBe(2)
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 1_100))
+    expect(requests).toBe(2)
+  })
+
+  it('aborts an in-flight job request when the last observer unmounts', async () => {
+    let requestStarted = false
+    let requestAborted = false
+    server.use(http.get('/api/eda/jobs/:jobId', async ({ request }) => {
+      requestStarted = true
+      await new Promise<void>((resolve) => {
+        request.signal.addEventListener('abort', () => {
+          requestAborted = true
+          resolve()
+        }, { once: true })
+      })
+      return HttpResponse.json({ request_id: 'req-aborted', job: edaRunningCustomJob })
+    }))
+    const testHarness = harness()
+    const { unmount } = renderHook(
+      () => useEdaJobQuery(edaRunningCustomJob.job_id),
+      { wrapper: testHarness.wrapper },
+    )
+
+    await waitFor(() => expect(requestStarted).toBe(true))
+    unmount()
+    await waitFor(() => expect(requestAborted).toBe(true))
+  })
+
+  it('keeps section requests isolated when one endpoint fails', async () => {
+    server.use(http.get('/api/eda/runs/:runId/sections/relationships', ({ request }) => (
+      HttpResponse.json({
+        type: 'about:blank',
+        title: 'EDA section failed',
+        status: 500,
+        detail: 'Bagian hubungan tidak dapat dimuat.',
+        instance: new URL(request.url).pathname,
+        request_id: 'req-section-failed',
+      }, { status: 500 })
+    )))
+    const testHarness = harness()
+    const { result } = renderHook(() => ({
+      quality: useEdaSectionQuery(edaReadyMonthlyRun.run_id, 'quality_overview'),
+      relationships: useEdaSectionQuery(edaReadyMonthlyRun.run_id, 'relationships'),
+    }), { wrapper: testHarness.wrapper })
+
+    await waitFor(() => expect(result.current.quality.data?.status).toBe('complete'))
+    await waitFor(() => expect(result.current.relationships.isError).toBe(true))
+    expect(result.current.quality.isError).toBe(false)
+    expect(result.current.relationships.error?.message).toBe('Bagian hubungan tidak dapat dimuat.')
   })
 })

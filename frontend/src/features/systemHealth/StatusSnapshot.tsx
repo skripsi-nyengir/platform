@@ -48,7 +48,7 @@ export function StatusSnapshot({ snapshot, displayedAt, pollAgeSeconds }: Status
               Status-poll freshness
             </Typography>
             <Typography variant="body2">
-              Snapshot checked at:{' '}
+              Status checked at (UTC):{' '}
               <Box component="span" sx={technicalTextSx}>{snapshot.checked_at}</Box>
             </Typography>
             <Typography variant="body2">
@@ -70,18 +70,21 @@ export function StatusSnapshot({ snapshot, displayedAt, pollAgeSeconds }: Status
             sx={{ alignItems: 'flex-start', minWidth: 0 }}
           >
             <Typography id="telemetry-freshness-heading" variant="h3">
-              Telemetry freshness
+              Historical corpus time
             </Typography>
             <Typography variant="body2">
-              Telemetry latest timestamp:{' '}
+              Historical corpus latest timestamp:{' '}
               {snapshot.telemetry.latest_ts === null ? (
                 'Unavailable'
               ) : (
                 <Box component="span" sx={technicalTextSx}>{snapshot.telemetry.latest_ts}</Box>
               )}
             </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Asia/Jakarta (WIB)
+            </Typography>
             <Typography variant="body2">
-              Telemetry age:{' '}
+              Corpus telemetry age:{' '}
               {snapshot.telemetry.age_seconds === null ? (
                 'Unknown'
               ) : (
@@ -99,7 +102,7 @@ export function StatusSnapshot({ snapshot, displayedAt, pollAgeSeconds }: Status
               <Box component="span" sx={technicalTextSx}>{snapshot.telemetry.offline_sensor_count}</Box>
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Telemetry freshness does not establish service readiness.
+              Waktu korpus historis tidak menetapkan readiness layanan saat ini.
             </Typography>
           </Stack>
         </Box>

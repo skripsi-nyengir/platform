@@ -5,55 +5,72 @@ import type {
 } from '../../contracts/systemHealth'
 import { fixtureGeneratedAt } from './telemetry'
 
+const checkedAt = '2026-07-24T08:00:00Z'
+
 export const systemStatus = Object.freeze({
   request_id: 'req_system_status',
-  checked_at: fixtureGeneratedAt,
-  overall_observation: 'All deterministic mock services are ready',
+  checked_at: checkedAt,
+  overall_observation: 'Preview replay siap; artifact asli seluruh keluarga masih pending',
   services: [
     {
-      name: 'api',
+      name: 'API/DB',
       liveness: 'alive',
       readiness: 'ready',
-      checked_at: fixtureGeneratedAt,
-      detail: 'API is serving deterministic fixtures',
+      checked_at: checkedAt,
+      detail: 'API dapat menjangkau database',
     },
     {
-      name: 'database',
+      name: 'Import telemetri nyata',
       liveness: 'alive',
       readiness: 'ready',
-      checked_at: fixtureGeneratedAt,
-      detail: 'Fixture store is ready',
+      checked_at: checkedAt,
+      detail: 'Corpus B02F3872 sudah dipublikasikan',
     },
     {
-      name: 'inference-worker',
+      name: 'Preview worker',
       liveness: 'alive',
       readiness: 'ready',
-      checked_at: fixtureGeneratedAt,
-      detail: 'Model artifact model-v1 is loaded',
+      checked_at: checkedAt,
+      detail: 'Worker simulator tersedia tanpa GPU',
+    },
+    {
+      name: 'Active selection',
+      liveness: 'alive',
+      readiness: 'ready',
+      checked_at: checkedAt,
+      detail: 'preview-lstm-ae-v1 dipilih',
+    },
+    {
+      name: 'Artifact asli',
+      liveness: 'unknown',
+      readiness: 'not_ready',
+      checked_at: checkedAt,
+      detail: 'Tujuh keluarga berstatus pending',
     },
   ],
   telemetry: {
-    latest_ts: '2026-07-19T10:29:40Z',
-    age_seconds: 20,
-    fresh_sensor_count: 6,
+    latest_ts: fixtureGeneratedAt,
+    age_seconds: 0,
+    fresh_sensor_count: 1,
     stale_sensor_count: 0,
     offline_sensor_count: 0,
   },
-  diagnostics: { fixture_revision: 'task-3', deterministic: true },
+  diagnostics: { score_provenance: 'simulated_preview', artifact_ready_count: 0 },
 } satisfies SystemStatusResponse)
 
 export const livenessResponse = Object.freeze({
   status: 'alive',
   request_id: 'req_health',
-  checked_at: fixtureGeneratedAt,
+  checked_at: checkedAt,
 } satisfies LivenessResponse)
 
 export const readinessResponse = Object.freeze({
   status: 'ready',
   request_id: 'req_ready',
-  checked_at: fixtureGeneratedAt,
+  checked_at: checkedAt,
   dependencies: [
-    { name: 'database', status: 'ready', detail: 'Fixture store is ready' },
-    { name: 'model-artifact', status: 'ready', detail: 'model-v1 is loaded' },
+    { name: 'database', status: 'ready', detail: 'Connected' },
+    { name: 'preview-worker', status: 'ready', detail: 'Simulator available' },
+    { name: 'artifact', status: 'not_ready', detail: 'Pending; not required for preview replay' },
   ],
 } satisfies ReadinessResponse)

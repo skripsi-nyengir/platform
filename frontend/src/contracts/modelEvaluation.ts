@@ -1,17 +1,53 @@
 import { z } from 'zod'
-import { Rfc3339Schema } from './common'
 
 const MetricIdentifierSchema = z.string().min(1)
 const LabeledMetricIdentifierSchema = z.enum(['confusion_matrix', 'roc', 'precision_recall'])
 
-export const ModelEvaluationSummarySchema = z.strictObject({
+export const ThresholdPolicySchema = z.strictObject({
+  source: z.string().min(1).optional(),
+  source_split: z.string().min(1).optional(),
+  percentile: z.number().optional(),
+  comparison: z.string().min(1).optional(),
+  comparator: z.string().min(1).optional(),
+}).catchall(z.unknown())
+
+export const ValidationTrackFieldsSchema = z.strictObject({
   version: z.string().min(1),
-  created_at: Rfc3339Schema,
-  evaluation_period: z.string(),
+  model: z.string().min(1),
+  track: z.string().min(1),
+  label: z.string().min(1),
+  score_key: z.string().min(1),
+  score_semantics: z.string().min(1),
+  evaluation_period: z.string().min(1),
+  validation_only: z.boolean(),
+  test_evaluated: z.boolean(),
+  n_val_windows: z.number().int().positive(),
+  threshold: z.number(),
+  threshold_policy: ThresholdPolicySchema,
   has_labeled_ground_truth: z.boolean(),
   available_metrics: z.array(MetricIdentifierSchema).max(500),
-  summary: z.string(),
+  summary: z.string().min(1),
+  model_key: z.string().nullable(),
+  report_source: z.enum([
+    'legacy_m1_fixture',
+    'platform_computed',
+    'reported_dandy_pilot',
+  ]),
+  label_source: z.enum(['none', 'synthetic_injection', 'expert', 'natural']),
+  evaluation_kind: z.enum([
+    'validation_threshold',
+    'synthetic_test',
+    'clean_test',
+    'comparison_snapshot',
+  ]),
+  test_observed: z.boolean(),
+  independent_final: z.boolean(),
+  source_commit: z.string().nullable(),
+  source_path: z.string().nullable(),
+  source_sha256: z.string().nullable(),
 })
+
+export const ModelEvaluationSummarySchema = ValidationTrackFieldsSchema
 export type ModelEvaluationSummary = z.infer<typeof ModelEvaluationSummarySchema>
 
 export const ModelEvaluationsQuerySchema = z.strictObject({
@@ -81,18 +117,13 @@ export const PrecisionRecallCurveSchema = z.strictObject({
 })
 export type PrecisionRecallCurve = z.infer<typeof PrecisionRecallCurveSchema>
 
-export const ModelEvaluationDetailSchema = z
-  .strictObject({
+export const ModelEvaluationDetailSchema = ValidationTrackFieldsSchema
+  .extend({
     request_id: z.string(),
-    version: z.string().min(1),
-    created_at: Rfc3339Schema,
-    evaluation_period: z.string(),
     model_hash: z.string().nullable(),
     preprocessing_hash: z.string().nullable(),
     threshold_hash: z.string().nullable(),
-    has_labeled_ground_truth: z.boolean(),
-    available_metrics: z.array(MetricIdentifierSchema).max(500),
-    metrics: z.record(z.string(), z.number()),
+    metrics: z.record(z.string(), z.unknown()),
     confusion_matrix: ConfusionMatrixSchema.optional(),
     roc: RocCurveSchema.optional(),
     precision_recall: PrecisionRecallCurveSchema.optional(),
@@ -100,15 +131,6 @@ export const ModelEvaluationDetailSchema = z
   })
   .superRefine((value, context) => {
     const declared = new Set(value.available_metrics)
-    for (const metric of Object.keys(value.metrics)) {
-      if (!declared.has(metric)) {
-        context.addIssue({
-          code: 'custom',
-          message: `${metric} is not declared in available_metrics`,
-          path: ['metrics', metric],
-        })
-      }
-    }
     if (Object.keys(value.metrics).length > 500) {
       context.addIssue({
         code: 'custom',

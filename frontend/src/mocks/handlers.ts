@@ -9,20 +9,17 @@ import type {
 import { AlertEventsQuerySchema, CurrentAlertsQuerySchema } from '../contracts/alerts'
 import {
   AlertCommandRequestSchema,
+  compareHistoricalDateTimes,
   SensorIdSchema,
-  sensorIds,
+  publicDeviceId,
   type ProblemDetails,
 } from '../contracts/common'
 import {
-  EdaCorrelationQuerySchema,
-  EdaDistributionQuerySchema,
-  EdaSummaryQuerySchema,
-  type CorrelationPoint,
-  type EdaCorrelationResponse,
-  type EdaDistributionResponse,
-  type EdaField,
-  type EdaSummaryResponse,
-  type HistogramBin,
+  EdaComputeRequestSchema,
+  EdaPeriodListQuerySchema,
+  EdaSectionNameSchema,
+  type EdaJobResponse,
+  type EdaRunResponse,
 } from '../contracts/eda'
 import { InferenceQuerySchema, type InferenceResponse } from '../contracts/inference'
 import {
@@ -35,15 +32,27 @@ import {
 } from '../contracts/telemetry'
 import { activeDetectedAlert } from './fixtures/alerts'
 import {
-  distributionSummaries,
-  edaCorrelationPoints,
-  edaMissingness,
-  edaSensorComparisons,
+  edaCacheHitResponse,
+  edaCanonicalRun,
+  edaChangePointsNotEligibleSection,
+  edaFailedJob,
+  edaFailedSection,
+  edaNotEligibleSection,
+  edaPeriodListResponse,
+  edaPublishedCustomRun,
+  edaQueuedComputeResponse,
+  edaQueuedCustomJob,
+  edaReadyMonthlyRun,
+  edaReadyWeeklyRun,
+  edaRunningComputeResponse,
+  edaRunningCustomJob,
+  edaSectionsByName,
+  edaSucceededJob,
+  edaUncertaintyNotEligibleSection,
 } from './fixtures/eda'
 import {
-  activeAnomalyInferencePoints,
-  fixtureModelVersion,
-  normalInferencePoints,
+  activeAnomalyInferenceBySensor,
+  normalInferenceBySensor,
 } from './fixtures/inference'
 import {
   modelEvaluationDetails,
@@ -55,14 +64,21 @@ import {
   systemStatus,
 } from './fixtures/systemHealth'
 import {
-  dataGapTelemetryHistoryPoints,
-  fixtureGeneratedAt,
+  dataGapTelemetryHistoryBySensor,
   latestTelemetrySensors,
   offlineTelemetrySensor,
   staleTelemetrySensor,
-  telemetryHistoryPoints,
+  telemetryHistoryBySensor,
 } from './fixtures/telemetry'
 import type { MockApiState } from './state'
+import {
+  ModelActivationRequestSchema,
+  ReplayJobRequestSchema,
+  type ModelActivationResponse,
+  type ReplayJobResponse,
+} from '../contracts/preview'
+import type { LatestTelemetrySensor } from '../contracts/telemetry'
+import { modelsResponse, previewDevice, replayJob } from './fixtures/preview'
 
 function problem(
   status: number,
@@ -116,9 +132,23 @@ function nextCursor(prefix: string, offset: number, returned: number, total: num
   return nextOffset < total ? `${prefix}:${nextOffset}` : null
 }
 
+function requestCount(state: MockApiState, key: string): number {
+  const count = (state.edaRequestCounts.get(key) ?? 0) + 1
+  state.edaRequestCounts.set(key, count)
+  return count
+}
+
 function pathParam(value: string | readonly string[] | undefined): string {
   return String(value)
 }
+
+const scenarioDevice = {
+  'active-anomaly': publicDeviceId,
+  stale: publicDeviceId,
+  offline: publicDeviceId,
+  'data-gap': publicDeviceId,
+  empty: publicDeviceId,
+} as const
 
 function currentAlert(state: MockApiState): CurrentAlert | undefined {
   const latest = state.events.at(-1)
@@ -131,16 +161,10 @@ function currentAlert(state: MockApiState): CurrentAlert | undefined {
   return {
     ...activeDetectedAlert,
     status: latest.event_type,
-    latest_event_ts: latest.event_ts,
+    latest_event_at: latest.event_at,
     latest_event_id: latest.event_id,
     ...permissions,
   }
-}
-
-function edaValue(point: CorrelationPoint, field: EdaField): number {
-  if (field === 'temperature_c') return point.x
-  if (field === 'relative_humidity_pct') return point.y
-  return point.score ?? 0
 }
 
 async function mutateAlert(
@@ -160,7 +184,6 @@ async function mutateAlert(
     const identical =
       accepted.alert_id === alertId &&
       accepted.status === action &&
-      accepted.event.event_ts === command.event_ts &&
       accepted.event.note === note
     if (!identical) {
       return problem(
@@ -178,15 +201,6 @@ async function mutateAlert(
   const latest = alertEvents.at(-1)
   if (latest === undefined) {
     return problem(404, 'req_alert_not_found', 'Alert not found', `Alert ${alertId} was not found`, request.url)
-  }
-  if (Date.parse(command.event_ts) <= Date.parse(latest.event_ts)) {
-    return problem(
-      409,
-      'req_event_order_conflict',
-      'Alert event order conflict',
-      'event_ts must be later than the current alert event',
-      request.url,
-    )
   }
   if (action === 'resolved' && latest.event_type === 'detected') {
     return problem(
@@ -218,16 +232,17 @@ async function mutateAlert(
 
   const detected = alertEvents[0]
   const event = Object.freeze({
-    event_id: action === 'acknowledged' ? 'event_n4_ack_001' : 'event_n4_resolve_001',
+    event_id:
+      action === 'acknowledged' ? 'event_b02_ack_001' : 'event_b02_resolve_001',
     alert_id: alertId,
-    event_ts: command.event_ts,
+    event_at: action === 'acknowledged' ? '2026-06-01T00:01:00Z' : '2026-06-01T00:02:00Z',
     event_type: action,
     device_id: latest.device_id,
-    actor: 'operator',
+    actor: 'preview-session',
     note,
-    inference_result_window_start_ts: detected?.inference_result_window_start_ts ?? null,
-    inference_result_window_end_ts: detected?.inference_result_window_end_ts ?? null,
+    accepted_at: action === 'acknowledged' ? '2026-06-01T00:01:00Z' : '2026-06-01T00:02:00Z',
     inference_model_version: detected?.inference_model_version ?? null,
+    detection_basis: 'simulated_preview',
   } satisfies AlertEvent)
   state.events = [...state.events, event]
 
@@ -256,28 +271,103 @@ async function mutateAlert(
 
 export function createHandlers(state: MockApiState): HttpHandler[] {
   return [
+    http.get('/api/devices', () => HttpResponse.json({
+      request_id: 'req_devices',
+      items: [structuredClone(previewDevice)],
+    })),
+
+    http.get('/api/models', ({ request }) => {
+      const url = new URL(request.url)
+      if (queryValue(url, 'device_id') !== publicDeviceId) return invalidQuery(request)
+      return HttpResponse.json(modelsResponse(state.activeModelVersion))
+    }),
+
+    http.post('/api/model-activations', async ({ request }) => {
+      const parsed = ModelActivationRequestSchema.safeParse(await request.json())
+      if (!parsed.success) return invalidQuery(request)
+      const prior = state.activeModelVersion
+      state.activeModelVersion = parsed.data.model_version
+      const response = {
+        request_id: 'req_activation',
+        activation: {
+          activation_id: `activation-${parsed.data.command_id}`,
+          command_id: parsed.data.command_id,
+          device_id: publicDeviceId,
+          prior_model_version: prior,
+          model_version: parsed.data.model_version,
+          changed: prior !== parsed.data.model_version,
+          activated_at: '2026-07-24T08:00:00Z',
+          actor: 'preview-session',
+        },
+        active_model_version: state.activeModelVersion,
+        idempotent_request_replay: false,
+      } satisfies ModelActivationResponse
+      return HttpResponse.json(response)
+    }),
+
+    http.post('/api/replay-jobs', async ({ request }) => {
+      const parsed = ReplayJobRequestSchema.safeParse(await request.json())
+      if (!parsed.success) return invalidQuery(request)
+      const existing = state.replayJobs.get(parsed.data.command_id)
+      const job = existing ?? replayJob(
+        `replay-${parsed.data.command_id}`,
+        parsed.data.from,
+        parsed.data.to,
+        state.activeModelVersion,
+        'running',
+      )
+      state.replayJobs.set(parsed.data.command_id, job)
+      const response = {
+        request_id: 'req_replay_create',
+        job,
+        idempotent_request_replay: existing !== undefined,
+      } satisfies ReplayJobResponse
+      return HttpResponse.json(response, { status: existing === undefined ? 202 : 200 })
+    }),
+
+    http.get('/api/replay-jobs/:jobId', ({ request, params }) => {
+      const requestedId = pathParam(params.jobId)
+      const existing = [...state.replayJobs.values()].find((job) => job.job_id === requestedId)
+      if (existing === undefined) {
+        return problem(404, 'req_replay_not_found', 'Replay not found', 'Replay job was not found', request.url)
+      }
+      const completed = { ...existing, ...replayJob(
+        existing.job_id,
+        existing.from,
+        existing.to,
+        existing.model_version,
+        'succeeded',
+      ) }
+      state.replayJobs.set(
+        [...state.replayJobs.entries()].find(([, job]) => job.job_id === requestedId)?.[0] ?? requestedId,
+        completed,
+      )
+      return HttpResponse.json({ request_id: 'req_replay_status', job: completed })
+    }),
+
     http.get('/api/telemetry/latest', ({ request }) => {
       const url = new URL(request.url)
       const deviceValue = queryValue(url, 'device_id')
       const parsedDevice = deviceValue === undefined ? undefined : SensorIdSchema.safeParse(deviceValue)
       if (parsedDevice !== undefined && !parsedDevice.success) return invalidQuery(request)
       const deviceId = parsedDevice?.data
-      let sensors = latestTelemetrySensors.map((sensor) => ({ ...sensor }))
-      if (state.scenario === 'stale') {
-        sensors = sensors.map((sensor) =>
-          sensor.device_id === staleTelemetrySensor.device_id ? { ...staleTelemetrySensor } : sensor,
-        )
-      }
-      if (state.scenario === 'offline') {
-        sensors = sensors.map((sensor) =>
-          sensor.device_id === offlineTelemetrySensor.device_id ? { ...offlineTelemetrySensor } : sensor,
-        )
-      }
-      if (state.scenario === 'empty' && deviceId === 'n6') sensors = []
+      let sensors: LatestTelemetrySensor[] = latestTelemetrySensors.map((sensor) => ({ ...sensor }))
+       if (state.scenario === 'stale') {
+         sensors = sensors.map((sensor) =>
+           sensor.device_id === scenarioDevice.stale ? { ...staleTelemetrySensor } : sensor,
+         )
+       }
+       if (state.scenario === 'offline') {
+         sensors = sensors.map((sensor) =>
+           sensor.device_id === scenarioDevice.offline ? { ...offlineTelemetrySensor } : sensor,
+         )
+       }
+       if (state.scenario === 'empty' && deviceId === scenarioDevice.empty) sensors = []
       else if (deviceId !== undefined) sensors = sensors.filter((sensor) => sensor.device_id === deviceId)
       return HttpResponse.json({
         request_id: 'req_telemetry_latest',
-        generated_at: fixtureGeneratedAt,
+        time_zone: 'Asia/Jakarta',
+        generated_at: '2026-07-24T08:00:00Z',
         sensors,
       })
     }),
@@ -295,19 +385,24 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
       if (!parsed.success) return invalidQuery(request)
       const { deviceId, from, to, bucket, limit } = parsed.data
       const offset = cursorOffset(url, 'telemetry')
-      const source =
-        state.scenario === 'empty' && deviceId === 'n6'
+       const source =
+         state.scenario === 'empty' && deviceId === scenarioDevice.empty
           ? []
-          : state.scenario === 'data-gap' && deviceId === 'n5'
-            ? dataGapTelemetryHistoryPoints
-            : telemetryHistoryPoints
-      const bounded = source
-        .filter((point) => Date.parse(point.ts) >= Date.parse(from) && Date.parse(point.ts) < Date.parse(to))
+           : state.scenario === 'data-gap'
+             ? dataGapTelemetryHistoryBySensor[deviceId]
+             : telemetryHistoryBySensor[deviceId]
+       const bounded = source
+         .filter(
+           (point) =>
+             compareHistoricalDateTimes(point.ts, from) >= 0 &&
+             compareHistoricalDateTimes(point.ts, to) < 0,
+         )
         .map((point) => ({ ...point }))
       const points = bounded.slice(offset, offset + limit)
       const body = {
         request_id: 'req_telemetry_history',
         device_id: deviceId,
+        time_zone: 'Asia/Jakarta',
         from,
         to,
         bucket,
@@ -332,28 +427,27 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
       if (!parsed.success) return invalidQuery(request)
       const { deviceId, from, to, limit } = parsed.data
       const offset = cursorOffset(url, 'inference')
-      const modelVersion = parsed.data.modelVersion ?? fixtureModelVersion
-      const source =
-        state.scenario === 'empty' && deviceId === 'n6'
-          ? []
-          : state.scenario === 'active-anomaly' && deviceId === 'n4'
-            ? activeAnomalyInferencePoints
-            : normalInferencePoints
-      const bounded = source
-        .filter(
-          (point) =>
-            Date.parse(point.window_start_ts) >= Date.parse(from) &&
-            Date.parse(point.window_end_ts) <= Date.parse(to),
-        )
-        .map((point) => ({
-          ...point,
-          model_version: modelVersion,
-          model_hash: `sha256:${modelVersion}`,
-        }))
+       const source =
+         state.scenario === 'empty' && deviceId === scenarioDevice.empty
+           ? []
+           : state.scenario === 'active-anomaly' && deviceId === scenarioDevice['active-anomaly']
+             ? activeAnomalyInferenceBySensor[deviceId]
+             : normalInferenceBySensor[deviceId]
+       const modelVersion = normalInferenceBySensor[deviceId][0].model_version
+       const modelFiltered =
+         parsed.data.modelVersion === undefined || parsed.data.modelVersion === modelVersion ? source : []
+       const bounded = modelFiltered
+         .filter(
+           (point) =>
+             compareHistoricalDateTimes(point.window_start_ts, from) >= 0 &&
+             compareHistoricalDateTimes(point.window_end_ts, to) <= 0,
+         )
+         .map((point) => ({ ...point }))
       const points = bounded.slice(offset, offset + limit)
       const body = {
         request_id: 'req_inference_results',
         device_id: deviceId,
+        time_zone: 'Asia/Jakarta',
         model_version: modelVersion,
         points,
         next_cursor: nextCursor('inference', offset, points.length, bounded.length),
@@ -373,21 +467,20 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
         cursor: queryValue(url, 'cursor'),
       })
       if (!parsed.success) return invalidQuery(request)
-      const { alertId, deviceId, from, to, limit } = parsed.data
+      const { alertId, deviceId, limit } = parsed.data
       const offset = cursorOffset(url, 'alert-events')
       const filtered = state.events
         .filter((event) => alertId === undefined || event.alert_id === alertId)
         .filter((event) => deviceId === undefined || event.device_id === deviceId)
-        .filter((event) => from === undefined || Date.parse(event.event_ts) >= Date.parse(from))
-        .filter((event) => to === undefined || Date.parse(event.event_ts) < Date.parse(to))
         .toSorted((left, right) =>
-          left.event_ts === right.event_ts
+          left.event_at === right.event_at
             ? left.event_id.localeCompare(right.event_id)
-            : left.event_ts.localeCompare(right.event_ts),
+            : left.event_at.localeCompare(right.event_at),
         )
       const events = filtered.slice(offset, offset + limit).map((event) => ({ ...event }))
       return HttpResponse.json({
         request_id: 'req_alert_events',
+        time_zone: 'Asia/Jakarta',
         events,
         next_cursor: nextCursor('alert-events', offset, events.length, filtered.length),
         returned_count: events.length,
@@ -413,7 +506,8 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
       const start = (page - 1) * pageSize
       const body = {
         request_id: 'req_current_alerts',
-        generated_at: fixtureGeneratedAt,
+        time_zone: 'Asia/Jakarta',
+        generated_at: '2026-07-24T08:00:00Z',
         items: filtered.slice(start, start + pageSize),
         page,
         page_size: pageSize,
@@ -430,115 +524,171 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
       mutateAlert(request, state, pathParam(params.alertId), 'resolved'),
     ),
 
-    http.get('/api/eda/summary', ({ request }) => {
+    http.get('/api/eda/periods', ({ request }) => {
       const url = new URL(request.url)
-      const parsed = EdaSummaryQuerySchema.safeParse({
-        deviceId: queryValue(url, 'device_id'),
-        from: queryValue(url, 'from'),
-        to: queryValue(url, 'to'),
-        bucket: queryValue(url, 'bucket'),
+      const parsed = EdaPeriodListQuerySchema.safeParse({
+        period_kind: queryValue(url, 'period_kind'),
+        cursor: queryValue(url, 'cursor') ?? null,
+        limit: queryNumber(url, 'limit'),
       })
       if (!parsed.success) return invalidQuery(request)
-      const { deviceId, from, to, bucket } = parsed.data
-      const empty = state.scenario === 'empty' && deviceId === 'n6'
-      const gap = state.scenario === 'data-gap' && deviceId === 'n5'
-      const comparisons = empty
-        ? []
-        : edaSensorComparisons
-            .filter((comparison) => deviceId === undefined || comparison.device_id === deviceId)
-            .map((comparison) => structuredClone(comparison))
-      const expectedCount = empty ? 0 : comparisons.length * 6
-      const observedCount = gap ? expectedCount - 1 : expectedCount
+      const count = requestCount(state, `period:${parsed.data.period_kind}`)
+      if (state.scenario === 'eda-period-error' && count === 1) {
+        return problem(
+          503,
+          `req-eda-period-${parsed.data.period_kind}`,
+          'EDA period list unavailable',
+          `Daftar ${parsed.data.period_kind} gagal dimuat untuk uji pemulihan.`,
+          new URL(request.url).pathname,
+        )
+      }
+      const available = state.scenario === 'eda-latest-fallback'
+        ? parsed.data.period_kind === 'weekly' ? [edaReadyWeeklyRun] : []
+        : parsed.data.period_kind === 'monthly' ? edaPeriodListResponse.items : []
+      const offset = cursorOffset(url, 'eda-periods')
+      const items = available.slice(offset, offset + parsed.data.limit)
       const body = {
-        request_id: 'req_eda_summary',
-        scope: { device_ids: deviceId === undefined ? [...sensorIds] : [deviceId], from, to, bucket },
-        coverage: {
-          expected_count: expectedCount,
-          observed_count: observedCount,
-          coverage_pct: expectedCount === 0 ? 0 : Number(((observedCount / expectedCount) * 100).toFixed(2)),
-          gap_count: gap ? 1 : 0,
-        },
-        missingness: empty
-          ? []
-          : gap
-            ? [{ field: 'temperature_c', missing_count: 1, missing_pct: 16.67 }]
-            : edaMissingness.map((item) => ({ ...item })),
-        sensor_comparison: comparisons,
-        candidate_outliers: [],
-      } satisfies EdaSummaryResponse
+        request_id: edaPeriodListResponse.request_id,
+        period_kind: parsed.data.period_kind,
+        items,
+        next_cursor: nextCursor('eda-periods', offset, items.length, available.length),
+        returned_count: items.length,
+      }
       return HttpResponse.json(body)
     }),
 
-    http.get('/api/eda/distributions', ({ request }) => {
-      const url = new URL(request.url)
-      const parsed = EdaDistributionQuerySchema.safeParse({
-        deviceId: queryValue(url, 'device_id'),
-        from: queryValue(url, 'from'),
-        to: queryValue(url, 'to'),
-        field: queryValue(url, 'field'),
-        bins: queryNumber(url, 'bins'),
-      })
+    http.post('/api/eda/compute', async ({ request }) => {
+      const parsed = EdaComputeRequestSchema.safeParse(await request.json())
       if (!parsed.success) return invalidQuery(request)
-      const { deviceId, field, bins: requestedBins } = parsed.data
-      const empty = state.scenario === 'empty' && deviceId === 'n6'
-      const sampleCount = empty ? 0 : deviceId === undefined ? 36 : 6
-      const summary = empty
-        ? { min: 0, max: 0, mean: 0, median: 0, p05: 0, p95: 0 }
-        : { ...distributionSummaries[field] }
-      const width = empty ? 0 : (summary.max - summary.min) / requestedBins
-      const bins: HistogramBin[] = empty
-        ? []
-        : Array.from({ length: requestedBins }, (_, index) => ({
-            start: summary.min + width * index,
-            end: summary.min + width * (index + 1),
-            count: Math.floor(sampleCount / requestedBins) + (index < sampleCount % requestedBins ? 1 : 0),
-          }))
+      const count = requestCount(state, 'compute')
+      const cacheHit = parsed.data.from === edaCacheHitResponse.run.scope.from &&
+        parsed.data.to === edaCacheHitResponse.run.scope.to
+      if (state.scenario === 'eda-job-queued') {
+        return HttpResponse.json(edaQueuedComputeResponse, { status: 202 })
+      }
+      if (state.scenario === 'eda-job-failed' && count > 1) {
+        return HttpResponse.json(edaCacheHitResponse)
+      }
+      return HttpResponse.json(cacheHit ? edaCacheHitResponse : edaRunningComputeResponse, {
+        status: cacheHit ? 200 : 202,
+      })
+    }),
+
+    http.get('/api/eda/jobs/:jobId', ({ request, params }) => {
+      const jobId = pathParam(params.jobId)
+      const count = requestCount(state, `job:${jobId}`)
+      if (state.scenario === 'eda-job-error' && count === 1) {
+        return problem(
+          503,
+          'req-eda-job-status',
+          'EDA job status unavailable',
+          'Status pekerjaan EDA gagal dimuat untuk uji pemulihan.',
+          new URL(request.url).pathname,
+        )
+      }
+      const scenarioJob = state.scenario === 'eda-job-queued'
+        ? { ...edaQueuedCustomJob, job_id: jobId }
+        : state.scenario === 'eda-job-running'
+          ? { ...edaRunningCustomJob, job_id: jobId }
+          : state.scenario === 'eda-job-success' || state.scenario === 'eda-job-error'
+            ? { ...edaSucceededJob, job_id: jobId }
+            : state.scenario === 'eda-job-failed'
+              ? { ...edaFailedJob, job_id: jobId }
+              : undefined
+      const job = scenarioJob ?? (jobId === edaRunningCustomJob.job_id
+        ? edaRunningCustomJob
+        : jobId === edaFailedJob.job_id
+          ? edaFailedJob
+          : jobId === edaSucceededJob.job_id
+            ? edaSucceededJob
+          : undefined)
+      if (job === undefined) {
+        return problem(404, 'req-eda-job-not-found', 'EDA job not found', 'Pekerjaan EDA tidak ditemukan.', request.url)
+      }
       const body = {
-        request_id: 'req_eda_distributions',
-        field,
-        sample_count: sampleCount,
-        summary,
-        bins,
-      } satisfies EdaDistributionResponse
+        request_id: 'req-eda-job',
+        job,
+      } satisfies EdaJobResponse
       return HttpResponse.json(body)
     }),
 
-    http.get('/api/eda/correlation', ({ request }) => {
-      const url = new URL(request.url)
-      const parsed = EdaCorrelationQuerySchema.safeParse({
-        deviceId: queryValue(url, 'device_id'),
-        from: queryValue(url, 'from'),
-        to: queryValue(url, 'to'),
-        xField: queryValue(url, 'x_field'),
-        yField: queryValue(url, 'y_field'),
-        maxPoints: queryNumber(url, 'max_points'),
-        cursor: queryValue(url, 'cursor'),
-      })
-      if (!parsed.success) return invalidQuery(request)
-      const { deviceId, xField, yField, from, to, maxPoints: maximumPoints } = parsed.data
-      const offset = cursorOffset(url, 'eda-correlation')
-      const empty = state.scenario === 'empty' && deviceId === 'n6'
-      const filtered = empty
-        ? []
-        : edaCorrelationPoints
-            .filter((point) => deviceId === undefined || point.device_id === deviceId)
-            .filter((point) => Date.parse(point.ts) >= Date.parse(from) && Date.parse(point.ts) < Date.parse(to))
-      const bounded = filtered.map((point) => ({
-        ...point,
-        x: edaValue(point, xField),
-        y: edaValue(point, yField),
-      }))
-      const points = bounded.slice(offset, offset + maximumPoints)
-      const body = {
-        request_id: 'req_eda_correlation',
-        x_field: xField,
-        y_field: yField,
-        sample_count: bounded.length,
-        correlation: bounded.length === 0 ? null : -0.72,
-        points,
-        next_cursor: nextCursor('eda-correlation', offset, points.length, bounded.length),
-      } satisfies EdaCorrelationResponse
+    http.get('/api/eda/runs/:runId', ({ request, params }) => {
+      const runId = pathParam(params.runId)
+      const run = runId === edaReadyMonthlyRun.run_id
+        ? edaReadyMonthlyRun
+        : runId === edaReadyWeeklyRun.run_id
+          ? edaReadyWeeklyRun
+          : runId === edaCanonicalRun.run_id
+            ? edaCanonicalRun
+        : runId === edaCacheHitResponse.run.run_id
+          ? edaCacheHitResponse.run
+          : runId === edaPublishedCustomRun.run_id
+            ? edaPublishedCustomRun
+          : undefined
+      if (run === undefined) {
+        return problem(404, 'req-eda-run-not-found', 'EDA run not found', 'Hasil EDA tidak ditemukan.', request.url)
+      }
+      const body = { request_id: 'req-eda-run', run } satisfies EdaRunResponse
       return HttpResponse.json(body)
+    }),
+
+    http.get('/api/eda/runs/:runId/sections/:section', ({ request, params }) => {
+      const runId = pathParam(params.runId)
+      const knownRunIds = [
+        edaReadyMonthlyRun.run_id,
+        edaReadyWeeklyRun.run_id,
+        edaCanonicalRun.run_id,
+        edaCacheHitResponse.run.run_id,
+        edaPublishedCustomRun.run_id,
+      ]
+      if (!knownRunIds.includes(runId)) {
+        return problem(404, 'req-eda-run-not-found', 'EDA run not found', 'Hasil EDA tidak ditemukan.', request.url)
+      }
+      const parsedSection = EdaSectionNameSchema.safeParse(pathParam(params.section))
+      if (!parsedSection.success) return invalidQuery(request)
+      const count = requestCount(state, `section:${parsedSection.data}`)
+      const failsOnce = state.scenario === 'eda-section-error' && parsedSection.data === 'uncertainty'
+      const failsMultipleOnce = state.scenario === 'eda-multiple-section-error' &&
+        (parsedSection.data === 'relationships' || parsedSection.data === 'stationarity')
+      if ((failsOnce || failsMultipleOnce) && count === 1) {
+        return problem(
+          503,
+          `req-eda-section-${parsedSection.data}`,
+          'EDA section unavailable',
+          `Bagian ${parsedSection.data} gagal dimuat untuk uji isolasi.`,
+          new URL(request.url).pathname,
+        )
+      }
+      if (state.scenario === 'eda-custom-not-eligible') {
+        if (parsedSection.data === 'change_points') {
+          return HttpResponse.json({ ...edaChangePointsNotEligibleSection, run_id: runId })
+        }
+        if (parsedSection.data === 'uncertainty') {
+          return HttpResponse.json({ ...edaUncertaintyNotEligibleSection, run_id: runId })
+        }
+      }
+      if (
+        state.scenario === 'eda-canonical' ||
+        state.scenario === 'eda-custom-not-eligible' ||
+        state.scenario === 'eda-section-error' ||
+        state.scenario === 'eda-multiple-section-error'
+      ) {
+        const completeSection = edaSectionsByName.get(parsedSection.data)
+        if (completeSection !== undefined) {
+          return HttpResponse.json({ ...completeSection, run_id: runId })
+        }
+      }
+      if (parsedSection.data === edaNotEligibleSection.section) {
+        return HttpResponse.json({ ...edaNotEligibleSection, run_id: runId })
+      }
+      if (parsedSection.data === edaFailedSection.section) {
+        return HttpResponse.json({ ...edaFailedSection, run_id: runId })
+      }
+      const section = edaSectionsByName.get(parsedSection.data)
+      if (section === undefined) {
+        return problem(404, 'req-eda-section-not-found', 'EDA section not found', 'Bagian EDA tidak ditemukan.', request.url)
+      }
+      return HttpResponse.json({ ...section, run_id: runId })
     }),
 
     http.get('/api/model-evaluations', ({ request }) => {
@@ -589,12 +739,22 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
           { status: 503 },
         )
       }
-      const telemetry =
-        state.scenario === 'stale'
-          ? { ...systemStatus.telemetry, fresh_sensor_count: 5, stale_sensor_count: 1 }
-          : state.scenario === 'offline'
-            ? { ...systemStatus.telemetry, fresh_sensor_count: 5, offline_sensor_count: 1 }
-            : { ...systemStatus.telemetry }
+       const telemetry =
+         state.scenario === 'stale'
+           ? {
+               ...systemStatus.telemetry,
+               fresh_sensor_count: 0,
+               stale_sensor_count: 1,
+               offline_sensor_count: 0,
+             }
+           : state.scenario === 'offline'
+             ? {
+                 ...systemStatus.telemetry,
+                 fresh_sensor_count: 0,
+                 stale_sensor_count: 0,
+                 offline_sensor_count: 1,
+               }
+             : { ...systemStatus.telemetry }
       return HttpResponse.json({ ...systemStatus, telemetry })
     }),
 

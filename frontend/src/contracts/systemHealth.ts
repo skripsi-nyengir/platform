@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { Rfc3339Schema } from './common'
+import { HistoricalDateTimeSchema, OperationalInstantSchema } from './common'
 
 export const LivenessStateSchema = z.enum(['alive', 'not_alive', 'unknown'])
 export type LivenessState = z.infer<typeof LivenessStateSchema>
@@ -11,24 +11,24 @@ export const SystemServiceStatusSchema = z.strictObject({
   name: z.string(),
   liveness: LivenessStateSchema,
   readiness: ReadinessStateSchema,
-  checked_at: Rfc3339Schema,
+  checked_at: OperationalInstantSchema,
   detail: z.string(),
 })
 export type SystemServiceStatus = z.infer<typeof SystemServiceStatusSchema>
 
 export const SystemTelemetryStatusSchema = z
   .strictObject({
-    latest_ts: Rfc3339Schema.nullable(),
+    latest_ts: HistoricalDateTimeSchema.nullable(),
     age_seconds: z.number().nonnegative().nullable(),
-    fresh_sensor_count: z.number().int().min(0).max(6),
-    stale_sensor_count: z.number().int().min(0).max(6),
-    offline_sensor_count: z.number().int().min(0).max(6),
+    fresh_sensor_count: z.number().int().min(0).max(1),
+    stale_sensor_count: z.number().int().min(0).max(1),
+    offline_sensor_count: z.number().int().min(0).max(1),
   })
   .refine(
     (value) =>
-      value.fresh_sensor_count + value.stale_sensor_count + value.offline_sensor_count <= 6,
+      value.fresh_sensor_count + value.stale_sensor_count + value.offline_sensor_count <= 1,
     {
-      message: 'telemetry sensor counts must not exceed six sensors',
+      message: 'telemetry sensor counts must not exceed one public device',
       path: ['fresh_sensor_count'],
     },
   )
@@ -42,7 +42,7 @@ export const DiagnosticsSchema = z
 
 export const SystemStatusResponseSchema = z.strictObject({
   request_id: z.string(),
-  checked_at: Rfc3339Schema,
+  checked_at: OperationalInstantSchema,
   overall_observation: z.string(),
   services: z.array(SystemServiceStatusSchema).max(500),
   telemetry: SystemTelemetryStatusSchema,
@@ -53,7 +53,7 @@ export type SystemStatusResponse = z.infer<typeof SystemStatusResponseSchema>
 export const LivenessResponseSchema = z.strictObject({
   status: z.literal('alive'),
   request_id: z.string(),
-  checked_at: Rfc3339Schema,
+  checked_at: OperationalInstantSchema,
 })
 export type LivenessResponse = z.infer<typeof LivenessResponseSchema>
 
@@ -67,7 +67,7 @@ export type ReadinessDependency = z.infer<typeof ReadinessDependencySchema>
 export const ReadinessResponseSchema = z.strictObject({
   status: z.enum(['ready', 'not_ready']),
   request_id: z.string(),
-  checked_at: Rfc3339Schema,
+  checked_at: OperationalInstantSchema,
   dependencies: z.array(ReadinessDependencySchema).max(500),
 })
 export type ReadinessResponse = z.infer<typeof ReadinessResponseSchema>

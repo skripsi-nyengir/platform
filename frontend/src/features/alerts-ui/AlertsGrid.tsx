@@ -1,7 +1,9 @@
 import { DataGrid, type GridColDef } from '@mui/x-data-grid'
 import type { CurrentAlert, CurrentAlertsResponse } from '../../contracts/alerts'
+import { sensorLabels } from '../../contracts/common'
 import { tokens } from '../../theme/tokens'
 import { AlertLifecycleActions } from './AlertLifecycleActions'
+import { formatProvenance } from '../../components/data/provenance'
 
 export interface AlertsGridProps {
   response: CurrentAlertsResponse
@@ -14,23 +16,38 @@ export interface AlertsGridProps {
 const pageSizeOptions = [10, 25, 50, 100]
 
 const columnWidths = {
-  alert_id: { flex: 1.25, minWidth: 150 },
+  alert_id: { flex: 1.25, minWidth: 130 },
   device_id: { flex: 0.7, minWidth: 80 },
-  status: { flex: 0.9, minWidth: 105 },
-  latest_event_ts: { flex: 1.5, minWidth: 190 },
-  actions: { flex: 1.65, minWidth: 230 },
+  status: { flex: 0.9, minWidth: 95 },
+  latest_event_ts: { flex: 1.5, minWidth: 150 },
+  detection_basis: { flex: 1.5, minWidth: 180 },
+  actions: { flex: 1.65, minWidth: 240 },
 } as const
 
 const columns: GridColDef<CurrentAlert>[] = [
   { field: 'alert_id', headerName: 'Alert ID', ...columnWidths.alert_id },
-  { field: 'device_id', headerName: 'Sensor', ...columnWidths.device_id },
+  {
+    field: 'device_id',
+    headerName: 'Sensor',
+    ...columnWidths.device_id,
+    valueFormatter: (value) => sensorLabels[value as CurrentAlert['device_id']],
+  },
   {
     field: 'status',
     headerName: 'Status',
     ...columnWidths.status,
     renderCell: ({ row }) => row.status === 'detected' ? 'Active' : row.status,
   },
-  { field: 'latest_event_ts', headerName: 'Last event', ...columnWidths.latest_event_ts },
+  { field: 'episode_start_ts', headerName: 'Episode start (WIB)', ...columnWidths.latest_event_ts },
+  { field: 'episode_end_ts', headerName: 'Episode end (WIB)', ...columnWidths.latest_event_ts },
+  { field: 'anomalous_window_count', headerName: 'Windows', minWidth: 90 },
+  {
+    field: 'detection_basis',
+    headerName: 'Detection basis',
+    ...columnWidths.detection_basis,
+    sortable: false,
+    valueFormatter: (value) => formatProvenance(value as CurrentAlert['detection_basis']),
+  },
   {
     field: 'actions',
     headerName: 'Action',
@@ -93,6 +110,11 @@ export function AlertsGrid({
           py: 0.5,
           overflowWrap: 'anywhere',
           whiteSpace: 'normal',
+        },
+        '& .MuiDataGrid-cell[data-field="actions"]': {
+          alignItems: 'stretch',
+          overflow: 'visible',
+          py: 1,
         },
         '& .MuiDataGrid-cell[data-field="alert_id"], & .MuiDataGrid-cell[data-field="device_id"], & .MuiDataGrid-cell[data-field="latest_event_ts"]': {
           fontFamily: tokens.font.data,

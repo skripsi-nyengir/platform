@@ -1,57 +1,75 @@
-import { useQuery } from '@tanstack/react-query'
-import { getEdaCorrelation, getEdaDistributions, getEdaSummary } from '../../api/eda'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import {
-  EdaCorrelationQuerySchema,
-  EdaDistributionQuerySchema,
-  EdaSummaryQuerySchema,
-  type EdaCorrelationQuery,
-  type EdaDistributionQuery,
+  computeEda,
+  getEdaJob,
+  getEdaPeriods,
+  getEdaRun,
+  getEdaSection,
+} from '../../api/eda'
+import {
+  EdaPeriodListQuerySchema,
+  type EdaComputeRequest,
+  type EdaPeriodListQuery,
+  type EdaSectionName,
 } from '../../contracts/eda'
-import type { UrlFilters } from '../filters/urlFilters'
 
-export function useEdaSummaryQuery(filters: UrlFilters) {
-  const query = EdaSummaryQuerySchema.parse({
-    deviceId: filters.sensor,
-    from: filters.from,
-    to: filters.to,
-    bucket: filters.bucket,
-  })
+export const edaQueryKeys = {
+  periods: (query: Required<EdaPeriodListQuery>) => [
+    'eda',
+    'periods',
+    query.period_kind,
+    query.limit,
+    query.cursor,
+  ] as const,
+  job: (jobId: string | null) => ['eda', 'job', jobId] as const,
+  run: (runId: string | null) => ['eda', 'run', runId] as const,
+  section: (runId: string | null, section: EdaSectionName) => [
+    'eda',
+    'run',
+    runId,
+    'section',
+    section,
+  ] as const,
+}
+
+export function useEdaPeriodsQuery(input: EdaPeriodListQuery) {
+  const query = EdaPeriodListQuerySchema.parse(input)
   return useQuery({
-    queryKey: ['eda', 'summary', query.deviceId ?? null, query.from, query.to, query.bucket] as const,
-    queryFn: ({ signal }) => getEdaSummary(query, signal),
+    queryKey: edaQueryKeys.periods(query),
+    queryFn: ({ signal }) => getEdaPeriods(query, signal),
   })
 }
 
-export function useEdaDistributionsQuery(input: EdaDistributionQuery) {
-  const query = EdaDistributionQuerySchema.parse(input)
+export function useEdaRunQuery(runId: string | null) {
   return useQuery({
-    queryKey: [
-      'eda',
-      'distributions',
-      query.deviceId ?? null,
-      query.from,
-      query.to,
-      query.field,
-      query.bins,
-    ] as const,
-    queryFn: ({ signal }) => getEdaDistributions(query, signal),
+    queryKey: edaQueryKeys.run(runId),
+    queryFn: ({ signal }) => getEdaRun(runId ?? '', signal),
+    enabled: runId !== null,
   })
 }
 
-export function useEdaCorrelationQuery(input: EdaCorrelationQuery) {
-  const query = EdaCorrelationQuerySchema.parse(input)
+export function useEdaSectionQuery(runId: string | null, section: EdaSectionName) {
   return useQuery({
-    queryKey: [
-      'eda',
-      'correlation',
-      query.deviceId ?? null,
-      query.from,
-      query.to,
-      query.xField,
-      query.yField,
-      query.maxPoints,
-      query.cursor ?? null,
-    ] as const,
-    queryFn: ({ signal }) => getEdaCorrelation(query, signal),
+    queryKey: edaQueryKeys.section(runId, section),
+    queryFn: ({ signal }) => getEdaSection(runId ?? '', section, signal),
+    enabled: runId !== null,
+  })
+}
+
+export function useEdaComputeMutation() {
+  return useMutation({
+    mutationFn: (request: EdaComputeRequest) => computeEda(request),
+  })
+}
+
+export function useEdaJobQuery(jobId: string | null) {
+  return useQuery({
+    queryKey: edaQueryKeys.job(jobId),
+    queryFn: ({ signal }) => getEdaJob(jobId ?? '', signal),
+    enabled: jobId !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.job.status
+      return status === 'queued' || status === 'running' ? 1_000 : false
+    },
   })
 }

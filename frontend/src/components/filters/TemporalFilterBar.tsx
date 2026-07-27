@@ -1,6 +1,6 @@
 import { FormControl, InputLabel, Select, Stack, TextField } from '@mui/material'
 import { useId } from 'react'
-import { BucketSchema, SensorIdSchema, sensorIds } from '../../contracts/common'
+import { BucketSchema, SensorIdSchema, sensorIds, sensorLabels } from '../../contracts/common'
 import type { UrlFilters } from '../../features/filters/urlFilters'
 import { tokens } from '../../theme/tokens'
 
@@ -70,9 +70,9 @@ export function TemporalFilterBar({
               Select sensor
             </option>
           ) : null}
-          {sensorIds.map((sensor) => (
-            <option key={sensor} value={sensor}>
-              {sensor}
+          {sensorIds.map((sensorId) => (
+            <option key={sensorId} value={sensorId}>
+              {sensorLabels[sensorId]}
             </option>
           ))}
         </Select>

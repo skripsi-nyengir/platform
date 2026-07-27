@@ -17,6 +17,7 @@ import {
   AlertStatusSchema,
   SensorIdSchema,
   sensorIds,
+  sensorLabels,
   type AlertStatus,
 } from '../contracts/common'
 import { AlertEventHistory } from '../features/alerts-ui/AlertEventHistory'
@@ -50,7 +51,14 @@ export function AlertsPage() {
 
   return (
     <Stack spacing={6}>
-      <Typography variant="h1">Alerts</Typography>
+      <Stack spacing={0.5}>
+        <Typography variant="h1">Alerts</Typography>
+        <Typography color="text.secondary" variant="body2">Episode skor historis · Asia/Jakarta (WIB)</Typography>
+        <Typography color="text.secondary" variant="body2">
+          Waktu episode ditampilkan dalam WIB; waktu lifecycle adalah UTC; provenance per episode
+          berasal dari API.
+        </Typography>
+      </Stack>
 
       <Paper component="section" aria-label="Alert filters" variant="outlined" sx={{ p: 4 }}>
         <Stack
@@ -94,8 +102,8 @@ export function AlertsPage() {
               }}
             >
               <option value="">All sensors</option>
-              {sensorIds.map((sensor) => (
-                <option key={sensor} value={sensor}>{sensor}</option>
+               {sensorIds.map((sensor) => (
+                 <option key={sensor} value={sensor}>{sensorLabels[sensor]}</option>
               ))}
             </Select>
           </FormControl>
