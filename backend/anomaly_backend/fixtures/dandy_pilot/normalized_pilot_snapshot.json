@@ -1,0 +1,198 @@
+{
+  "schema_version": "reported_dandy_pilot_v1",
+  "report_source": "reported_dandy_pilot",
+  "label_source": "synthetic_injection",
+  "evaluation_kind": "comparison_snapshot",
+  "source_commit": "6d265f0b3d3c91097e2295a43c6a6dee034374d8",
+  "test_observed": true,
+  "independent_final": false,
+  "seed": 42,
+  "disclaimer": "Snapshot pilot Dandy berasal dari satu seed/run; test sudah diamati, belum merupakan evaluasi independen/final, dan seluruh model gagal skenario stuck.",
+  "sources": [
+    {
+      "path": "notebooks/step8/summaries/final_test_summary.json",
+      "sha256": "592d0d69bbb9e985d2db3f7314a635a04cd870bd0ae683b5aa28caf70966eb24"
+    },
+    {
+      "path": "notebooks/step10/summaries/step10_comparison_summary.json",
+      "sha256": "ed03bf3d823d7a47c3f18f946d6222844476cc83ee28bdd64a436df356caa18d"
+    }
+  ],
+  "models": [
+    {
+      "model_key": "lstm-ae",
+      "display_name": "LSTM-AE",
+      "family": "Neural reconstruction",
+      "rank": 1,
+      "score_key": "global_mae",
+      "reported_threshold": 0.009740831330418587,
+      "composite_primary": 0.6640308373776758,
+      "window_f1": 0.617941823515033,
+      "window_precision": 0.536047497879559,
+      "window_recall": 0.7293710328909405,
+      "event_hit_rate": 0.8809523809523809,
+      "clean_test_fpr": 0.006456334171358427,
+      "alert_rate": 0.013915937820898693,
+      "n_predicted_windows": 2358,
+      "stuck_event_hit_rate": 0.0,
+      "dynamic_score_by_family": {
+        "abrupt_drift": 10.5,
+        "dropout": 10.5,
+        "gradual_drift": 10.5,
+        "noise": 10.5,
+        "spike": 9.22,
+        "stuck": 0.0
+      }
+    },
+    {
+      "model_key": "usad",
+      "display_name": "USAD",
+      "family": "Neural reconstruction",
+      "rank": 2,
+      "score_key": "averaged_global_l2",
+      "reported_threshold": 0.30791249647736557,
+      "composite_primary": 0.45999544310476875,
+      "window_f1": 0.43122676579925645,
+      "window_precision": 0.3262285375962108,
+      "window_recall": 0.6358915175995383,
+      "event_hit_rate": 0.8095238095238095,
+      "clean_test_fpr": 0.013544137955454835,
+      "alert_rate": 0.01993555468998973,
+      "n_predicted_windows": 3378,
+      "stuck_event_hit_rate": 0.0,
+      "dynamic_score_by_family": {
+        "abrupt_drift": 10.5,
+        "dropout": 10.5,
+        "gradual_drift": 10.5,
+        "noise": 10.5,
+        "spike": 7.35,
+        "stuck": 0.0
+      }
+    },
+    {
+      "model_key": "cfc-autoencoder",
+      "display_name": "CfC Autoencoder",
+      "family": "Neural reconstruction",
+      "rank": 3,
+      "score_key": "global_mse",
+      "reported_threshold": 3.889578908911372e-06,
+      "composite_primary": 0.4266938473238069,
+      "window_f1": 0.3917426788286126,
+      "window_precision": 0.3353884093711467,
+      "window_recall": 0.4708597807270629,
+      "event_hit_rate": 0.5952380952380952,
+      "clean_test_fpr": 0.009542863213059027,
+      "alert_rate": 0.014358556708331858,
+      "n_predicted_windows": 2433,
+      "stuck_event_hit_rate": 0.0,
+      "dynamic_score_by_family": {
+        "abrupt_drift": 5.11875,
+        "dropout": 10.5,
+        "gradual_drift": 1.75,
+        "noise": 9.1875,
+        "spike": 8.4,
+        "stuck": 0.0
+      }
+    },
+    {
+      "model_key": "ewma",
+      "display_name": "EWMA",
+      "family": "Statistical baseline",
+      "rank": 4,
+      "score_key": "global_mae",
+      "reported_threshold": 0.025326583255082382,
+      "composite_primary": 0.38921327084671264,
+      "window_f1": 0.33313782991202345,
+      "window_precision": 0.25192193968066234,
+      "window_recall": 0.4916330063473745,
+      "event_hit_rate": 0.8809523809523809,
+      "clean_test_fpr": 0.015078550098556472,
+      "alert_rate": 0.019959161030652834,
+      "n_predicted_windows": 3382,
+      "stuck_event_hit_rate": 0.0,
+      "dynamic_score_by_family": {
+        "abrupt_drift": 10.5,
+        "dropout": 10.5,
+        "gradual_drift": 10.266666666666667,
+        "noise": 8.20625,
+        "spike": 4.14,
+        "stuck": 0.0
+      }
+    },
+    {
+      "model_key": "pca",
+      "display_name": "PCA",
+      "family": "Statistical baseline",
+      "rank": 5,
+      "score_key": "global_mae",
+      "reported_threshold": 0.022622425761073855,
+      "composite_primary": 0.3696059324680621,
+      "window_f1": 0.344721096313453,
+      "window_precision": 0.2589907192575406,
+      "window_recall": 0.5152914021927294,
+      "event_hit_rate": 0.6666666666666666,
+      "clean_test_fpr": 0.01521428655736931,
+      "alert_rate": 0.020348665651594017,
+      "n_predicted_windows": 3448,
+      "stuck_event_hit_rate": 0.0,
+      "dynamic_score_by_family": {
+        "abrupt_drift": 10.5,
+        "dropout": 10.5,
+        "gradual_drift": 10.5,
+        "noise": 7.875,
+        "spike": 3.15,
+        "stuck": 0.0
+      }
+    },
+    {
+      "model_key": "mtad-gat",
+      "display_name": "MTAD-GAT",
+      "family": "Neural forecasting",
+      "rank": 6,
+      "score_key": "fused_score",
+      "reported_threshold": 0.7346822699514213,
+      "composite_primary": 0.3651456878986899,
+      "window_f1": 0.2736660929432014,
+      "window_precision": 0.24574961360123648,
+      "window_recall": 0.3087378640776699,
+      "event_hit_rate": 0.7380952380952381,
+      "clean_test_fpr": 0.0018236005783587594,
+      "alert_rate": 0.0038183481365634867,
+      "n_predicted_windows": 647,
+      "stuck_event_hit_rate": 0.0,
+      "dynamic_score_by_family": {
+        "abrupt_drift": 4.262499999999999,
+        "dropout": 5.43,
+        "gradual_drift": 0.0,
+        "noise": 5.75625,
+        "spike": 1.935,
+        "stuck": 0.0
+      }
+    },
+    {
+      "model_key": "wsn-dense-ae",
+      "display_name": "WSN Dense AE",
+      "family": "Neural reconstruction",
+      "rank": 7,
+      "score_key": "global_mse",
+      "reported_threshold": 0.001566833149991076,
+      "composite_primary": 0.2889931092844946,
+      "window_f1": 0.2780269058295964,
+      "window_precision": 0.17597422522246087,
+      "window_recall": 0.6618580496249279,
+      "event_hit_rate": 0.8333333333333334,
+      "clean_test_fpr": 0.031697413925380356,
+      "alert_rate": 0.038466532110524886,
+      "n_predicted_windows": 6518,
+      "stuck_event_hit_rate": 0.0,
+      "dynamic_score_by_family": {
+        "abrupt_drift": 10.5,
+        "dropout": 10.5,
+        "gradual_drift": 10.5,
+        "noise": 10.5,
+        "spike": 8.4,
+        "stuck": 0.0
+      }
+    }
+  ]
+}

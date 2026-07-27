@@ -1,0 +1,718 @@
+{
+  "schema_version": "talpha_seed_v1",
+  "fixture_note": "Deterministic threshold fixture only; not runtime inference or ground truth.",
+  "provenance": {
+    "metadata_sha256": "9d015808bd032747d7b48ffdadc7f7d98aa68efb81e8e5c0d9313fbd7c77a8bc",
+    "validation_sha256": "56c43dfd7aeb4f79e533a67e373174a07c45c2a4b1ba3df14352309e6670f2b1",
+    "comparison_sha256": "09e3afdb55930e4dfc26b6cae8af0cf55105d2f3a523b14e8ad83fecfe4df6b6",
+    "validation_rows": 86104,
+    "seg_bounds": [
+      0,
+      36032,
+      65146,
+      86104
+    ],
+    "segment_count": 3,
+    "gap_count": 2,
+    "gap_threshold_seconds": 600,
+    "source_timestamp_policy": "exact no-offset calendar values; timezone unspecified",
+    "scaler": {
+      "channels": [
+        "suhu1",
+        "rh1",
+        "suhu2",
+        "rh2"
+      ],
+      "minimum": [
+        20.859050750732422,
+        29.2172908782959,
+        17.866750717163086,
+        32.085941314697266
+      ],
+      "maximum": [
+        49.910560607910156,
+        85.91895294189453,
+        27.658769607543945,
+        81.82958984375
+      ],
+      "inverse_formula": "physical = scaled * (maximum - minimum) + minimum"
+    },
+    "device_mapping": {
+      "talpha-1": {
+        "temperature_c": {
+          "source_channel": "suhu1",
+          "source_column": 0
+        },
+        "relative_humidity_pct": {
+          "source_channel": "rh1",
+          "source_column": 1
+        }
+      },
+      "talpha-2": {
+        "temperature_c": {
+          "source_channel": "suhu2",
+          "source_column": 2
+        },
+        "relative_humidity_pct": {
+          "source_channel": "rh2",
+          "source_column": 3
+        }
+      }
+    }
+  },
+  "telemetry": [
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-11T23:50:35",
+      "temperature_c": 25.556650323674432,
+      "relative_humidity_pct": 50.56433166676993,
+      "source_index": 0,
+      "gap_before": false,
+      "payload_hash": "9a23d910f06e2d1663b48db89bf3288d44da78ec2a528d3ee594887ca6d5888a"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-11T23:50:35",
+      "temperature_c": 22.038820201456247,
+      "relative_humidity_pct": 49.86243114650563,
+      "source_index": 0,
+      "gap_before": false,
+      "payload_hash": "3ea9c70be9cb06fae6e6ce061ff45d82f000de15b6b5330ea21a49d96422eaa4"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-11T23:50:42",
+      "temperature_c": 25.556650323674432,
+      "relative_humidity_pct": 50.71691925875649,
+      "source_index": 1,
+      "gap_before": false,
+      "payload_hash": "d1657af45d50eb8c92c7c60f08755cc9b5cb9479c1df60e6b2da0c510a60e79b"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-11T23:50:42",
+      "temperature_c": 22.038820201456247,
+      "relative_humidity_pct": 49.84717201846229,
+      "source_index": 1,
+      "gap_before": false,
+      "payload_hash": "26f6810f7c53711a808352861e20f7585de8c338666d6428494ae28f6634f411"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-11T23:50:47",
+      "temperature_c": 25.556650323674432,
+      "relative_humidity_pct": 50.56433166676993,
+      "source_index": 2,
+      "gap_before": false,
+      "payload_hash": "c216235e60ac082e574ff3741203a935a76bbdc572a8ea7026462052eaa90313"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-11T23:50:47",
+      "temperature_c": 22.049539513822538,
+      "relative_humidity_pct": 49.85480084124583,
+      "source_index": 2,
+      "gap_before": false,
+      "payload_hash": "1de9bb35d113f3c92309e72b1e1ccb25e4c328423c6e6f483f52d87f61fecf0b"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-11T23:50:54",
+      "temperature_c": 25.578100146784436,
+      "relative_humidity_pct": 50.45752018339522,
+      "source_index": 3,
+      "gap_before": false,
+      "payload_hash": "dac287e209efe8d97fdc4b1bb76454474e8488640fba8940ac457fcc59488736"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-11T23:50:54",
+      "temperature_c": 22.028089507918708,
+      "relative_humidity_pct": 49.85480084124583,
+      "source_index": 3,
+      "gap_before": false,
+      "payload_hash": "ab8c1eb50a79bacd46c556c255300bc35bdb950042dc0b6f670a85892ae0136c"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-11T23:51:00",
+      "temperature_c": 25.578100146784436,
+      "relative_humidity_pct": 50.388851795874416,
+      "source_index": 4,
+      "gap_before": false,
+      "payload_hash": "190b66d7c1a02b8fe2085fc8012bd9e8ae55f097dfe067ec10a9103ec745e5e0"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-11T23:51:00",
+      "temperature_c": 22.038820201456247,
+      "relative_humidity_pct": 49.87768879207272,
+      "source_index": 4,
+      "gap_before": false,
+      "payload_hash": "2ade35519991d219110d28869edb7528d902cd70b2ed3b1a97adbd6744ae2341"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-11T23:51:07",
+      "temperature_c": 25.578100146784436,
+      "relative_humidity_pct": 50.343079066944995,
+      "source_index": 5,
+      "gap_before": false,
+      "payload_hash": "4290f16afa6f9e2563d94d733067ff4cf72eaa794a9319b460ccb1c320d49592"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-11T23:51:07",
+      "temperature_c": 22.049539513822538,
+      "relative_humidity_pct": 49.89294050773481,
+      "source_index": 5,
+      "gap_before": false,
+      "payload_hash": "41a06f569d62ed47d4104df41c43c1312220529e082a52216d9fe22e87d7abb2"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-14T14:24:37",
+      "temperature_c": 25.395769074577856,
+      "relative_humidity_pct": 42.33221020955605,
+      "source_index": 36030,
+      "gap_before": false,
+      "payload_hash": "30e0b17412d6bd21ec61d2f05b859099401f5600f63a043b33981010edc50736"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-14T14:24:37",
+      "temperature_c": 21.566909857700352,
+      "relative_humidity_pct": 49.11475017962073,
+      "source_index": 36030,
+      "gap_before": false,
+      "payload_hash": "5beca84e3656bf8703bca9744e6852bfad29b0aed6081c437569e2b4a1d3289b"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-14T14:24:43",
+      "temperature_c": 25.395769074577856,
+      "relative_humidity_pct": 42.011779984034945,
+      "source_index": 36031,
+      "gap_before": false,
+      "payload_hash": "fc933c2df468e5cdcef3e0687b90134365e4f4280388b5ba3238e4e70d4b7afd"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-14T14:24:43",
+      "temperature_c": 21.566909857700352,
+      "relative_humidity_pct": 49.13763071806636,
+      "source_index": 36031,
+      "gap_before": false,
+      "payload_hash": "275d1a44f77a019754bedd5b2cb45d2c98a20d47c8f6d6e93be6ab258d3c71e5"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-14T15:57:48",
+      "temperature_c": 23.218570686844885,
+      "relative_humidity_pct": 58.78881926630527,
+      "source_index": 36032,
+      "gap_before": true,
+      "payload_hash": "128f83c61cd5a9d98af4a1162b6b0aebcf4726e099a8619fdaa3040cf9153a6a"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-14T15:57:48",
+      "temperature_c": 20.998479886137943,
+      "relative_humidity_pct": 56.25585903151625,
+      "source_index": 36032,
+      "gap_before": true,
+      "payload_hash": "361dbd2c5cda72dfb19a3f67d9c625f788ed77f8e43091f5a7b3c132ae99ec1e"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-14T15:57:56",
+      "temperature_c": 23.22929949451097,
+      "relative_humidity_pct": 58.77356000015425,
+      "source_index": 36033,
+      "gap_before": false,
+      "payload_hash": "af6c2a2c0411a19b438eba588a387cbd6ad44c04e6d12b7e152a390eec7a7e3e"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-14T15:57:56",
+      "temperature_c": 21.009210579675482,
+      "relative_humidity_pct": 56.21770898769353,
+      "source_index": 36033,
+      "gap_before": false,
+      "payload_hash": "312e83f61d9c637bde4568c4f2d2f8c5584d72f434271f4b4a51ffb85e032645"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-16T18:42:45",
+      "temperature_c": 25.052560649385782,
+      "relative_humidity_pct": 50.94580149165694,
+      "source_index": 65144,
+      "gap_before": false,
+      "payload_hash": "6bdc48b46c5e2de14fbce07bd8b310a5794a1ccf0fea428871cf4ee2d0b25102"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-16T18:42:45",
+      "temperature_c": 21.577629170066643,
+      "relative_humidity_pct": 45.155090212282175,
+      "source_index": 65144,
+      "gap_before": false,
+      "payload_hash": "f6de8c8375adb949557e8fa6d674af66aedd649fbbfd0e0718c27a764bfc4b14"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-16T18:42:52",
+      "temperature_c": 25.041848941318335,
+      "relative_humidity_pct": 50.869510230425476,
+      "source_index": 65145,
+      "gap_before": false,
+      "payload_hash": "6a1d659b9e773ae18f6ee6c1df98aa11b2312869cfaec65a8532a9e5da78c863"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-16T18:42:52",
+      "temperature_c": 21.588359863604182,
+      "relative_humidity_pct": 45.16271903506572,
+      "source_index": 65145,
+      "gap_before": false,
+      "payload_hash": "86eb5ff1fed3cd0bfd85dea7f337ec04042d033f99311d23d752f82b92385901"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-16T19:26:21",
+      "temperature_c": 23.5939501670415,
+      "relative_humidity_pct": 54.60791045869922,
+      "source_index": 65146,
+      "gap_before": true,
+      "payload_hash": "2469f8d61d00e0783e35e7920e30f48c2c356d390489ad29dd63b0c5fbeebc71"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-16T19:26:21",
+      "temperature_c": 20.987749192600404,
+      "relative_humidity_pct": 53.77630928228541,
+      "source_index": 65146,
+      "gap_before": true,
+      "payload_hash": "fe3ae7d02d20d533ab05fd8e358a51c2e5c91cca9b3bc6da4a501a6b01e331c7"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-16T19:26:31",
+      "temperature_c": 23.604679191158198,
+      "relative_humidity_pct": 54.40955013778324,
+      "source_index": 65147,
+      "gap_before": false,
+      "payload_hash": "abc995df5c6ce80f3b86e5356bf21d79fa3cfb5086d4ca30465ac1ebe7162c9f"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-16T19:26:31",
+      "temperature_c": 20.987749192600404,
+      "relative_humidity_pct": 53.60845887380867,
+      "source_index": 65147,
+      "gap_before": false,
+      "payload_hash": "747a9bb511138c629bd28df02bc273766a2c66bb263a5191331a92a98d28f3b4"
+    },
+    {
+      "device_id": "talpha-1",
+      "ts": "2025-12-18T07:52:42",
+      "temperature_c": 24.677190693016257,
+      "relative_humidity_pct": 54.714721942073936,
+      "source_index": 86103,
+      "gap_before": false,
+      "payload_hash": "79c05c19ae494bb28095963bbf23c839aaadf64c9d6a00827db4298fd9f102a7"
+    },
+    {
+      "device_id": "talpha-2",
+      "ts": "2025-12-18T07:52:42",
+      "temperature_c": 21.245159185493094,
+      "relative_humidity_pct": 45.75780872151722,
+      "source_index": 86103,
+      "gap_before": false,
+      "payload_hash": "f0649ac1a7029a8d11ea9d637bf0185fe9fc0e9ad650bd5a4796aa708514cefe"
+    }
+  ],
+  "inference_results": [
+    {
+      "device_id": "talpha-1",
+      "window_start_ts": "2025-12-11T23:50:35",
+      "window_end_ts": "2025-12-11T23:53:36",
+      "model_version": "conv1d-arm-b-talpha-1-validation-fixture",
+      "score": 0.013,
+      "threshold": 0.02707822278141974,
+      "is_anomaly": false,
+      "score_provenance": "deterministic_threshold_fixture",
+      "source_start_index": 0,
+      "source_end_index": 29,
+      "reading_count": 30,
+      "stride": 1
+    },
+    {
+      "device_id": "talpha-1",
+      "window_start_ts": "2025-12-11T23:53:42",
+      "window_end_ts": "2025-12-11T23:56:43",
+      "model_version": "conv1d-arm-b-talpha-1-validation-fixture",
+      "score": 0.019,
+      "threshold": 0.02707822278141974,
+      "is_anomaly": false,
+      "score_provenance": "deterministic_threshold_fixture",
+      "source_start_index": 30,
+      "source_end_index": 59,
+      "reading_count": 30,
+      "stride": 1
+    },
+    {
+      "device_id": "talpha-1",
+      "window_start_ts": "2025-12-11T23:56:48",
+      "window_end_ts": "2025-12-11T23:59:51",
+      "model_version": "conv1d-arm-b-talpha-1-validation-fixture",
+      "score": 0.02707822278141974,
+      "threshold": 0.02707822278141974,
+      "is_anomaly": false,
+      "score_provenance": "deterministic_threshold_fixture",
+      "source_start_index": 60,
+      "source_end_index": 89,
+      "reading_count": 30,
+      "stride": 1
+    },
+    {
+      "device_id": "talpha-1",
+      "window_start_ts": "2025-12-11T23:59:57",
+      "window_end_ts": "2025-12-12T00:02:57",
+      "model_version": "conv1d-arm-b-talpha-1-validation-fixture",
+      "score": 0.028,
+      "threshold": 0.02707822278141974,
+      "is_anomaly": true,
+      "score_provenance": "deterministic_threshold_fixture",
+      "source_start_index": 90,
+      "source_end_index": 119,
+      "reading_count": 30,
+      "stride": 1
+    },
+    {
+      "device_id": "talpha-2",
+      "window_start_ts": "2025-12-11T23:50:35",
+      "window_end_ts": "2025-12-11T23:53:36",
+      "model_version": "conv1d-arm-b-talpha-2-validation-fixture",
+      "score": 0.014,
+      "threshold": 0.031537856459617604,
+      "is_anomaly": false,
+      "score_provenance": "deterministic_threshold_fixture",
+      "source_start_index": 0,
+      "source_end_index": 29,
+      "reading_count": 30,
+      "stride": 1
+    },
+    {
+      "device_id": "talpha-2",
+      "window_start_ts": "2025-12-11T23:53:42",
+      "window_end_ts": "2025-12-11T23:56:43",
+      "model_version": "conv1d-arm-b-talpha-2-validation-fixture",
+      "score": 0.022,
+      "threshold": 0.031537856459617604,
+      "is_anomaly": false,
+      "score_provenance": "deterministic_threshold_fixture",
+      "source_start_index": 30,
+      "source_end_index": 59,
+      "reading_count": 30,
+      "stride": 1
+    },
+    {
+      "device_id": "talpha-2",
+      "window_start_ts": "2025-12-11T23:56:48",
+      "window_end_ts": "2025-12-11T23:59:51",
+      "model_version": "conv1d-arm-b-talpha-2-validation-fixture",
+      "score": 0.031537856459617604,
+      "threshold": 0.031537856459617604,
+      "is_anomaly": false,
+      "score_provenance": "deterministic_threshold_fixture",
+      "source_start_index": 60,
+      "source_end_index": 89,
+      "reading_count": 30,
+      "stride": 1
+    },
+    {
+      "device_id": "talpha-2",
+      "window_start_ts": "2025-12-11T23:59:57",
+      "window_end_ts": "2025-12-12T00:02:57",
+      "model_version": "conv1d-arm-b-talpha-2-validation-fixture",
+      "score": 0.025,
+      "threshold": 0.031537856459617604,
+      "is_anomaly": false,
+      "score_provenance": "deterministic_threshold_fixture",
+      "source_start_index": 90,
+      "source_end_index": 119,
+      "reading_count": 30,
+      "stride": 1
+    }
+  ],
+  "alerts": [
+    {
+      "alert_id": "alert_talpha_1_active",
+      "device_id": "talpha-1",
+      "detected_at": "2025-12-12T00:02:57",
+      "score": 0.028,
+      "threshold": 0.02707822278141974,
+      "model_version": "conv1d-arm-b-talpha-1-validation-fixture",
+      "inference_result_window_start_ts": "2025-12-11T23:59:57",
+      "inference_result_window_end_ts": "2025-12-12T00:02:57",
+      "detection_basis": "threshold_model_fixture"
+    }
+  ],
+  "alert_events": [
+    {
+      "event_id": "event_talpha_1_detected",
+      "alert_id": "alert_talpha_1_active",
+      "event_ts": "2025-12-12T00:02:57",
+      "event_type": "detected",
+      "device_id": "talpha-1",
+      "actor": "threshold-model-fixture",
+      "note": null,
+      "inference_result_window_start_ts": "2025-12-11T23:59:57",
+      "inference_result_window_end_ts": "2025-12-12T00:02:57",
+      "inference_model_version": "conv1d-arm-b-talpha-1-validation-fixture",
+      "detection_basis": "threshold_model_fixture"
+    }
+  ],
+  "alert_commands": [],
+  "model_evaluations": [
+    {
+      "version": "ewma-canonical-4ch",
+      "model": "ewma",
+      "track": "canonical_4ch",
+      "label": "EWMA",
+      "score_key": "global_mae",
+      "score_semantics": "global mean absolute reconstruction error (MAE)",
+      "evaluation_period": "2025-12-11T23:50:35 – 2025-12-18T07:52:42",
+      "validation_only": true,
+      "test_evaluated": false,
+      "n_val_windows": 86017,
+      "threshold": 0.047478773146867714,
+      "threshold_policy": {
+        "source_split": "val",
+        "percentile": 99.5,
+        "comparison": ">"
+      },
+      "has_labeled_ground_truth": false,
+      "available_metrics": [
+        "threshold",
+        "strict_exceedance_count",
+        "strict_exceedance_fraction"
+      ],
+      "summary": "This validation-only calibration summary does not measure anomaly-detection accuracy. Raw reconstruction magnitudes use different MAE/MSE semantics and are not compared directly.",
+      "model_hash": null,
+      "preprocessing_hash": null,
+      "threshold_hash": null,
+      "metrics": {
+        "threshold": 0.047478773146867714,
+        "strict_exceedance_count": 431,
+        "strict_exceedance_fraction": 0.005010637432135508
+      },
+      "notes": null
+    },
+    {
+      "version": "pca-canonical-4ch",
+      "model": "pca",
+      "track": "canonical_4ch",
+      "label": "PCA",
+      "score_key": "global_mae",
+      "score_semantics": "global mean absolute reconstruction error (MAE)",
+      "evaluation_period": "2025-12-11T23:50:35 – 2025-12-18T07:52:42",
+      "validation_only": true,
+      "test_evaluated": false,
+      "n_val_windows": 86017,
+      "threshold": 0.057222952693700785,
+      "threshold_policy": {
+        "source_split": "val",
+        "percentile": 99.5,
+        "comparison": ">"
+      },
+      "has_labeled_ground_truth": false,
+      "available_metrics": [
+        "threshold",
+        "strict_exceedance_count",
+        "strict_exceedance_fraction"
+      ],
+      "summary": "This validation-only calibration summary does not measure anomaly-detection accuracy. Raw reconstruction magnitudes use different MAE/MSE semantics and are not compared directly.",
+      "model_hash": null,
+      "preprocessing_hash": null,
+      "threshold_hash": null,
+      "metrics": {
+        "threshold": 0.057222952693700785,
+        "strict_exceedance_count": 431,
+        "strict_exceedance_fraction": 0.005010637432135508
+      },
+      "notes": null
+    },
+    {
+      "version": "conv1d-arm-a",
+      "model": "conv1d_autoencoder",
+      "track": "arm_a",
+      "label": "Conv1D Arm A",
+      "score_key": "global_mae",
+      "score_semantics": "global mean absolute reconstruction error (MAE)",
+      "evaluation_period": "2025-12-11T23:50:35 – 2025-12-18T07:52:42",
+      "validation_only": true,
+      "test_evaluated": false,
+      "n_val_windows": 86017,
+      "threshold": 0.025718613043427447,
+      "threshold_policy": {
+        "source_split": "val",
+        "percentile": 99.5,
+        "comparison": ">"
+      },
+      "has_labeled_ground_truth": false,
+      "available_metrics": [
+        "threshold",
+        "strict_exceedance_count",
+        "strict_exceedance_fraction"
+      ],
+      "summary": "This validation-only calibration summary does not measure anomaly-detection accuracy. Raw reconstruction magnitudes use different MAE/MSE semantics and are not compared directly.",
+      "model_hash": null,
+      "preprocessing_hash": null,
+      "threshold_hash": null,
+      "metrics": {
+        "threshold": 0.025718613043427447,
+        "strict_exceedance_count": 431,
+        "strict_exceedance_fraction": 0.005010637432135508
+      },
+      "notes": null
+    },
+    {
+      "version": "conv1d-arm-b-talpha1",
+      "model": "conv1d_autoencoder",
+      "track": "arm_b_talpha1",
+      "label": "Conv1D Arm B · TALPHA-1",
+      "score_key": "global_mae",
+      "score_semantics": "global mean absolute reconstruction error (MAE)",
+      "evaluation_period": "2025-12-11T23:50:35 – 2025-12-18T07:52:42",
+      "validation_only": true,
+      "test_evaluated": false,
+      "n_val_windows": 86017,
+      "threshold": 0.02707822278141974,
+      "threshold_policy": {
+        "source_split": "val",
+        "percentile": 99.5,
+        "comparison": ">"
+      },
+      "has_labeled_ground_truth": false,
+      "available_metrics": [
+        "threshold",
+        "strict_exceedance_count",
+        "strict_exceedance_fraction"
+      ],
+      "summary": "This validation-only calibration summary does not measure anomaly-detection accuracy. Raw reconstruction magnitudes use different MAE/MSE semantics and are not compared directly.",
+      "model_hash": null,
+      "preprocessing_hash": null,
+      "threshold_hash": null,
+      "metrics": {
+        "threshold": 0.02707822278141974,
+        "strict_exceedance_count": 431,
+        "strict_exceedance_fraction": 0.005010637432135508
+      },
+      "notes": null
+    },
+    {
+      "version": "conv1d-arm-b-talpha2",
+      "model": "conv1d_autoencoder",
+      "track": "arm_b_talpha2",
+      "label": "Conv1D Arm B · TALPHA-2",
+      "score_key": "global_mae",
+      "score_semantics": "global mean absolute reconstruction error (MAE)",
+      "evaluation_period": "2025-12-11T23:50:35 – 2025-12-18T07:52:42",
+      "validation_only": true,
+      "test_evaluated": false,
+      "n_val_windows": 86017,
+      "threshold": 0.031537856459617604,
+      "threshold_policy": {
+        "source_split": "val",
+        "percentile": 99.5,
+        "comparison": ">"
+      },
+      "has_labeled_ground_truth": false,
+      "available_metrics": [
+        "threshold",
+        "strict_exceedance_count",
+        "strict_exceedance_fraction"
+      ],
+      "summary": "This validation-only calibration summary does not measure anomaly-detection accuracy. Raw reconstruction magnitudes use different MAE/MSE semantics and are not compared directly.",
+      "model_hash": null,
+      "preprocessing_hash": null,
+      "threshold_hash": null,
+      "metrics": {
+        "threshold": 0.031537856459617604,
+        "strict_exceedance_count": 431,
+        "strict_exceedance_fraction": 0.005010637432135508
+      },
+      "notes": null
+    },
+    {
+      "version": "tranad-canonical-4ch",
+      "model": "tranad",
+      "track": "canonical_4ch",
+      "label": "TranAD",
+      "score_key": "averaged_global_mse",
+      "score_semantics": "average of two global mean squared reconstruction errors (MSE)",
+      "evaluation_period": "2025-12-11T23:50:35 – 2025-12-18T07:52:42",
+      "validation_only": true,
+      "test_evaluated": false,
+      "n_val_windows": 86017,
+      "threshold": 0.007528403326869005,
+      "threshold_policy": {
+        "source_split": "val",
+        "percentile": 99.5,
+        "comparison": ">"
+      },
+      "has_labeled_ground_truth": false,
+      "available_metrics": [
+        "threshold",
+        "strict_exceedance_count",
+        "strict_exceedance_fraction"
+      ],
+      "summary": "This validation-only calibration summary does not measure anomaly-detection accuracy. Raw reconstruction magnitudes use different MAE/MSE semantics and are not compared directly.",
+      "model_hash": null,
+      "preprocessing_hash": null,
+      "threshold_hash": null,
+      "metrics": {
+        "threshold": 0.007528403326869005,
+        "strict_exceedance_count": 431,
+        "strict_exceedance_fraction": 0.005010637432135508
+      },
+      "notes": null
+    },
+    {
+      "version": "usad-canonical-4ch",
+      "model": "usad",
+      "track": "canonical_4ch",
+      "label": "USAD",
+      "score_key": "averaged_global_mse",
+      "score_semantics": "average of two global mean squared reconstruction errors (MSE)",
+      "evaluation_period": "2025-12-11T23:50:35 – 2025-12-18T07:52:42",
+      "validation_only": true,
+      "test_evaluated": false,
+      "n_val_windows": 86017,
+      "threshold": 0.008044914752244947,
+      "threshold_policy": {
+        "source_split": "val",
+        "percentile": 99.5,
+        "comparison": ">"
+      },
+      "has_labeled_ground_truth": false,
+      "available_metrics": [
+        "threshold",
+        "strict_exceedance_count",
+        "strict_exceedance_fraction"
+      ],
+      "summary": "This validation-only calibration summary does not measure anomaly-detection accuracy. Raw reconstruction magnitudes use different MAE/MSE semantics and are not compared directly.",
+      "model_hash": null,
+      "preprocessing_hash": null,
+      "threshold_hash": null,
+      "metrics": {
+        "threshold": 0.008044914752244947,
+        "strict_exceedance_count": 431,
+        "strict_exceedance_fraction": 0.005010637432135508
+      },
+      "notes": null
+    }
+  ]
+}
