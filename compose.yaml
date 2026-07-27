@@ -1,0 +1,198 @@
+services:
+  db:
+    image: timescale/timescaledb:2.28.3-pg17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  migrate:
+    build:
+      context: ./backend
+      target: runtime
+    command: ["alembic", "-c", "alembic.ini", "upgrade", "head"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend
+
+  seed:
+    build:
+      context: ./backend
+      target: runtime
+    command: ["python", "-m", "anomaly_backend.seed"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  api:
+    build:
+      context: ./backend
+      target: runtime
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).read()"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks:
+      - backend
+
+  worker:
+    build:
+      context: ./backend
+      target: worker
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - backend
+
+  eda-worker:
+    build:
+      context: ./backend
+      target: eda-worker
+    command: ["python", "-m", "anomaly_worker.eda_service"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      EDA_WORKER_LEASE_SECONDS: ${EDA_WORKER_LEASE_SECONDS:-900}
+      EDA_WORKER_HEARTBEAT_SECONDS: ${EDA_WORKER_HEARTBEAT_SECONDS:-30}
+      EDA_WORKER_MAX_ATTEMPTS: ${EDA_WORKER_MAX_ATTEMPTS:-3}
+      EDA_WORKER_COMPUTE_TIMEOUT_SECONDS: ${EDA_WORKER_COMPUTE_TIMEOUT_SECONDS:-1800}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: "2147483648"
+    restart: unless-stopped
+    networks:
+      - backend
+
+  eda-cli:
+    profiles: ["ops"]
+    build:
+      context: ./backend
+      target: runtime
+    entrypoint: ["python", "-m", "anomaly_backend.eda_cli"]
+    command: ["--help"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  import:
+    profiles: ["import"]
+    build:
+      context: ./backend
+      target: worker
+    command: ["python", "-m", "anomaly_backend.importer"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      B02_RAW_ARCHIVE_PATH: /data/b02f3872.tar.gz
+    volumes:
+      - "${B02_RAW_ARCHIVE_PATH:-./REPLACE_WITH_LEGACY_B02_ARCHIVE.tar.gz}:/data/b02f3872.tar.gz:ro"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  eda-import:
+    profiles: ["eda-import"]
+    build:
+      context: ./backend
+      target: eda-worker
+    command: ["python", "-m", "anomaly_backend.eda_importer"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      EDA_RAW_SOURCE_PATH: /data/sensor_data_long.csv
+      EDA_SOURCE_MANIFEST_PATH: /data/bivariate_b02f3872_source_v1.json
+      EDA_SOURCE_MANIFEST_SHA256: 196178e7424bd2e92268606f0ef33237d2329bdfefd9dce592283c07a697d486
+    volumes:
+      - "${EDA_RAW_SOURCE_PATH:-./REPLACE_WITH_B02_V3_SOURCE/sensor_data_long.csv}:/data/sensor_data_long.csv:ro"
+      - "${EDA_SOURCE_MANIFEST_PATH:-./REPLACE_WITH_B02_V3_SOURCE/source-manifest.json}:/data/bivariate_b02f3872_source_v1.json:ro"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  nginx:
+    build:
+      context: ./frontend
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${NGINX_PORT}:80"
+    networks:
+      - backend
+      - public
+
+networks:
+  backend:
+    internal: true
+  public:
+
+volumes:
+  db_data:
