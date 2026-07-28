@@ -59,6 +59,7 @@ import {
   modelEvaluationSummaries,
 } from './fixtures/modelEvaluations'
 import { modelRegistryResponse } from './fixtures/modelRegistry'
+import { offlineEvaluationsResponse } from './fixtures/offlineEvaluations'
 import {
   livenessResponse,
   readinessResponse,
@@ -693,6 +694,10 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
     }),
 
     http.get('/api/model-registry', () => HttpResponse.json(structuredClone(modelRegistryResponse))),
+
+    http.get('/api/offline-evaluations', () =>
+      HttpResponse.json(structuredClone(offlineEvaluationsResponse)),
+    ),
 
     http.get('/api/model-evaluations', ({ request }) => {
       const url = new URL(request.url)

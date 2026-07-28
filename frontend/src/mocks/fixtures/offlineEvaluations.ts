@@ -1,0 +1,49 @@
+import type { OfflineEvaluationsResponse } from '../../contracts/offlineEvaluations'
+
+export const offlineEvaluationsResponse = {
+  items: [
+    {
+      model_family: 'lstm',
+      model_sha256: 'f26a67d378c4b5a90e64f7dc3844d2971cb414d1bf60926fefa188b13df99212',
+      dataset_reference: 'b02f3872_ruang_produksi_v3_march07',
+      forward_validation: {
+        recon_max_abs_diff: 0.0007296204566955566,
+        score_rel_error: 0.003807021537795663,
+        passed: true,
+      },
+      threshold: {
+        value: 0.0004298445419408381,
+        policy: 'clean_val_quantile',
+        alpha: 0.01,
+        comparison: 'strict_gt',
+      },
+      n_val_windows: 105_338,
+      n_test_windows: 105_564,
+      n_events: 28,
+      n_positive_windows: 1_489,
+      metrics: {
+        window_precision: 0.46153846153846156,
+        window_recall: 0.8381464069845533,
+        window_f1: 0.5952778440257572,
+        event_hit_rate: 0.9285714285714286,
+        event_hit_by_family: {
+          spike: 1,
+          contextual_shift: 1,
+          gradual_slope: 1,
+          stuck: 1,
+          dropout: 1,
+          coe: 0.5,
+        },
+        clean_test_fpr: 0.013792580804061991,
+        composite_fc1: 0.6166007905138341,
+        alert_rate: 4.629043085272344,
+      },
+      provenance: {
+        forward:
+          'reverse-engineered from state-dict + hyperparams, validated against artifact validation_reconstruction.npz',
+        torch_version: '2.12.1+cu130',
+        computed_at: '2026-07-28T18:34:58.085621Z',
+      },
+    },
+  ],
+} satisfies OfflineEvaluationsResponse

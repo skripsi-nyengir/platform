@@ -462,6 +462,54 @@ class ModelRegistryResponse(StrictModel):
     items: list[ModelRegistryItem] = Field(min_length=3, max_length=3)
 
 
+class OfflineEvaluationForwardValidation(StrictModel):
+    recon_max_abs_diff: float
+    score_rel_error: float
+    passed: bool
+
+
+class OfflineEvaluationThreshold(StrictModel):
+    value: float
+    policy: Literal["clean_val_quantile"]
+    alpha: float
+    comparison: Literal["strict_gt"]
+
+
+class OfflineEvaluationMetrics(StrictModel):
+    window_precision: float
+    window_recall: float
+    window_f1: float
+    event_hit_rate: float
+    event_hit_by_family: dict[str, float] = Field(min_length=1)
+    clean_test_fpr: float
+    composite_fc1: float
+    alert_rate: float
+
+
+class OfflineEvaluationProvenance(StrictModel):
+    forward: NonEmptyString
+    torch_version: NonEmptyString
+    computed_at: NonEmptyString
+
+
+class OfflineEvaluationItem(StrictModel):
+    model_family: Literal["lstm"]
+    model_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    dataset_reference: Literal["b02f3872_ruang_produksi_v3_march07"]
+    forward_validation: OfflineEvaluationForwardValidation
+    threshold: OfflineEvaluationThreshold
+    n_val_windows: Annotated[int, Field(ge=0)]
+    n_test_windows: Annotated[int, Field(ge=0)]
+    n_events: Annotated[int, Field(ge=0)]
+    n_positive_windows: Annotated[int, Field(ge=0)]
+    metrics: OfflineEvaluationMetrics
+    provenance: OfflineEvaluationProvenance
+
+
+class OfflineEvaluationsResponse(StrictModel):
+    items: list[OfflineEvaluationItem] = Field(min_length=1, max_length=1)
+
+
 class ValidationTrackFields(StrictModel):
     version: NonEmptyString
     model: NonEmptyString
