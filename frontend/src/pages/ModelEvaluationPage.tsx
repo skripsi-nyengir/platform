@@ -36,9 +36,9 @@ function formatFractionAsPercent(value: number): string {
 
 function formatAlertRate(value: number): string {
   return `${value.toLocaleString('id-ID', {
-    minimumFractionDigits: 3,
-    maximumFractionDigits: 3,
-  })}%`
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} /hari`
 }
 
 export function ModelEvaluationPage() {
@@ -189,7 +189,7 @@ export function ModelEvaluationPage() {
                   ['Event hit rate', formatFractionAsPercent(item.metrics.event_hit_rate)],
                   ['Clean test FPR', formatFractionAsPercent(item.metrics.clean_test_fpr)],
                   ['Composite Fc1', formatFractionAsPercent(item.metrics.composite_fc1)],
-                  ['Alert rate (%)', formatAlertRate(item.metrics.alert_rate)],
+                  ['Alert rate', formatAlertRate(item.metrics.alert_rate)],
                   ...Object.entries(item.metrics.event_hit_by_family).map(
                     ([family, value]) =>
                       [
