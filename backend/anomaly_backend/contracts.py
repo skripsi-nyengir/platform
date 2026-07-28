@@ -435,6 +435,33 @@ AlertMutationResponse = AcknowledgeAlertResponse | ResolveAlertResponse
 NonEmptyString = Annotated[str, Field(min_length=1)]
 
 
+class ModelRegistryItem(StrictModel):
+    id: Literal["transformer_step5", "conv1d_step5", "lstm_step5"]
+    family: Literal["transformer", "conv1d", "lstm"]
+    display_name: NonEmptyString
+    architecture: dict[str, int | float] = Field(min_length=1, max_length=16)
+    param_count: Annotated[int, Field(gt=0)]
+    best_val_mse: Annotated[float, Field(gt=0)]
+    best_epoch: Annotated[int, Field(gt=0)]
+    model_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    dataset_reference: Literal["b02f3872_ruang_produksi_v3_march07"]
+    window_size: Literal[30]
+    features: list[Literal["suhu", "rh"]] = Field(min_length=2, max_length=2)
+    score_semantics: Literal["window_mean_squared_reconstruction_error"]
+    report_source: Literal["reported_model_registry"]
+    summary: NonEmptyString
+
+    @model_validator(mode="after")
+    def validate_features(self) -> ModelRegistryItem:
+        if self.features != ["suhu", "rh"]:
+            raise ValueError("model registry features must be suhu then rh")
+        return self
+
+
+class ModelRegistryResponse(StrictModel):
+    items: list[ModelRegistryItem] = Field(min_length=3, max_length=3)
+
+
 class ValidationTrackFields(StrictModel):
     version: NonEmptyString
     model: NonEmptyString

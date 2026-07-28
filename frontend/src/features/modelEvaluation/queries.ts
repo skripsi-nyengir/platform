@@ -1,5 +1,6 @@
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { getModelEvaluation, getModelEvaluations } from '../../api/modelEvaluations'
+import { getModelRegistry } from '../../api/modelRegistry'
 import {
   ModelEvaluationDetailSchema,
   ModelEvaluationsQuerySchema,
@@ -23,6 +24,13 @@ export function useModelEvaluationsQuery(input: ModelEvaluationsQuery = {}) {
   return useQuery({
     queryKey: ['model-evaluations', 'list', query.page, query.pageSize],
     queryFn: ({ signal }) => getModelEvaluations(query, signal),
+  })
+}
+
+export function useModelRegistryQuery() {
+  return useQuery({
+    queryKey: ['model-registry'],
+    queryFn: ({ signal }) => getModelRegistry(signal),
   })
 }
 

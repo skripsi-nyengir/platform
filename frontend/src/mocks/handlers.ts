@@ -58,6 +58,7 @@ import {
   modelEvaluationDetails,
   modelEvaluationSummaries,
 } from './fixtures/modelEvaluations'
+import { modelRegistryResponse } from './fixtures/modelRegistry'
 import {
   livenessResponse,
   readinessResponse,
@@ -690,6 +691,8 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
       }
       return HttpResponse.json({ ...section, run_id: runId })
     }),
+
+    http.get('/api/model-registry', () => HttpResponse.json(structuredClone(modelRegistryResponse))),
 
     http.get('/api/model-evaluations', ({ request }) => {
       const url = new URL(request.url)
