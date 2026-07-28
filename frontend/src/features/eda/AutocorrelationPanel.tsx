@@ -127,9 +127,9 @@ function AutocorrelationPanelContent({ runId }: AutocorrelationPanelProps) {
                 const unavailable = channelUnavailable(channel)
                 const description = `ACF dan PACF ${channel.name} untuk lag 0 sampai 72 jam pada median per jam; domain koefisien tetap dari minus satu sampai satu.`
                 return (
-                  <Paper component="article" key={channel.key} variant="outlined" sx={{ minWidth: 0, p: 4 }}>
+                  <Box component="article" key={channel.key} sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 4 }}>
                     <Stack spacing={1} sx={{ minWidth: 0 }}>
-                      <Typography variant="h3">{channel.name}</Typography>
+                      <Typography variant="subtitle2">{channel.name}</Typography>
                       {unavailable === null && channel.lags.length > 0 ? (
                         <Box
                           role="img"
@@ -191,7 +191,7 @@ function AutocorrelationPanelContent({ runId }: AutocorrelationPanelProps) {
                         />
                       )}
                     </Stack>
-                  </Paper>
+                  </Box>
                 )
               })}
             </Box>

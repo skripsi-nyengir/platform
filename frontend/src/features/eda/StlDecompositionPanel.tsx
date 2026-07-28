@@ -142,9 +142,9 @@ function StlDecompositionPanelContent({ runId }: StlDecompositionPanelProps) {
                   },
                 ]
                 return (
-                  <Paper component="article" key={channel.key} variant="outlined" sx={{ minWidth: 0, p: 4 }}>
+                  <Box component="article" key={channel.key} sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 4 }}>
                     <Stack spacing={1} sx={{ minWidth: 0 }}>
-                      <Typography variant="h3">{channel.name} ({channel.unit})</Typography>
+                      <Typography variant="subtitle2">{channel.name} ({channel.unit})</Typography>
                       {channel.status === 'ok' && channel.rows.length > 0 ? (
                         <Box
                           role="img"
@@ -187,7 +187,7 @@ function StlDecompositionPanelContent({ runId }: StlDecompositionPanelProps) {
                         />
                       )}
                     </Stack>
-                  </Paper>
+                  </Box>
                 )
               })}
             </Box>

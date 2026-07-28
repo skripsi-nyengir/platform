@@ -70,6 +70,12 @@ function expectDescribedCharts(count: number) {
   }
 }
 
+function expectSingleOutlinedPanel(title: string) {
+  const panel = screen.getByRole('heading', { name: title }).closest('section')
+  expect(panel?.classList.contains('MuiPaper-outlined')).toBe(true)
+  expect(panel?.querySelector('.MuiPaper-outlined')).toBeNull()
+}
+
 function renderPanel(panel: ReactElement) {
   const harness = createQueryTestHarness()
   harnesses.push(harness)
@@ -377,6 +383,10 @@ describe('complete structure evidence', () => {
     </>)
 
     await waitFor(() => expect(screen.getAllByRole('button', { name: /^Lihat data/ })).toHaveLength(5))
+    expectSingleOutlinedPanel('Autokorelasi ACF dan PACF')
+    expectSingleOutlinedPanel('Spektrum frekuensi')
+    expectSingleOutlinedPanel('Dekomposisi STL')
+    expectSingleOutlinedPanel('Kandidat perubahan rezim')
     expectDescribedCharts(11)
   })
 

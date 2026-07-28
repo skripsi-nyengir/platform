@@ -52,6 +52,12 @@ function expectDescribedCharts(count: number) {
   }
 }
 
+function expectSingleOutlinedPanel(title: string) {
+  const panel = screen.getByRole('heading', { name: title }).closest('section')
+  expect(panel?.classList.contains('MuiPaper-outlined')).toBe(true)
+  expect(panel?.querySelector('.MuiPaper-outlined')).toBeNull()
+}
+
 function renderPanel(panel: ReactElement) {
   const harness = createQueryTestHarness()
   harnesses.push(harness)
@@ -326,6 +332,7 @@ describe('temporal panel evidence', () => {
     </>)
 
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Lihat data' })).toHaveLength(3))
+    expectSingleOutlinedPanel('Distribusi temporal Suhu dan RH')
     expectDescribedCharts(4)
   })
 

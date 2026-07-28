@@ -126,9 +126,9 @@ export function UnivariateDiagnosticsPanel({ runId }: UnivariateDiagnosticsPanel
               ]
 
               return (
-                <Paper key={channel.id} component="article" variant="outlined" sx={{ minWidth: 0, p: 4 }}>
+                <Box key={channel.id} component="article" sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 4 }}>
                   <Stack spacing={2} sx={{ minWidth: 0, height: '100%' }}>
-                    <Typography variant="h3">{channel.label}</Typography>
+                    <Typography variant="subtitle2">{channel.label}</Typography>
                     <Typography variant="body2" color="text.secondary">{description}</Typography>
                     <Box role="img" aria-label={`Histogram ${channel.label}`} aria-description={description} sx={{ minWidth: 0 }}>
                       <BarChart
@@ -228,7 +228,7 @@ export function UnivariateDiagnosticsPanel({ runId }: UnivariateDiagnosticsPanel
                       onClose={() => setOpenChannel(undefined)}
                     />
                   </Stack>
-                </Paper>
+                </Box>
               )
             })}
           </Box>

@@ -69,23 +69,29 @@ describe('EdaPage', () => {
       'eda-grid-structure',
     ]) {
       const grid = screen.getByTestId(testId)
-      expect(grid.getAttribute('data-layout')).toBe('auto-fit-min-320')
+      expect(grid.getAttribute('data-layout')).toBe('curated-spans')
       expect(window.getComputedStyle(grid).display).toBe('grid')
       expect(window.getComputedStyle(grid).minWidth).toBe('0px')
-      expect(window.getComputedStyle(grid).gridTemplateColumns).toContain('minmax(min(320px, 100%), 1fr)')
+      expect(window.getComputedStyle(grid).gridAutoFlow).toBe('dense')
     }
     expect(window.getComputedStyle(await screen.findByTestId('eda-audit-table-scroll')).overflowX).toBe('auto')
   })
 
   it('shows source and algorithm provenance plus the global methodology limits', async () => {
+    const user = userEvent.setup()
     renderApp('/eda')
 
     const header = await screen.findByTestId('eda-run-provenance')
+    const provenanceTrigger = within(header).getByRole('button', { name: /Detail/ })
+    await user.click(provenanceTrigger)
+    expect(within(header).getByRole('region').getAttribute('aria-labelledby')).toBe(
+      provenanceTrigger.id,
+    )
     expect(within(header).getByText('Komputasi rentang setara-algoritme')).not.toBeNull()
     expect(within(header).getByText(/Source SHA-256: a{12}…/)).not.toBeNull()
     expect(within(header).getByText(/Algoritme: b02-v3-live-1/)).not.toBeNull()
     expect(within(header).getByText(/Config: b{12}…/)).not.toBeNull()
-    expect(within(header).getByText(/2026-02-01T00:00:00 – 2026-03-01T00:00:00/)).not.toBeNull()
+    expect(within(header).getAllByText(/2026-02-01T00:00:00 – 2026-03-01T00:00:00/)).toHaveLength(2)
     expect(within(header).getByText(/Jenis periode: monthly/)).not.toBeNull()
     expect(within(header).getByText(/Boundary-censored: tidak/)).not.toBeNull()
     for (const context of ['B02', 'Suhu (°C)', 'RH (%)', 'Asia/Jakarta (WIB)']) {
@@ -93,6 +99,11 @@ describe('EdaPage', () => {
     }
 
     const methodology = screen.getByRole('note', { name: 'Batas metodologi EDA' })
+    const methodologyTrigger = within(methodology).getByRole('button', { name: /Batas metodologi/ })
+    await user.click(methodologyTrigger)
+    expect(within(methodology).getByRole('region').getAttribute('aria-labelledby')).toBe(
+      methodologyTrigger.id,
+    )
     expect(within(methodology).getByText(/kualitas kandidat saja/i)).not.toBeNull()
     expect(within(methodology).getByText(/deskriptif, bukan kausal/i)).not.toBeNull()
     expect(within(methodology).getByText(/tidak memuat bukti model atau deteksi anomali/i)).not.toBeNull()
@@ -100,6 +111,7 @@ describe('EdaPage', () => {
   })
 
   it('reserves the canonical parity label for a published full-range run', async () => {
+    const user = userEvent.setup()
     const canonicalRun: EdaRunSummary = {
       ...edaReadyMonthlyRun,
       run_id: 'run-b02-canonical-v3',
@@ -131,6 +143,7 @@ describe('EdaPage', () => {
     renderApp(`/eda?mode=precompute&period_kind=monthly&run=${canonicalRun.run_id}`)
 
     const header = await screen.findByTestId('eda-run-provenance')
+    await user.click(within(header).getByRole('button', { name: /Detail/ }))
     expect(within(header).getByText('Rilis v3 terpublikasi (paritas kanonik)')).not.toBeNull()
     expect(within(header).queryByText('Komputasi rentang setara-algoritme')).toBeNull()
     expect(within(header).getByText(/Jenis periode: full_range/)).not.toBeNull()
@@ -199,6 +212,7 @@ describe('EdaPage', () => {
     renderApp('/eda')
 
     const initialHeader = await screen.findByTestId('eda-run-provenance')
+    await user.click(within(initialHeader).getByRole('button', { name: /Detail/ }))
     expect(within(initialHeader).getByText(/Jenis periode: monthly/)).not.toBeNull()
     await user.click(screen.getByLabelText('Mode'))
     await user.click(screen.getByRole('option', { name: 'Rentang kustom' }))
@@ -213,7 +227,7 @@ describe('EdaPage', () => {
     await waitFor(() => {
       const header = screen.getByTestId('eda-run-provenance')
       expect(within(header).getByText(/Jenis periode: custom/)).not.toBeNull()
-      expect(within(header).getByText(/2026-02-01T00:00:00 – 2026-02-02T00:00:00/)).not.toBeNull()
+      expect(within(header).getAllByText(/2026-02-01T00:00:00 – 2026-02-02T00:00:00/)).toHaveLength(2)
       expect(within(header).getByText(/Run: run-b02-custom-cache/)).not.toBeNull()
     })
     await waitFor(() => expect(requestedRuns).toContain(edaCacheHitResponse.run.run_id))

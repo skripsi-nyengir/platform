@@ -124,8 +124,8 @@ export function QualityExcerptPanel({ runId }: QualityExcerptPanelProps) {
               ] as const).map((channel) => {
                 const description = `${channel.label} pada jendela kejadian ${excerptData.selectionKind}; garis terputus pada gap di atas 30 detik dan marker menunjukkan record rule-screened yang dipertahankan.`
                 return (
-                  <Paper key={channel.id} component="article" variant="outlined" sx={{ minWidth: 0, p: 2 }}>
-                    <Typography variant="h3">{channel.label}</Typography>
+                  <Box key={channel.id} component="article" sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 2 }}>
+                    <Typography variant="subtitle2">{channel.label}</Typography>
                     <Box role="img" aria-label={`${channel.label} excerpt kualitas`} aria-description={description} sx={{ minWidth: 0 }}>
                       <LineChart
                         id={`quality-excerpt-${channel.id}-chart`}
@@ -171,13 +171,13 @@ export function QualityExcerptPanel({ runId }: QualityExcerptPanelProps) {
                         ]}
                       />
                     </Box>
-                  </Paper>
+                  </Box>
                 )
               })}
             </Box>
-            <Paper component="article" variant="outlined" sx={{ minWidth: 0, p: 2 }}>
+            <Box component="article" sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 2 }}>
               <Stack spacing={1}>
-                <Typography variant="h3">Flag diagnostik tumpang tindih</Typography>
+                <Typography variant="subtitle2">Flag diagnostik tumpang tindih</Typography>
                 <Box
                   role="img"
                   aria-label="Marker flag diagnostik per timestamp"
@@ -221,7 +221,7 @@ export function QualityExcerptPanel({ runId }: QualityExcerptPanelProps) {
                   ))}
                 </Box>
               </Stack>
-            </Paper>
+            </Box>
             <Button size="small" onClick={() => setDialogOpen(true)}>Lihat data</Button>
             <BoundedDataDialog<ExcerptTableRow>
               open={dialogOpen}

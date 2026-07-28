@@ -219,14 +219,13 @@ export function TemporalDistributionPanel({ runId }: TemporalDistributionPanelPr
                 const emptyCount = channel.points.filter((point) => !point.censored && point.count === 0).length
                 const description = `${channel.name} ${resolutionLabels[resolution].toLowerCase()} dalam ${channel.unit} untuk ${viewLabels[view].toLowerCase()}. Median, Q1, dan Q3 berhenti pada bin kosong atau tersensor.`
                 return (
-                  <Paper
+                  <Box
                     component="article"
                     key={channel.key}
-                    variant="outlined"
-                    sx={{ minWidth: 0, p: 4 }}
+                    sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 4 }}
                   >
                     <Stack spacing={1} sx={{ minWidth: 0 }}>
-                      <Typography variant="h3">{channel.name} ({channel.unit})</Typography>
+                      <Typography variant="subtitle2">{channel.name} ({channel.unit})</Typography>
                       {censoredCount === 0 && emptyCount === 0 ? null : (
                         <Typography variant="caption" color="text.secondary">
                           {censoredCount} bin tersensor dan {emptyCount} bin kosong memutus garis median, Q1, dan Q3.
@@ -308,7 +307,7 @@ export function TemporalDistributionPanel({ runId }: TemporalDistributionPanelPr
                         />
                       </Box>
                     </Stack>
-                  </Paper>
+                  </Box>
                 )
               })}
             </Box>

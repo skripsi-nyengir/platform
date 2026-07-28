@@ -52,6 +52,12 @@ function expectDescribedCharts(count: number) {
   }
 }
 
+function expectSingleOutlinedPanel(title: string) {
+  const panel = screen.getByRole('heading', { name: title }).closest('section')
+  expect(panel?.classList.contains('MuiPaper-outlined')).toBe(true)
+  expect(panel?.querySelector('.MuiPaper-outlined')).toBeNull()
+}
+
 function renderPanel(panel: ReactElement) {
   const harness = createQueryTestHarness()
   harnesses.push(harness)
@@ -187,6 +193,7 @@ describe('relationship panel evidence', () => {
     expect(chart.getAttribute('data-x-axis')).toBe('["Mentah","Screened"]')
     expect(screen.getByText(/Pearson mengukur hubungan linear/)).not.toBeNull()
     expect(screen.getByText(/populasi terpilih yang berbeda/)).not.toBeNull()
+    expectSingleOutlinedPanel('Ringkasan asosiasi Suhu–RH')
   })
 
   it('defaults to 30m/30s, keeps [-1,1], and updates both sensitivity selectors', async () => {

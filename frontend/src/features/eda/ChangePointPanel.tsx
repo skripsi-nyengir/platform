@@ -99,9 +99,9 @@ function ChangePointPanelContent({ runId }: ChangePointPanelProps) {
               }}
             >
               {data.blockSummaries.map((block) => (
-                <Paper component="article" key={block.id} variant="outlined" sx={{ minWidth: 0, p: 2 }}>
+                <Box component="article" key={block.id} sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 2 }}>
                   <Stack spacing={0.5}>
-                    <Typography variant="h3">Blok {block.startDate} – {block.endDate}</Typography>
+                    <Typography variant="subtitle2">Blok {block.startDate} – {block.endDate}</Typography>
                     <Typography variant="body2" color="text.secondary" sx={technicalTextSx}>
                       {block.pairCount.toLocaleString('id-ID')} median harian
                     </Typography>
@@ -109,7 +109,7 @@ function ChangePointPanelContent({ runId }: ChangePointPanelProps) {
                       Blok harian berstatus {block.status}; {block.stableChangeCount} kandidat stabil; {block.confirmationCount} aturan konfirmasi.
                     </Typography>
                   </Stack>
-                </Paper>
+                </Box>
               ))}
             </Box>
             {data.confirmationSummary.length === 0 ? (
@@ -232,9 +232,9 @@ function ChangePointPanelContent({ runId }: ChangePointPanelProps) {
                     ].map((chart) => {
                       const description = `${chart.title} pada tanggal kandidat agregat harian; ${channel.name} ditampilkan pada sumbu numeriknya sendiri.`
                       return (
-                        <Paper component="article" key={chart.key} variant="outlined" sx={{ minWidth: 0, p: 4 }}>
+                        <Box component="article" key={chart.key} sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 4 }}>
                           <Stack spacing={1} sx={{ minWidth: 0 }}>
-                            <Typography variant="h3">{chart.title}</Typography>
+                            <Typography variant="subtitle2">{chart.title}</Typography>
                             <Box
                               role="img"
                               aria-label={chart.title}
@@ -278,7 +278,7 @@ function ChangePointPanelContent({ runId }: ChangePointPanelProps) {
                               />
                             </Box>
                           </Stack>
-                        </Paper>
+                        </Box>
                       )
                     })
                   })}

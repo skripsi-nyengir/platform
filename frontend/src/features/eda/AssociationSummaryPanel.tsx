@@ -139,10 +139,10 @@ export function AssociationSummaryPanel({ runId }: AssociationSummaryPanelProps)
               }}
             >
               {data.map((item) => (
-                <Paper component="article" key={item.id} variant="outlined" sx={{ minWidth: 0, p: 2 }}>
+                <Box component="article" key={item.id} sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 2 }}>
                   <Stack spacing={1}>
                     <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                      <Typography variant="h3">{statisticLabels[item.statistic]}</Typography>
+                      <Typography variant="subtitle2">{statisticLabels[item.statistic]}</Typography>
                       <Chip size="small" color="success" label="Status: layak" />
                     </Stack>
                     <Typography variant="body2" sx={technicalTextSx}>
@@ -152,7 +152,7 @@ export function AssociationSummaryPanel({ runId }: AssociationSummaryPanelProps)
                       Screened {formatCoefficient(item.screened)} · {item.screenedPairCount.toLocaleString('id-ID')} pasangan
                     </Typography>
                   </Stack>
-                </Paper>
+                </Box>
               ))}
             </Box>
             <Box

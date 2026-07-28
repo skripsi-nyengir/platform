@@ -112,9 +112,9 @@ function SpectrumPanelContent({ runId }: SpectrumPanelProps) {
               {data.channels.map((channel) => {
                 const description = `Spektrum ${channel.name} pada median per jam. Tooltip mengubah frekuensi menjadi periode hanya untuk nilai finite dan bukan nol.`
                 return (
-                  <Paper component="article" key={channel.key} variant="outlined" sx={{ minWidth: 0, p: 4 }}>
+                  <Box component="article" key={channel.key} sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 4 }}>
                     <Stack spacing={1} sx={{ minWidth: 0 }}>
-                      <Typography variant="h3">{channel.name}</Typography>
+                      <Typography variant="subtitle2">{channel.name}</Typography>
                       {channel.status === 'ok' && channel.rows.length > 0 ? (
                         <Box
                           role="img"
@@ -164,7 +164,7 @@ function SpectrumPanelContent({ runId }: SpectrumPanelProps) {
                         />
                       )}
                     </Stack>
-                  </Paper>
+                  </Box>
                 )
               })}
             </Box>

@@ -76,9 +76,9 @@ export function QualityIntegrityPanel({ runId }: QualityIntegrityPanelProps) {
               }}
             >
               {domainTables.map((table) => (
-                <Paper key={table.id} component="article" variant="outlined" sx={{ minWidth: 0, p: 2 }}>
+                <Box key={table.id} component="article" sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 2 }}>
                   <Stack spacing={1} sx={{ minWidth: 0 }}>
-                    <Typography variant="h3">Fate domain — {table.label}</Typography>
+                    <Typography variant="subtitle2">Fate domain — {table.label}</Typography>
                     <Typography variant="body2" color="text.secondary">
                       Total {table.totalPairs.toLocaleString('id-ID')}; non-finite {table.nonFinitePairs.toLocaleString('id-ID')}; excluded {table.excludedPairs.toLocaleString('id-ID')} pasangan.
                     </Typography>
@@ -118,7 +118,7 @@ export function QualityIntegrityPanel({ runId }: QualityIntegrityPanelProps) {
                       </Table>
                     </TableContainer>
                   </Stack>
-                </Paper>
+                </Box>
               ))}
             </Box>
             <Box
@@ -135,21 +135,27 @@ export function QualityIntegrityPanel({ runId }: QualityIntegrityPanelProps) {
                 { title: 'Grup duplikat', metric: integrity.duplicateGroups },
                 { title: 'Pasangan duplikat konflik', metric: integrity.conflictingPairs },
               ] as const).map(({ title, metric }) => (
-                <Paper key={title} component="article" variant="outlined" sx={{ minWidth: 0, p: 4 }}>
-                  <Typography variant="h3">{title}</Typography>
-                  <Typography variant="h2" sx={{ fontFamily: tokens.font.data, mt: 1 }}>
+                <Box key={title} component="article" sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 4 }}>
+                  <Typography variant="subtitle2">{title}</Typography>
+                  <Typography sx={{
+                    fontFamily: tokens.font.data,
+                    fontSize: tokens.font.size.summaryValue,
+                    fontVariantNumeric: 'tabular-nums',
+                    lineHeight: tokens.font.lineHeight.summaryValue,
+                    mt: 1,
+                  }}>
                     {metric.count.toLocaleString('id-ID')}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {formatFinitePercent(metric.count, metric.denominator)} dari {metric.denominator.toLocaleString('id-ID')} {metric.denominatorLabel}.
                   </Typography>
-                </Paper>
+                </Box>
               ))}
             </Box>
-            <Paper component="article" variant="outlined" sx={{ minWidth: 0, p: 4 }}>
+            <Box component="article" sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 4 }}>
               <Stack spacing={2} sx={{ minWidth: 0 }}>
                 <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Typography variant="h3" sx={{ flexGrow: 1 }}>Cadence pasangan</Typography>
+                  <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>Cadence pasangan</Typography>
                   <Chip
                     size="small"
                     color={integrity.cadence.status === 'pass' ? 'success' : 'error'}
@@ -209,7 +215,7 @@ export function QualityIntegrityPanel({ runId }: QualityIntegrityPanelProps) {
                   Median teramati <Box component="span" sx={{ fontFamily: tokens.font.data }}>{integrity.cadence.observedMedianSeconds} dtk</Box>. Gap di atas {integrity.cadence.primaryGapSeconds} detik: <Box component="span" sx={{ fontFamily: tokens.font.data }}>{integrity.cadence.gapCount.toLocaleString('id-ID')}</Box>.
                 </Typography>
               </Stack>
-            </Paper>
+            </Box>
           </>
         )}
       </Stack>

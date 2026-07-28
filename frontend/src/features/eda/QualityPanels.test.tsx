@@ -46,6 +46,12 @@ function expectDescribedCharts(count: number) {
   }
 }
 
+function expectSingleOutlinedPanel(title: string) {
+  const panel = screen.getByRole('heading', { name: title }).closest('section')
+  expect(panel?.classList.contains('MuiPaper-outlined')).toBe(true)
+  expect(panel?.querySelector('.MuiPaper-outlined')).toBeNull()
+}
+
 function section(name: EdaSectionName): Extract<EdaSectionResponse, { status: 'complete' }> {
   const value = edaSectionsByName.get(name)
   if (value === undefined) throw new Error(`Missing fixture section ${name}`)
@@ -276,6 +282,11 @@ describe('QUALITY panel family complete state', () => {
     expect(screen.getByRole('heading', { name: 'Integritas kualitas' })).not.toBeNull()
     expect(screen.getByRole('table', { name: 'Fate domain Resolved raw' })).not.toBeNull()
     expect(screen.getByText('Gate PASS')).not.toBeNull()
+    expectSingleOutlinedPanel('Audit pairing timestamp')
+    expectSingleOutlinedPanel('Diagnostik univariat')
+    expectSingleOutlinedPanel('Excerpt kejadian kualitas')
+    expectSingleOutlinedPanel('Integritas kualitas')
+    expect(screen.getByText('Grup duplikat').parentElement?.querySelector('.MuiTypography-h2')).toBeNull()
     expectDescribedCharts(8)
     expect(screen.getAllByRole('button', { name: 'Lihat data' })).toHaveLength(3)
     expect(useEdaSectionQueryMock).toHaveBeenCalledWith('run-quality', 'quality_overview')

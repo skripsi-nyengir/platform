@@ -1,4 +1,7 @@
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Chip,
@@ -24,6 +27,7 @@ import { AutocorrelationPanel } from '../features/eda/AutocorrelationPanel'
 import { BootstrapUncertaintyPanel } from '../features/eda/BootstrapUncertaintyPanel'
 import { ChangePointPanel } from '../features/eda/ChangePointPanel'
 import { EdaRunControls } from '../features/eda/EdaRunControls'
+import { EdaSectionHeading } from '../features/eda/EdaSectionHeading'
 import { JointDensityPanel } from '../features/eda/JointDensityPanel'
 import { PairingAuditPanel } from '../features/eda/PairingAuditPanel'
 import { QualityExcerptPanel } from '../features/eda/QualityExcerptPanel'
@@ -48,14 +52,18 @@ const anchors = [
   { id: 'metadata-audit', label: 'Metadata Audit dan Akses Data' },
 ] as const
 
-const panelGridSx = {
+const panelGridSx = (desktopColumns: string) => ({
   alignItems: 'start',
   display: 'grid',
   gap: 4,
-  gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
+  gridAutoFlow: 'dense',
+  gridTemplateColumns: {
+    xs: 'minmax(0, 1fr)',
+    md: desktopColumns,
+  },
   minWidth: 0,
   '& > *': { minWidth: 0 },
-} as const
+})
 
 const technicalTextSx = {
   fontFamily: tokens.font.data,
@@ -72,75 +80,123 @@ function RunProvenance({ run }: { run: EdaRunSummary }) {
   const toCensored = run.sections.some((section) => section.range_boundary.to_censored)
   const fromOpenEnded = run.sections.some((section) => section.range_boundary.from_open_ended)
   const toOpenEnded = run.sections.some((section) => section.range_boundary.to_open_ended)
+  const boundaryStatus = fromCensored || toCensored
+    ? 'tersensor'
+    : fromOpenEnded || toOpenEnded ? 'open-ended' : 'utuh'
 
   return (
-    <Paper
+    <Accordion
       component="section"
       aria-labelledby="eda-run-provenance-heading"
       data-testid="eda-run-provenance"
+      disableGutters
+      slots={{ heading: 'div' }}
       variant="outlined"
-      sx={{ minWidth: 0, p: 4 }}
+      sx={{
+        minWidth: 0,
+        '&::before': { display: 'none' },
+        '&.Mui-expanded': { m: 0 },
+      }}
     >
-      <Stack spacing={3} sx={{ minWidth: 0 }}>
+      <AccordionSummary
+        aria-controls="eda-run-provenance-detail"
+        id="eda-run-provenance-summary"
+        sx={{
+          minHeight: tokens.size.control,
+          px: 3,
+          '&.Mui-expanded': { minHeight: tokens.size.control },
+          '& .MuiAccordionSummary-content': { my: 1 },
+          '& .MuiAccordionSummary-content.Mui-expanded': { my: 1 },
+        }}
+      >
         <Stack
           direction="row"
-          spacing={2}
+          spacing={1.5}
           useFlexGap
-          sx={{ alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}
+          sx={{ alignItems: 'center', flexWrap: 'wrap', minWidth: 0, width: '100%' }}
         >
-          <Typography id="eda-run-provenance-heading" variant="h2" sx={{ flexGrow: 1 }}>
-            Provenance sumber dan algoritme
+          <Typography
+            component="h2"
+            id="eda-run-provenance-heading"
+            variant="caption"
+            sx={{ fontWeight: 700 }}
+          >
+            Provenance
           </Typography>
           <ProvenanceBadge
             edaProvenance={run.canonical_release ? 'canonical_release' : 'algorithm_equivalent'}
           />
+          <Typography variant="body2" sx={technicalTextSx}>
+            Run: {hashPrefix(run.run_id)}
+          </Typography>
+          <Typography variant="body2" sx={technicalTextSx}>
+            {run.scope.from} – {run.scope.to}
+          </Typography>
+          <Typography variant="body2">Boundary: {boundaryStatus}</Typography>
+          <Typography variant="body2" color="primary.main" sx={{ fontWeight: 700, ml: 'auto' }}>
+            Detail
+          </Typography>
         </Stack>
+      </AccordionSummary>
 
-        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-          <Chip size="small" label="B02" />
-          <Chip size="small" label="Suhu (°C)" />
-          <Chip size="small" label="RH (%)" />
-          <Chip size="small" label="Asia/Jakarta (WIB)" />
+      <AccordionDetails sx={{ px: 3, pb: 3, pt: 0 }}>
+        <Stack spacing={2} sx={{ minWidth: 0 }}>
+          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            <Chip size="small" label="B02" />
+            <Chip size="small" label="Suhu (°C)" />
+            <Chip size="small" label="RH (%)" />
+            <Chip size="small" label="Asia/Jakarta (WIB)" />
+          </Stack>
+
+          <Box
+            sx={{
+              display: 'grid',
+              gap: 3,
+              gridTemplateColumns: {
+                xs: 'minmax(0, 1fr)',
+                md: 'repeat(4, minmax(0, 1fr))',
+              },
+              minWidth: 0,
+            }}
+          >
+            <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+              <Typography variant="caption" color="text.secondary">Identitas run</Typography>
+              <Typography variant="body2" sx={technicalTextSx}>Run: {run.run_id}</Typography>
+              <Typography variant="body2" sx={technicalTextSx}>
+                Source SHA-256: {hashPrefix(run.source_sha256)}
+              </Typography>
+            </Stack>
+            <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+              <Typography variant="caption" color="text.secondary">Versi komputasi</Typography>
+              <Typography variant="body2" sx={technicalTextSx}>
+                Algoritme: {run.algorithm_version}
+              </Typography>
+              <Typography variant="body2" sx={technicalTextSx}>
+                Config: {hashPrefix(run.config_hash)}
+              </Typography>
+            </Stack>
+            <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+              <Typography variant="caption" color="text.secondary">Rentang tepat, half-open</Typography>
+              <Typography variant="body2" sx={technicalTextSx}>
+                {run.scope.from} – {run.scope.to}
+              </Typography>
+              <Typography variant="body2" sx={technicalTextSx}>
+                Jenis periode: {run.scope.period_kind}
+              </Typography>
+            </Stack>
+            <Stack spacing={0.5} sx={{ minWidth: 0 }}>
+              <Typography variant="caption" color="text.secondary">Status batas rentang</Typography>
+              <Typography variant="body2" sx={technicalTextSx}>
+                Boundary-censored: {fromCensored || toCensored ? 'ya' : 'tidak'}
+              </Typography>
+              <Typography variant="body2" sx={technicalTextSx}>
+                Awal {fromCensored ? 'tersensor' : fromOpenEnded ? 'open-ended' : 'utuh'} · akhir {toCensored ? 'tersensor' : toOpenEnded ? 'open-ended' : 'utuh'}
+              </Typography>
+            </Stack>
+          </Box>
         </Stack>
-
-        <Box sx={panelGridSx}>
-          <Stack spacing={0.5} sx={{ minWidth: 0 }}>
-            <Typography variant="caption" color="text.secondary">Identitas run</Typography>
-            <Typography variant="body2" sx={technicalTextSx}>Run: {run.run_id}</Typography>
-            <Typography variant="body2" sx={technicalTextSx}>
-              Source SHA-256: {hashPrefix(run.source_sha256)}
-            </Typography>
-          </Stack>
-          <Stack spacing={0.5} sx={{ minWidth: 0 }}>
-            <Typography variant="caption" color="text.secondary">Versi komputasi</Typography>
-            <Typography variant="body2" sx={technicalTextSx}>
-              Algoritme: {run.algorithm_version}
-            </Typography>
-            <Typography variant="body2" sx={technicalTextSx}>
-              Config: {hashPrefix(run.config_hash)}
-            </Typography>
-          </Stack>
-          <Stack spacing={0.5} sx={{ minWidth: 0 }}>
-            <Typography variant="caption" color="text.secondary">Rentang tepat, half-open</Typography>
-            <Typography variant="body2" sx={technicalTextSx}>
-              {run.scope.from} – {run.scope.to}
-            </Typography>
-            <Typography variant="body2" sx={technicalTextSx}>
-              Jenis periode: {run.scope.period_kind}
-            </Typography>
-          </Stack>
-          <Stack spacing={0.5} sx={{ minWidth: 0 }}>
-            <Typography variant="caption" color="text.secondary">Status batas rentang</Typography>
-            <Typography variant="body2" sx={technicalTextSx}>
-              Boundary-censored: {fromCensored || toCensored ? 'ya' : 'tidak'}
-            </Typography>
-            <Typography variant="body2" sx={technicalTextSx}>
-              Awal {fromCensored ? 'tersensor' : fromOpenEnded ? 'open-ended' : 'utuh'} · akhir {toCensored ? 'tersensor' : toOpenEnded ? 'open-ended' : 'utuh'}
-            </Typography>
-          </Stack>
-        </Box>
-      </Stack>
-    </Paper>
+      </AccordionDetails>
+    </Accordion>
   )
 }
 
@@ -239,13 +295,57 @@ export function EdaPage() {
         <RunProvenance run={selectedRun} />
       )}
 
-      <Alert severity="info" role="note" aria-label="Batas metodologi EDA">
-        <Stack spacing={0.5}>
-          <Typography variant="body2"><strong>Kualitas kandidat saja;</strong> hasil screening bukan ground truth.</Typography>
-          <Typography variant="body2">Analisis bersifat deskriptif, bukan kausal.</Typography>
-          <Typography variant="body2">Halaman ini tidak memuat bukti model atau deteksi anomali.</Typography>
-          <Typography variant="body2">Mentah dan screened adalah populasi terpilih yang berbeda, bukan perbandingan akurasi.</Typography>
-        </Stack>
+      <Alert
+        severity="info"
+        role="note"
+        aria-label="Batas metodologi EDA"
+        sx={{ '& .MuiAlert-message': { py: 0, width: '100%' } }}
+      >
+        <Accordion
+          disableGutters
+          elevation={0}
+          slots={{ heading: 'div' }}
+          sx={{
+            backgroundColor: 'transparent',
+            color: 'inherit',
+            '&::before': { display: 'none' },
+            '&.Mui-expanded': { m: 0 },
+          }}
+        >
+          <AccordionSummary
+            aria-controls="eda-methodology-detail"
+            id="eda-methodology-summary"
+            sx={{
+              minHeight: tokens.size.control,
+              p: 0,
+              '&.Mui-expanded': { minHeight: tokens.size.control },
+              '& .MuiAccordionSummary-content': { my: 0 },
+              '& .MuiAccordionSummary-content.Mui-expanded': { my: 0 },
+            }}
+          >
+            <Stack
+              direction="row"
+              spacing={2}
+              useFlexGap
+              sx={{ alignItems: 'center', flexWrap: 'wrap', width: '100%' }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                Screening kualitas dan analisis deskriptif; bukan ground truth, kausalitas, atau bukti model.
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, ml: 'auto' }}>
+                Batas metodologi
+              </Typography>
+            </Stack>
+          </AccordionSummary>
+          <AccordionDetails sx={{ p: 0, pt: 1 }}>
+            <Stack spacing={0.5}>
+              <Typography variant="body2"><strong>Kualitas kandidat saja;</strong> hasil screening bukan ground truth.</Typography>
+              <Typography variant="body2">Analisis bersifat deskriptif, bukan kausal.</Typography>
+              <Typography variant="body2">Halaman ini tidak memuat bukti model atau deteksi anomali.</Typography>
+              <Typography variant="body2">Mentah dan screened adalah populasi terpilih yang berbeda, bukan perbandingan akurasi.</Typography>
+            </Stack>
+          </AccordionDetails>
+        </Accordion>
       </Alert>
 
       <Paper component="nav" aria-label="Indeks bagian EDA" variant="outlined" sx={{ minWidth: 0, p: 2 }}>
@@ -260,62 +360,99 @@ export function EdaPage() {
       </Paper>
 
       <Stack component="section" id="kualitas-data" aria-labelledby="kualitas-data-heading" spacing={3} sx={{ minWidth: 0 }}>
-        <Stack spacing={0.5}>
-          <Typography id="kualitas-data-heading" variant="h2">Kualitas Data</Typography>
-          <Typography variant="body2" color="text.secondary">Audit pairing, domain, distribusi, dan excerpt sebelum interpretasi.</Typography>
-        </Stack>
-        <Box data-testid="eda-grid-quality" data-layout="auto-fit-min-320" sx={panelGridSx}>
-          <PairingAuditPanel runId={runId} />
-          <JointDensityPanel runId={runId} />
-          <UnivariateDiagnosticsPanel runId={runId} />
-          <QualityExcerptPanel runId={runId} />
-          <QualityIntegrityPanel runId={runId} />
+        <EdaSectionHeading
+          id="kualitas-data-heading"
+          title="Kualitas Data"
+          supportingText="Audit pairing, domain, distribusi, dan excerpt sebelum interpretasi."
+        />
+        <Box data-testid="eda-grid-quality" data-layout="curated-spans" sx={panelGridSx('repeat(12, minmax(0, 1fr))')}>
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <PairingAuditPanel runId={runId} />
+          </Box>
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <JointDensityPanel runId={runId} />
+          </Box>
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <UnivariateDiagnosticsPanel runId={runId} />
+          </Box>
+          <Box sx={{ gridColumn: { xs: '1 / -1', md: 'span 6' } }}>
+            <QualityExcerptPanel runId={runId} />
+          </Box>
+          <Box sx={{ gridColumn: { xs: '1 / -1', md: 'span 6' } }}>
+            <QualityIntegrityPanel runId={runId} />
+          </Box>
         </Box>
       </Stack>
 
       <Stack component="section" id="pola-temporal" aria-labelledby="pola-temporal-heading" spacing={3} sx={{ minWidth: 0 }}>
-        <Stack spacing={0.5}>
-          <Typography id="pola-temporal-heading" variant="h2">Pola Temporal</Typography>
-          <Typography variant="body2" color="text.secondary">Cakupan kalender, pola hari-jam, dan distribusi menurut waktu lokal.</Typography>
-        </Stack>
-        <Box data-testid="eda-grid-temporal" data-layout="auto-fit-min-320" sx={panelGridSx}>
-          <TemporalCoveragePanel runId={runId} />
-          <WeekdayHourCoveragePanel runId={runId} />
-          <TemporalDistributionPanel runId={runId} />
+        <EdaSectionHeading
+          id="pola-temporal-heading"
+          title="Pola Temporal"
+          supportingText="Cakupan kalender, pola hari-jam, dan distribusi menurut waktu lokal."
+        />
+        <Box data-testid="eda-grid-temporal" data-layout="curated-spans" sx={panelGridSx('repeat(2, minmax(0, 1fr))')}>
+          <Box sx={{ gridColumn: { xs: '1 / -1', md: 'span 1' } }}>
+            <TemporalCoveragePanel runId={runId} />
+          </Box>
+          <Box sx={{ gridColumn: { xs: '1 / -1', md: 'span 1' } }}>
+            <WeekdayHourCoveragePanel runId={runId} />
+          </Box>
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <TemporalDistributionPanel runId={runId} />
+          </Box>
         </Box>
       </Stack>
 
       <Stack component="section" id="hubungan-suhu-rh" aria-labelledby="hubungan-suhu-rh-heading" spacing={3} sx={{ minWidth: 0 }}>
-        <Stack spacing={0.5}>
-          <Typography id="hubungan-suhu-rh-heading" variant="h2">Hubungan Suhu-RH</Typography>
-          <Typography variant="body2" color="text.secondary">Asosiasi statis, sensitivitas rolling, dan ketidakpastian bootstrap.</Typography>
-        </Stack>
-        <Box data-testid="eda-grid-relationships" data-layout="auto-fit-min-320" sx={panelGridSx}>
-          <AssociationSummaryPanel runId={runId} />
-          <RollingCorrelationPanel runId={runId} />
-          <BootstrapUncertaintyPanel runId={runId} />
+        <EdaSectionHeading
+          id="hubungan-suhu-rh-heading"
+          title="Hubungan Suhu-RH"
+          supportingText="Asosiasi statis, sensitivitas rolling, dan ketidakpastian bootstrap."
+        />
+        <Box data-testid="eda-grid-relationships" data-layout="curated-spans" sx={panelGridSx('repeat(2, minmax(0, 1fr))')}>
+          <Box sx={{ gridColumn: { xs: '1 / -1', md: 'span 1' } }}>
+            <AssociationSummaryPanel runId={runId} />
+          </Box>
+          <Box sx={{ gridColumn: { xs: '1 / -1', md: 'span 1' } }}>
+            <RollingCorrelationPanel runId={runId} />
+          </Box>
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <BootstrapUncertaintyPanel runId={runId} />
+          </Box>
         </Box>
       </Stack>
 
       <Stack component="section" id="struktur-temporal" aria-labelledby="struktur-temporal-heading" spacing={3} sx={{ minWidth: 0 }}>
-        <Stack spacing={0.5}>
-          <Typography id="struktur-temporal-heading" variant="h2">Struktur Temporal dan Perubahan Rezim</Typography>
-          <Typography variant="body2" color="text.secondary">Kelayakan, dependensi lag, frekuensi, dekomposisi, dan kandidat batas rezim.</Typography>
-        </Stack>
-        <Box data-testid="eda-grid-structure" data-layout="auto-fit-min-320" sx={panelGridSx}>
-          <StationarityEligibilityPanel runId={runId} />
-          <AutocorrelationPanel runId={runId} />
-          <SpectrumPanel runId={runId} />
-          <StlDecompositionPanel runId={runId} />
-          <ChangePointPanel runId={runId} />
+        <EdaSectionHeading
+          id="struktur-temporal-heading"
+          title="Struktur Temporal dan Perubahan Rezim"
+          supportingText="Kelayakan, dependensi lag, frekuensi, dekomposisi, dan kandidat batas rezim."
+        />
+        <Box data-testid="eda-grid-structure" data-layout="curated-spans" sx={panelGridSx('repeat(2, minmax(0, 1fr))')}>
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <StationarityEligibilityPanel runId={runId} />
+          </Box>
+          <Box sx={{ gridColumn: { xs: '1 / -1', md: 'span 1' } }}>
+            <AutocorrelationPanel runId={runId} />
+          </Box>
+          <Box sx={{ gridColumn: { xs: '1 / -1', md: 'span 1' } }}>
+            <SpectrumPanel runId={runId} />
+          </Box>
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <StlDecompositionPanel runId={runId} />
+          </Box>
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <ChangePointPanel runId={runId} />
+          </Box>
         </Box>
       </Stack>
 
       <Stack component="section" id="metadata-audit" aria-labelledby="metadata-audit-heading" spacing={3} sx={{ minWidth: 0 }}>
-        <Stack spacing={0.5}>
-          <Typography id="metadata-audit-heading" variant="h2">Metadata Audit dan Akses Data</Typography>
-          <Typography variant="body2" color="text.secondary">Identitas dataset, rilis, manifest sumber, seed, dan dependensi komputasi.</Typography>
-        </Stack>
+        <EdaSectionHeading
+          id="metadata-audit-heading"
+          title="Metadata Audit dan Akses Data"
+          supportingText="Identitas dataset, rilis, manifest sumber, seed, dan dependensi komputasi."
+        />
         <AuditMetadataPanel runId={runId} />
       </Stack>
     </Stack>

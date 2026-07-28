@@ -91,8 +91,8 @@ export function PairingAuditPanel({ runId }: PairingAuditPanelProps) {
               }}
             >
               {data.bars.map((bar) => (
-                <Paper key={bar.id} component="article" variant="outlined" sx={{ minWidth: 0, p: 2 }}>
-                  <Typography variant="h3">{bar.label}</Typography>
+                <Box key={bar.id} component="article" sx={{ backgroundColor: theme.palette.background.default, minWidth: 0, p: 2 }}>
+                  <Typography variant="subtitle2">{bar.label}</Typography>
                   <Typography variant="body2" color="text.secondary">
                     Total <Box component="span" sx={{ fontFamily: tokens.font.data }}>{bar.total.toLocaleString('id-ID')}</Box>
                   </Typography>
@@ -103,7 +103,7 @@ export function PairingAuditPanel({ runId }: PairingAuditPanelProps) {
                       </Box>
                     </Typography>
                   ))}
-                </Paper>
+                </Box>
               ))}
             </Box>
             <Alert severity={data.conservationStatus === 'pass' ? 'success' : 'error'} role="status">
