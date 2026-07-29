@@ -165,7 +165,7 @@ def test_schema_is_current_and_raw_readings_are_timescale_float64() -> None:
         revision = connection.execute(
             "SELECT version_num FROM alembic_version"
         ).fetchone()
-        assert revision == ("20260726_0003",)
+        assert revision == ("20260729_0004",)
         assert EDA_TABLES <= _public_tables(connection)
 
         dimension = connection.execute(
@@ -498,7 +498,7 @@ def test_downgrade_removes_only_eda_objects_and_upgrade_restores_them() -> None:
                 "SELECT version_num FROM alembic_version"
             ).fetchone()
             assert revision == ("20260724_0002",)
-            assert _public_tables(connection) == before - EDA_TABLES
+            assert _public_tables(connection) == before - EDA_TABLES - {"injection_events"}
             assert connection.execute(
                 "SELECT to_regprocedure('public.eda_reject_immutable_change()')"
             ).fetchone() == (None,)
@@ -511,7 +511,7 @@ def test_downgrade_removes_only_eda_objects_and_upgrade_restores_them() -> None:
     with _connect() as connection:
         assert connection.execute(
             "SELECT version_num FROM alembic_version"
-        ).fetchone() == ("20260726_0003",)
+        ).fetchone() == ("20260729_0004",)
         assert EDA_TABLES <= _public_tables(connection)
         assert connection.execute(
             """

@@ -177,6 +177,28 @@ services:
     networks:
       - backend
 
+  sim-import:
+    profiles: ["sim-import"]
+    build:
+      context: ./backend
+      target: eda-worker
+    command: ["python", "-m", "anomaly_backend.sim_importer"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SIM_INJECTED_NPZ_PATH: /data/test_injected.npz
+      SIM_INJECTED_EVENTS_PATH: /data/test_injected_events.json
+    volumes:
+      - "${SIM_INJECTED_DIR:-./REPLACE_WITH_INJECTED_DATASET}:/data:ro"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
   nginx:
     build:
       context: ./frontend

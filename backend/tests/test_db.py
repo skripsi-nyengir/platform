@@ -112,6 +112,7 @@ def test_database_engine_is_async_core_owned() -> None:
         "eda_runs",
         "eda_source_snapshots",
         "inference_results",
+        "injection_events",
         "model_evaluations",
         "model_activations",
         "model_families",
@@ -139,7 +140,7 @@ def test_database_health_and_revision_use_injected_connection() -> None:
                 assert await database_is_healthy(connection)
                 assert (
                     await current_migration_revision(connection)
-                    == "20260726_0003"
+                    == "20260729_0004"
                 )
         finally:
             await engine.dispose()
@@ -162,6 +163,7 @@ def test_compose_defines_expected_services_and_public_nginx() -> None:
         "eda-cli",
         "import",
         "eda-import",
+        "sim-import",
         "nginx",
     }
     assert "timescale/timescaledb:2.28.3-pg17" in compose
@@ -177,6 +179,7 @@ def test_compose_defines_expected_services_and_public_nginx() -> None:
             "eda-worker",
             "eda-cli",
             "eda-import",
+            "sim-import",
         )
     )
     assert services["nginx"].count("    ports:") == 1
@@ -198,7 +201,7 @@ def test_compose_enforces_the_database_seed_api_nginx_dependency_chain() -> None
     assert "      db:\n        condition: service_healthy" in services["migrate"]
     assert "      migrate:\n        condition: service_completed_successfully" in services["seed"]
     assert "      seed:\n        condition: service_completed_successfully" in services["api"]
-    for name in ("worker", "eda-worker", "eda-cli", "eda-import"):
+    for name in ("worker", "eda-worker", "eda-cli", "eda-import", "sim-import"):
         assert (
             "      seed:\n        condition: service_completed_successfully"
             in services[name]
@@ -218,6 +221,10 @@ def test_compose_enforces_the_database_seed_api_nginx_dependency_chain() -> None
         "EDA_RAW_SOURCE_PATH",
         "EDA_SOURCE_MANIFEST_PATH",
         "EDA_SOURCE_MANIFEST_SHA256",
+    }
+    assert _environment_keys(services["sim-import"]) == set(DATABASE_ENV) | {
+        "SIM_INJECTED_NPZ_PATH",
+        "SIM_INJECTED_EVENTS_PATH",
     }
 
 
@@ -258,6 +265,16 @@ def test_compose_uses_only_checked_in_build_contexts_and_private_backend_network
     assert services["eda-import"].count(":ro\"") == 2
     assert "      - backend" in services["eda-import"]
     assert "      - public" not in services["eda-import"]
+    assert "    build:\n      context: ./backend\n      target: eda-worker" in services[
+        "sim-import"
+    ]
+    assert (
+        '    command: ["python", "-m", "anomaly_backend.sim_importer"]'
+        in services["sim-import"]
+    )
+    assert services["sim-import"].count(":ro\"") == 1
+    assert "      - backend" in services["sim-import"]
+    assert "      - public" not in services["sim-import"]
     assert '    command: ["python", "-m", "anomaly_backend.seed"]' in services["seed"]
     assert "    build:\n      context: ./frontend" in services["nginx"]
     assert "      - backend" in services["nginx"]

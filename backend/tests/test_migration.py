@@ -162,7 +162,7 @@ def test_fresh_database_reaches_current_head_with_score_timestamp_hypertable() -
                 async with engine.connect() as connection:
                     assert (
                         await current_migration_revision(connection)
-                        == "20260726_0003"
+                        == "20260729_0004"
                     )
                     dimension = await connection.scalar(
                         text(

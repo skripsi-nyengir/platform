@@ -63,8 +63,13 @@ devices = Table(
     Column("display_name", Text, nullable=False),
     Column("source_device_uuid", Text),
     Column("time_zone", Text),
+    Column("telemetry_kind", Text, nullable=False),
     Column("is_active", Boolean, nullable=False),
     Column("archived_at", DateTime(timezone=True)),
+    CheckConstraint(
+        "telemetry_kind IN ('historical_replay', 'anomaly_injected')",
+        name="ck_devices_telemetry_kind",
+    ),
     CheckConstraint(
         "(is_active AND archived_at IS NULL) OR "
         "(NOT is_active AND archived_at IS NOT NULL)",
@@ -72,7 +77,8 @@ devices = Table(
     ),
 )
 Index(
-    "uq_devices_one_public_active",
+    "uq_devices_one_active_per_kind",
+    devices.c.telemetry_kind,
     devices.c.is_active,
     unique=True,
     postgresql_where=devices.c.is_active,
@@ -111,6 +117,41 @@ corpora = Table(
         "preprocessing_contract_version",
         name="uq_corpora_identity",
     ),
+)
+
+injection_events = Table(
+    "injection_events",
+    metadata,
+    Column("event_id", Text, primary_key=True),
+    Column("corpus_id", Text, ForeignKey("corpora.corpus_id"), nullable=False),
+    Column("device_id", Text, ForeignKey("devices.device_id"), nullable=False),
+    Column("family", Text, nullable=False),
+    Column("severity", Text, nullable=False),
+    Column("channel", Text, nullable=False),
+    Column("channel_index", Integer, nullable=False),
+    Column("start_idx", BigInteger, nullable=False),
+    Column("end_idx_exclusive", BigInteger, nullable=False),
+    Column("start_ts", DateTime(timezone=False), nullable=False),
+    Column("end_ts", DateTime(timezone=False), nullable=False),
+    Column("segment_index", Integer, nullable=False),
+    CheckConstraint(
+        "end_idx_exclusive > start_idx AND start_idx >= 0",
+        name="ck_injection_events_range",
+    ),
+    CheckConstraint(
+        "severity IN ('low', 'medium', 'high')",
+        name="ck_injection_events_severity",
+    ),
+    CheckConstraint(
+        "family IN ('spike', 'drift', 'stuck', 'erratic', 'bias', "
+        "'data_loss', 'garbage')",
+        name="ck_injection_events_family",
+    ),
+)
+Index(
+    "ix_injection_events_corpus",
+    injection_events.c.corpus_id,
+    injection_events.c.start_idx,
 )
 
 published_corpora = Table(
