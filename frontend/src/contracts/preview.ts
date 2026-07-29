@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  CorpusDeviceIdSchema,
   HistoricalDateTimeSchema,
   OperationalInstantSchema,
   SensorIdSchema,
@@ -91,7 +92,7 @@ export const ReplayStatusSchema = z.enum(['queued', 'running', 'succeeded', 'fai
 export const ReplayJobRequestSchema = z
   .strictObject({
     command_id: z.string().uuid(),
-    device_id: SensorIdSchema,
+    device_id: CorpusDeviceIdSchema,
     from: HistoricalDateTimeSchema,
     to: HistoricalDateTimeSchema,
   })
@@ -110,7 +111,7 @@ export type ReplayJobRequest = z.infer<typeof ReplayJobRequestSchema>
 
 export const ReplayJobSchema = z.strictObject({
   job_id: z.string(),
-  device_id: SensorIdSchema,
+  device_id: CorpusDeviceIdSchema,
   from: HistoricalDateTimeSchema,
   to: HistoricalDateTimeSchema,
   time_zone: z.literal('Asia/Jakarta'),

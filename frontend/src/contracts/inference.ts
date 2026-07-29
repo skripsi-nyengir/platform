@@ -1,8 +1,8 @@
 import { z } from 'zod'
 import {
   BucketSchema,
+  CorpusDeviceIdSchema,
   HistoricalDateTimeSchema,
-  SensorIdSchema,
   compareHistoricalDateTimes,
 } from './common'
 
@@ -37,7 +37,7 @@ export type InferencePoint = z.infer<typeof InferencePointSchema>
 
 export const InferenceQuerySchema = z
   .strictObject({
-    deviceId: SensorIdSchema,
+    deviceId: CorpusDeviceIdSchema,
     from: HistoricalDateTimeSchema,
     to: HistoricalDateTimeSchema,
     bucket: BucketSchema.default('raw'),
@@ -64,7 +64,7 @@ export type InferenceResultsQuery = InferenceQuery
 export const InferenceResponseSchema = z
   .strictObject({
     request_id: z.string(),
-    device_id: SensorIdSchema,
+    device_id: CorpusDeviceIdSchema,
     time_zone: z.literal('Asia/Jakarta'),
     model_version: z.string(),
     points: z.array(InferencePointSchema).max(5_000),

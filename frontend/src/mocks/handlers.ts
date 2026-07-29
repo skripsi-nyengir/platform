@@ -12,6 +12,7 @@ import {
   compareHistoricalDateTimes,
   SensorIdSchema,
   publicDeviceId,
+  simDeviceId,
   type ProblemDetails,
 } from '../contracts/common'
 import {
@@ -80,8 +81,18 @@ import {
   type ModelActivationResponse,
   type ReplayJobResponse,
 } from '../contracts/preview'
-import type { LatestTelemetrySensor } from '../contracts/telemetry'
+import {
+  SetSimActiveModelRequestSchema,
+  type SetSimActiveModelResponse,
+} from '../contracts/simulation'
+import type { LatestTelemetrySensor, TelemetryPoint } from '../contracts/telemetry'
 import { modelsResponse, previewDevice, replayJob } from './fixtures/preview'
+import {
+  simulationInferencePoints,
+  simulationInjectionEvents,
+  simulationModelsResponse,
+  simulationTelemetryPoints,
+} from './fixtures/simulation'
 
 function problem(
   status: number,
@@ -274,6 +285,42 @@ async function mutateAlert(
 
 export function createHandlers(state: MockApiState): HttpHandler[] {
   return [
+    http.get('/api/simulation/models', () =>
+      HttpResponse.json(simulationModelsResponse(state.simActiveModelVersion)),
+    ),
+
+    http.post('/api/simulation/active-model', async ({ request }) => {
+      const parsed = SetSimActiveModelRequestSchema.safeParse(await request.json())
+      if (!parsed.success) {
+        return problem(400, 'req_invalid_sim_model', 'Invalid model selection', parsed.error.message, request.url)
+      }
+      const exists = simulationModelsResponse(state.simActiveModelVersion).models.some(
+        (model) => model.version === parsed.data.model_version,
+      )
+      if (!exists) {
+        return problem(404, 'req_sim_model_not_found', 'Model not found', 'The artifact model was not found', request.url)
+      }
+      state.simActiveModelVersion = parsed.data.model_version
+      const response = {
+        request_id: 'req_simulation_active_model',
+        device_id: simDeviceId,
+        active_model_version: state.simActiveModelVersion,
+      } satisfies SetSimActiveModelResponse
+      return HttpResponse.json(response)
+    }),
+
+    http.get('/api/injection-events', ({ request }) => {
+      const url = new URL(request.url)
+      if (queryValue(url, 'device_id') !== simDeviceId) return invalidQuery(request)
+      return HttpResponse.json({
+        request_id: 'req_injection_events',
+        device_id: simDeviceId,
+        time_zone: 'Asia/Jakarta',
+        events: simulationInjectionEvents.map((event) => ({ ...event })),
+        returned_count: simulationInjectionEvents.length,
+      })
+    }),
+
     http.get('/api/devices', () => HttpResponse.json({
       request_id: 'req_devices',
       items: [structuredClone(previewDevice)],
@@ -312,12 +359,16 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
       const parsed = ReplayJobRequestSchema.safeParse(await request.json())
       if (!parsed.success) return invalidQuery(request)
       const existing = state.replayJobs.get(parsed.data.command_id)
+      const modelVersion = parsed.data.device_id === simDeviceId
+        ? state.simActiveModelVersion
+        : state.activeModelVersion
       const job = existing ?? replayJob(
         `replay-${parsed.data.command_id}`,
         parsed.data.from,
         parsed.data.to,
-        state.activeModelVersion,
+        modelVersion,
         'running',
+        parsed.data.device_id,
       )
       state.replayJobs.set(parsed.data.command_id, job)
       const response = {
@@ -340,6 +391,7 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
         existing.to,
         existing.model_version,
         'succeeded',
+        existing.device_id,
       ) }
       state.replayJobs.set(
         [...state.replayJobs.entries()].find(([, job]) => job.job_id === requestedId)?.[0] ?? requestedId,
@@ -388,14 +440,15 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
       if (!parsed.success) return invalidQuery(request)
       const { deviceId, from, to, bucket, limit } = parsed.data
       const offset = cursorOffset(url, 'telemetry')
-       const source =
-         state.scenario === 'empty' && deviceId === scenarioDevice.empty
-          ? []
-            : state.scenario === 'data-gap'
-              ? dataGapTelemetryHistoryBySensor[deviceId]
-              : bucket === '1d'
-                ? dailyTelemetryHistoryBySensor[deviceId]
-                : telemetryHistoryBySensor[deviceId]
+       const source: readonly TelemetryPoint[] = deviceId === simDeviceId
+         ? simulationTelemetryPoints
+         : state.scenario === 'empty' && deviceId === scenarioDevice.empty
+           ? []
+           : state.scenario === 'data-gap'
+             ? dataGapTelemetryHistoryBySensor[deviceId]
+             : bucket === '1d'
+               ? dailyTelemetryHistoryBySensor[deviceId]
+               : telemetryHistoryBySensor[deviceId]
        const bounded = source
          .filter(
            (point) =>
@@ -432,14 +485,20 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
       if (!parsed.success) return invalidQuery(request)
       const { deviceId, from, to, limit } = parsed.data
       const offset = cursorOffset(url, 'inference')
-       const source =
-         state.scenario === 'empty' && deviceId === scenarioDevice.empty
+       const modelVersion = deviceId === simDeviceId
+         ? parsed.data.modelVersion ?? state.simActiveModelVersion
+         : normalInferenceBySensor[deviceId][0].model_version
+       const knownSimulationModel = simulationModelsResponse(state.simActiveModelVersion).models.some(
+         (model) => model.version === modelVersion,
+       )
+       const source = deviceId === simDeviceId
+         ? knownSimulationModel ? simulationInferencePoints(modelVersion) : []
+         : state.scenario === 'empty' && deviceId === scenarioDevice.empty
            ? []
            : state.scenario === 'active-anomaly' && deviceId === scenarioDevice['active-anomaly']
              ? activeAnomalyInferenceBySensor[deviceId]
              : normalInferenceBySensor[deviceId]
-       const modelVersion = normalInferenceBySensor[deviceId][0].model_version
-       const modelFiltered =
+       const modelFiltered = deviceId === simDeviceId ||
          parsed.data.modelVersion === undefined || parsed.data.modelVersion === modelVersion ? source : []
        const bounded = modelFiltered
          .filter(

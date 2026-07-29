@@ -4,6 +4,7 @@ import { EdaPage } from '../pages/EdaPage'
 import { ModelEvaluationPage } from '../pages/ModelEvaluationPage'
 import { OverviewPage } from '../pages/OverviewPage'
 import { SensorDetailPage } from '../pages/SensorDetailPage'
+import { SimulationPage } from '../pages/SimulationPage'
 import { SystemHealthPage } from '../pages/SystemHealthPage'
 import { AppShell } from './AppShell'
 
@@ -16,6 +17,7 @@ const routes = [
       { path: '/alerts', element: <AlertsPage /> },
       { path: '/eda', element: <EdaPage /> },
       { path: '/model-evaluation', element: <ModelEvaluationPage /> },
+      { path: '/simulation', element: <SimulationPage /> },
       { path: '/system-health', element: <SystemHealthPage /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],

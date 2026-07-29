@@ -2,6 +2,7 @@ import { z } from 'zod'
 import {
   AvailabilitySchema,
   BucketSchema,
+  CorpusDeviceIdSchema,
   FreshnessSchema,
   HistoricalDateTimeSchema,
   OperationalInstantSchema,
@@ -39,7 +40,7 @@ export type TelemetryPoint = z.infer<typeof TelemetryPointSchema>
 
 export const TelemetryHistoryQuerySchema = z
   .strictObject({
-    deviceId: SensorIdSchema,
+    deviceId: CorpusDeviceIdSchema,
     from: HistoricalDateTimeSchema,
     to: HistoricalDateTimeSchema,
     bucket: BucketSchema.default('raw'),
@@ -63,7 +64,7 @@ export type TelemetryHistoryQuery = z.input<typeof TelemetryHistoryQuerySchema>
 export const TelemetryHistoryResponseSchema = z
   .strictObject({
     request_id: z.string(),
-    device_id: SensorIdSchema,
+    device_id: CorpusDeviceIdSchema,
     time_zone: z.literal('Asia/Jakarta'),
     from: HistoricalDateTimeSchema,
     to: HistoricalDateTimeSchema,

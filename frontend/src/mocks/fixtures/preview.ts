@@ -1,4 +1,4 @@
-import { publicDeviceId } from '../../contracts/common'
+import { publicDeviceId, simDeviceId, type CorpusDeviceId } from '../../contracts/common'
 import type {
   Device,
   ModelFamily,
@@ -56,16 +56,17 @@ export function replayJob(
   to: string,
   modelVersion: string,
   status: ReplayJob['status'] = 'queued',
+  deviceId: CorpusDeviceId = publicDeviceId,
 ): ReplayJob {
   return {
     job_id: jobId,
-    device_id: publicDeviceId,
+    device_id: deviceId,
     from,
     to,
     time_zone: 'Asia/Jakarta',
     model_version: modelVersion,
     activation_id: `activation-${modelVersion}`,
-    score_provenance: 'simulated_preview',
+    score_provenance: deviceId === simDeviceId ? 'artifact_backed' : 'simulated_preview',
     status,
     progress: status === 'succeeded' ? 1 : status === 'running' ? 0.5 : 0,
     processed_count: status === 'succeeded' ? 100 : status === 'running' ? 50 : 0,

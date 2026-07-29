@@ -4,11 +4,18 @@ export const sensorIds = ['b02f3872-ruang-produksi'] as const
 export const SensorIdSchema = z.enum(sensorIds)
 export type SensorId = z.infer<typeof SensorIdSchema>
 
+export const CorpusDeviceIdSchema = z.enum([
+  'b02f3872-ruang-produksi',
+  'b02f3872-simulasi-injeksi',
+])
+export type CorpusDeviceId = z.infer<typeof CorpusDeviceIdSchema>
+
 export const sensorLabels: Readonly<Record<SensorId, string>> = Object.freeze({
   'b02f3872-ruang-produksi': 'B02',
 })
 
 export const publicDeviceId = sensorIds[0]
+export const simDeviceId = 'b02f3872-simulasi-injeksi' as const satisfies CorpusDeviceId
 export const publicTimeZone = 'Asia/Jakarta' as const
 
 export const BucketSchema = z.enum(['raw', '1m', '5m', '15m', '1h', '1d'])

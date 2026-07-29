@@ -18,6 +18,7 @@ const routeIconPaths: Record<NavigationItem['path'], string> = {
   '/alerts': 'M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm6-6v-5a6 6 0 0 0-5-5.91V4a1 1 0 1 0-2 0v1.09A6 6 0 0 0 6 11v5l-2 2v1h16v-1l-2-2Z',
   '/eda': 'M3 3v18h18v-2H5V3H3Zm4 12h3v2H7v-2Zm0-4h7v2H7v-2Zm0-4h11v2H7V7Zm9 4h2v6h-2v-6Zm-4 3h2v3h-2v-3Z',
   '/model-evaluation': 'M4 3h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5l-3 3-3-3H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 12 3-4 3 2 4-6 2 1-5 8-3-2-2 3-2-2Z',
+  '/simulation': 'M9 2v2h1v5.59L4.59 15A4 4 0 0 0 8 21h8a4 4 0 0 0 3.41-6L14 9.59V4h1V2H9Zm3 9.41V4h2v7.41L15 13H9l1-1.59V4h2v7.41Z',
   '/system-health': 'M3 12h4l2-6 4 12 2-6h6v2h-4.5L13 22 9 10l-.5 4H3v-2Z',
 }
 

@@ -8,6 +8,7 @@ export interface MockApiState {
   events: AlertEvent[]
   acceptedCommands: Map<string, AlertMutationResponse>
   activeModelVersion: string
+  simActiveModelVersion: string
   replayJobs: Map<string, ReplayJob>
   edaRequestCounts: Map<string, number>
 }
@@ -22,6 +23,7 @@ export const mockState: MockApiState = {
   events: [],
   acceptedCommands: new Map<string, AlertMutationResponse>(),
   activeModelVersion: 'preview-lstm-ae-v1',
+  simActiveModelVersion: 'artifact-lstm-ae-v3',
   replayJobs: new Map<string, ReplayJob>(),
   edaRequestCounts: new Map<string, number>(),
 }
@@ -31,6 +33,7 @@ export function resetMockState(scenario: AppMockScenario = 'normal'): void {
   mockState.events = scenarioSeedEvents(scenario)
   mockState.acceptedCommands.clear()
   mockState.activeModelVersion = 'preview-lstm-ae-v1'
+  mockState.simActiveModelVersion = 'artifact-lstm-ae-v3'
   mockState.replayJobs.clear()
   mockState.edaRequestCounts.clear()
 }
