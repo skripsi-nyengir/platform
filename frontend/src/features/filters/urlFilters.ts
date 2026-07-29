@@ -24,9 +24,14 @@ export const historicalDefaultRange = Object.freeze({
   to: '2026-07-24T09:02:05',
 })
 
+export const telemetryDefaultRange = Object.freeze({
+  from: '2026-02-01T00:00:00',
+  to: '2026-06-01T00:00:00',
+})
+
 const defaults: Pick<UrlFilters, 'from' | 'to' | 'bucket'> = {
-  ...historicalDefaultRange,
-  bucket: '15m',
+  ...telemetryDefaultRange,
+  bucket: '1d',
 }
 
 export type EdaRunMode = 'precompute' | 'custom'

@@ -1,4 +1,4 @@
-import { Box, Button, Paper, Stack, Typography } from '@mui/material'
+import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { LineChart } from '@mui/x-charts/LineChart'
 import type { GridColDef, GridValidRowModel } from '@mui/x-data-grid'
@@ -136,6 +136,8 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
     anomalyEndTimes.has(point.x.getTime()) ? point.y : null,
   )
   const hasChartData = telemetryPoints.length > 0 || inferencePoints.length > 0
+  // ponytail: disclose the API cap here; add cursor pagination only if full fine-bucket browsing becomes required.
+  const telemetryIsTruncated = telemetry.data?.next_cursor !== undefined && telemetry.data.next_cursor !== null
 
   return (
     <Paper
@@ -213,6 +215,11 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
 
         {hasChartData ? (
           <Stack spacing={1}>
+            {telemetryIsTruncated ? (
+              <Alert severity="warning" role="note">
+                View truncated. Pilih rentang lebih sempit atau bucket lebih kasar untuk melihat seluruh data.
+              </Alert>
+            ) : null}
             <Typography variant="body2" color="text.secondary">
               {chartSummary}
             </Typography>

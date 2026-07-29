@@ -7,7 +7,7 @@ import type { InferenceResultsResponse } from '../../contracts/inference'
 import type { Provenance } from '../../components/data/provenance'
 import type { LatestTelemetryResponse } from '../../contracts/telemetry'
 import { useCurrentAlertsQuery } from '../alerts/queries'
-import { historicalDefaultRange } from '../filters/urlFilters'
+import { telemetryDefaultRange } from '../filters/urlFilters'
 import { useInferenceResultsQuery } from '../inference/queries'
 import { useLatestTelemetryQuery } from '../telemetry/queries'
 
@@ -44,7 +44,7 @@ export function useOverviewData(): {
   const currentAlerts = useCurrentAlertsQuery({ status: 'detected', page: 1, pageSize: 100 })
   const inference = useInferenceResultsQuery({
     deviceId: publicDeviceId,
-      ...historicalDefaultRange,
+    ...telemetryDefaultRange,
     bucket: 'raw',
     limit: 500,
   })

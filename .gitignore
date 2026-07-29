@@ -2,6 +2,7 @@
 .omo/
 .playwright-mcp/
 .superpowers/
+/artifacts/
 
 # Frontend dependencies and generated output
 frontend/node_modules/

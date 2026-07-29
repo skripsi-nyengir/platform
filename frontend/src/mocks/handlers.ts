@@ -66,6 +66,7 @@ import {
   systemStatus,
 } from './fixtures/systemHealth'
 import {
+  dailyTelemetryHistoryBySensor,
   dataGapTelemetryHistoryBySensor,
   latestTelemetrySensors,
   offlineTelemetrySensor,
@@ -390,9 +391,11 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
        const source =
          state.scenario === 'empty' && deviceId === scenarioDevice.empty
           ? []
-           : state.scenario === 'data-gap'
-             ? dataGapTelemetryHistoryBySensor[deviceId]
-             : telemetryHistoryBySensor[deviceId]
+            : state.scenario === 'data-gap'
+              ? dataGapTelemetryHistoryBySensor[deviceId]
+              : bucket === '1d'
+                ? dailyTelemetryHistoryBySensor[deviceId]
+                : telemetryHistoryBySensor[deviceId]
        const bounded = source
          .filter(
            (point) =>

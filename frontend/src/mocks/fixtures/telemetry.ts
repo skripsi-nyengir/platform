@@ -50,14 +50,21 @@ function telemetryPoint(
   })
 }
 
-const normalPoints = Object.freeze([
-  telemetryPoint('2026-05-31T23:50:35', 24.5567, 50.5643),
-  telemetryPoint('2026-05-31T23:50:42', 24.5567, 50.7169),
-  telemetryPoint('2026-05-31T23:50:47', 24.5567, 50.5643),
-  telemetryPoint('2026-05-31T23:50:54', 24.5781, 50.4575),
-  telemetryPoint('2026-05-31T23:51:00', 24.5781, 50.3889),
-  telemetryPoint('2026-05-31T23:51:07', 24.5781, 50.3431),
-])
+const corpusStart = Date.parse('2026-02-01T00:00:00Z')
+const normalPoints = Object.freeze(Array.from({ length: 2_001 }, (_, index) =>
+  telemetryPoint(
+    new Date(corpusStart + index * 15 * 60_000).toISOString().slice(0, 19),
+    24 + Math.sin(index / 96),
+    52 + Math.cos(index / 96),
+  ),
+))
+const dailyPoints = Object.freeze(Array.from({ length: 120 }, (_, index) =>
+  telemetryPoint(
+    new Date(corpusStart + index * 24 * 60 * 60_000).toISOString().slice(0, 19),
+    24 + Math.sin(index / 6),
+    52 + Math.cos(index / 6),
+  ),
+))
 
 const gapPoints = Object.freeze([
   telemetryPoint('2026-05-31T20:24:37', 25.3958, 42.3322),
@@ -68,6 +75,10 @@ const gapPoints = Object.freeze([
 
 export const telemetryHistoryBySensor = Object.freeze({
   [publicDeviceId]: normalPoints,
+} satisfies Record<SensorId, readonly TelemetryPoint[]>)
+
+export const dailyTelemetryHistoryBySensor = Object.freeze({
+  [publicDeviceId]: dailyPoints,
 } satisfies Record<SensorId, readonly TelemetryPoint[]>)
 
 export const dataGapTelemetryHistoryBySensor = Object.freeze({

@@ -3,6 +3,7 @@ import {
   historicalDefaultRange,
   parseEdaUrlState,
   parseUrlFilters,
+  telemetryDefaultRange,
   updateEdaUrlState,
   updateUrlFilters,
 } from './urlFilters'
@@ -10,9 +11,13 @@ import {
 describe('B02 URL filters', () => {
   it('uses the B02 source range and rejects legacy sensors', () => {
     expect(parseUrlFilters(new URLSearchParams({ sensor: 'talpha-1' }))).toEqual({
-      ...historicalDefaultRange,
-      bucket: '15m',
+      ...telemetryDefaultRange,
+      bucket: '1d',
     })
+  })
+
+  it('keeps the 13-month EDA source range separate from telemetry defaults', () => {
+    expect(parseEdaUrlState(new URLSearchParams())).toMatchObject(historicalDefaultRange)
   })
 
   it('round-trips the public sensor and historical model version', () => {

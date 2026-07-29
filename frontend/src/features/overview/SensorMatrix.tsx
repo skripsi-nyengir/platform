@@ -21,7 +21,7 @@ import type { CurrentAlert } from '../../contracts/alerts'
 import { sensorIds, sensorLabels, type SensorId } from '../../contracts/common'
 import type { LatestTelemetryResponse, LatestTelemetrySensor } from '../../contracts/telemetry'
 import { tokens } from '../../theme/tokens'
-import { historicalDefaultRange } from '../filters/urlFilters'
+import { telemetryDefaultRange } from '../filters/urlFilters'
 import { useTelemetryHistoryQuery } from '../telemetry/queries'
 import type { LatestSensorScore } from './useOverviewData'
 
@@ -84,8 +84,8 @@ function SensorCard({
   const theme = useTheme()
   const history = useTelemetryHistoryQuery({
     deviceId: sensorId,
-      ...historicalDefaultRange,
-    bucket: 'raw',
+    ...telemetryDefaultRange,
+    bucket: '1d',
     limit: 500,
   })
   const historyPoints = history.data?.points ?? []
@@ -93,7 +93,7 @@ function SensorCard({
   const sparklineData = buildOverviewSparklineData({
     theme,
     sensorId,
-      ...historicalDefaultRange,
+    ...telemetryDefaultRange,
     telemetry: historyPoints,
   })
   const priority = score?.isAnomaly === true || hasDetectedAlert

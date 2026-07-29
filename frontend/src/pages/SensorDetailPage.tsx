@@ -10,7 +10,7 @@ import { SensorIdSchema, sensorLabels, type SensorId } from '../contracts/common
 import {
   parseUrlFilters,
   updateUrlFilters,
-  historicalDefaultRange,
+  telemetryDefaultRange,
   type UrlFilters,
 } from '../features/filters/urlFilters'
 import { useLatestTelemetryQuery } from '../features/telemetry/queries'
@@ -121,7 +121,7 @@ export function SensorDetailPage() {
           Selected sensor: <Box component="span" sx={technicalTextSx}>{sensorLabel}</Box>
         </Typography>
         <Typography color="text.secondary" variant="body2">
-          Corpus range (WIB): {historicalDefaultRange.from} – {historicalDefaultRange.to}
+          Corpus range (WIB): {telemetryDefaultRange.from} – {telemetryDefaultRange.to}
         </Typography>
         <Typography color="text.secondary" variant="body2">
           Telemetri historis nyata · Asia/Jakarta (WIB)
