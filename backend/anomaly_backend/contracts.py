@@ -213,7 +213,7 @@ class InjectionEventsResponse(StrictModel):
 class TelemetryHistoryQuery(StrictModel):
     _optional_non_nullable_fields: ClassVar[frozenset[str]] = frozenset({"cursor"})
 
-    device_id: SensorId
+    device_id: CorpusDeviceId
     from_ts: HistoricalDateTime = Field(alias="from")
     to_ts: HistoricalDateTime = Field(alias="to")
     bucket: Bucket = "raw"
@@ -231,7 +231,7 @@ class TelemetryHistoryQuery(StrictModel):
 
 class TelemetryHistoryResponse(StrictModel):
     request_id: str
-    device_id: SensorId
+    device_id: CorpusDeviceId
     from_ts: HistoricalDateTime = Field(alias="from")
     to_ts: HistoricalDateTime = Field(alias="to")
     bucket: Bucket
@@ -275,7 +275,7 @@ class InferenceQuery(StrictModel):
         {"cursor", "model_version"}
     )
 
-    device_id: SensorId
+    device_id: CorpusDeviceId
     from_ts: HistoricalDateTime = Field(alias="from")
     to_ts: HistoricalDateTime = Field(alias="to")
     bucket: Bucket = "raw"
@@ -297,7 +297,7 @@ InferenceResultsQuery = InferenceQuery
 
 class InferenceResponse(StrictModel):
     request_id: str
-    device_id: SensorId
+    device_id: CorpusDeviceId
     time_zone: Literal["Asia/Jakarta"]
     model_version: str
     points: list[InferencePoint] = Field(max_length=5_000)

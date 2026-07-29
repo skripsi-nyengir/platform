@@ -5,7 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from anomaly_backend.contracts import SensorId
+from anomaly_backend.contracts import CorpusDeviceId
 
 
 _CANONICAL_MODEL = text(
@@ -41,7 +41,7 @@ _INFERENCE_RESULTS = text(
 async def inference_rows(
     connection: AsyncConnection,
     *,
-    device_id: SensorId,
+    device_id: CorpusDeviceId,
     from_ts: datetime,
     to_ts: datetime,
     model_version: str | None,

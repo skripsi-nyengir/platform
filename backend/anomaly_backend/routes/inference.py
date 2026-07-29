@@ -7,12 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from anomaly_backend.contracts import (
     Bucket,
+    CorpusDeviceId,
     HistoricalDateTime,
     InferencePoint,
     InferenceQuery,
     InferenceResponse,
     ScoreProvenance,
-    SensorId,
     format_historical_datetime,
     make_cursor,
     parse_cursor,
@@ -31,7 +31,7 @@ def _datetime(row: RowMapping, field: str) -> datetime:
 
 @router.get("/api/inference-results", response_model=InferenceResponse)
 async def inference_results(
-    device_id: Annotated[SensorId, Query()],
+    device_id: Annotated[CorpusDeviceId, Query()],
     from_ts: Annotated[HistoricalDateTime, Query(alias="from")],
     to_ts: Annotated[HistoricalDateTime, Query(alias="to")],
     connection: Annotated[AsyncConnection, Depends(get_connection)],

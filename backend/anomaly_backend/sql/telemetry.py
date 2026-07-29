@@ -5,7 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from anomaly_backend.contracts import Bucket, SensorId
+from anomaly_backend.contracts import Bucket, CorpusDeviceId, SensorId
 
 
 _LATEST = text(
@@ -129,7 +129,7 @@ async def latest_rows(
 async def history_rows(
     connection: AsyncConnection,
     *,
-    device_id: SensorId,
+    device_id: CorpusDeviceId,
     from_ts: datetime,
     to_ts: datetime,
     bucket: Bucket,

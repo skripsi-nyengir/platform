@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from anomaly_backend.contracts import (
     Bucket,
+    CorpusDeviceId,
     HistoricalDateTime,
     LatestTelemetryResponse,
     LatestTelemetrySensor,
@@ -81,7 +82,7 @@ async def latest_telemetry(
 
 @router.get("/api/telemetry/history", response_model=TelemetryHistoryResponse)
 async def telemetry_history(
-    device_id: Annotated[SensorId, Query()],
+    device_id: Annotated[CorpusDeviceId, Query()],
     from_ts: Annotated[HistoricalDateTime, Query(alias="from")],
     to_ts: Annotated[HistoricalDateTime, Query(alias="to")],
     connection: Annotated[AsyncConnection, Depends(get_connection)],
