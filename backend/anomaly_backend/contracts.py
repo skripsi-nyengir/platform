@@ -210,6 +210,32 @@ class InjectionEventsResponse(StrictModel):
     returned_count: Annotated[int, Field(ge=0)]
 
 
+class SimModel(StrictModel):
+    version: str
+    model_key: str
+    display_name: str
+    score_key: str
+    threshold: float
+    manifest_sha256: str
+    is_active: bool
+
+
+class SimModelsResponse(StrictModel):
+    request_id: str
+    device_id: CorpusDeviceId
+    models: list[SimModel]
+
+
+class SetSimActiveModelRequest(StrictModel):
+    model_version: str = Field(min_length=1)
+
+
+class SetSimActiveModelResponse(StrictModel):
+    request_id: str
+    device_id: CorpusDeviceId
+    active_model_version: str
+
+
 class TelemetryHistoryQuery(StrictModel):
     _optional_non_nullable_fields: ClassVar[frozenset[str]] = frozenset({"cursor"})
 

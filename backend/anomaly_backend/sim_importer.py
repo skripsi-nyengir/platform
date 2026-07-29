@@ -514,6 +514,48 @@ def _upsert_models(connection: psycopg.Connection[dict[str, Any]]) -> None:
                 ),
             ],
         )
+        # Seed one activation per artifact model so any of the three can be made
+        # the sim device's active selection (replay resolves the model from
+        # active_model_selections). Deterministic ids keep this idempotent.
+        cursor.executemany(
+            """
+            INSERT INTO model_activations (
+                activation_id, command_id, payload_hash, device_id,
+                prior_model_version, model_version, changed, activated_at, actor
+            ) VALUES (%s, %s, 'sim-seed', %s, NULL, %s, FALSE, now(), 'sim_importer')
+            ON CONFLICT (activation_id) DO NOTHING
+            """,
+            [
+                (
+                    "activation-sim-artifact-lstm",
+                    "activation-sim-artifact-lstm",
+                    SIM_DEVICE_ID,
+                    "artifact-lstm-ae-v3",
+                ),
+                (
+                    "activation-sim-artifact-conv1d",
+                    "activation-sim-artifact-conv1d",
+                    SIM_DEVICE_ID,
+                    "artifact-conv1d-v3",
+                ),
+                (
+                    "activation-sim-artifact-transformer",
+                    "activation-sim-artifact-transformer",
+                    SIM_DEVICE_ID,
+                    "artifact-transformer-v3",
+                ),
+            ],
+        )
+        # Default the sim device to the LSTM artifact. DO NOTHING preserves a
+        # later switch made through the simulation API across re-imports.
+        cursor.execute(
+            """
+            INSERT INTO active_model_selections (device_id, activation_id, model_version)
+            VALUES (%s, 'activation-sim-artifact-lstm', 'artifact-lstm-ae-v3')
+            ON CONFLICT (device_id) DO NOTHING
+            """,
+            (SIM_DEVICE_ID,),
+        )
 
 
 def _assert_counts(connection: psycopg.Connection[dict[str, Any]], corpus_id: str) -> None:
