@@ -10,6 +10,7 @@ import {
 } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import { useState } from 'react'
+import { randomId } from '../../lib/id'
 import { publicDeviceId } from '../../contracts/common'
 import { ReplayJobRequestSchema } from '../../contracts/preview'
 import { useCreateReplayMutation, useModelsQuery, useReplayJobQuery } from './queries'
@@ -20,7 +21,7 @@ export function ReplayPanel() {
   const createReplay = useCreateReplayMutation()
   const [from, setFrom] = useState<string>('2026-02-01T00:00:00')
   const [to, setTo] = useState<string>('2026-03-01T00:00:00')
-  const [commandId, setCommandId] = useState(() => crypto.randomUUID())
+  const [commandId, setCommandId] = useState(() => randomId())
   const [jobId, setJobId] = useState<string>()
   const status = useReplayJobQuery(jobId)
   const validation = ReplayJobRequestSchema.safeParse({
@@ -47,11 +48,11 @@ export function ReplayPanel() {
         <Stack direction="row" spacing={2} useFlexGap sx={{ flexWrap: 'wrap' }}>
           <TextField label="From (WIB)" value={from} onChange={(event) => {
             setFrom(event.target.value)
-            setCommandId(crypto.randomUUID())
+            setCommandId(randomId())
           }} />
           <TextField label="To (WIB)" value={to} onChange={(event) => {
             setTo(event.target.value)
-            setCommandId(crypto.randomUUID())
+            setCommandId(randomId())
           }} />
           <Button
             variant="contained"

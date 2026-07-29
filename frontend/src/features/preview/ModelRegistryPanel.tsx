@@ -10,6 +10,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
+import { randomId } from '../../lib/id'
 import { useState } from 'react'
 import { publicDeviceId } from '../../contracts/common'
 import type { ModelFamily } from '../../contracts/preview'
@@ -93,7 +94,7 @@ export function ModelRegistryPanel() {
             onClick={() => {
               if (candidateVersion === undefined) return
               activation.mutate({
-                command_id: crypto.randomUUID(),
+                command_id: randomId(),
                 device_id: publicDeviceId,
                 model_version: candidateVersion,
               }, { onSuccess: () => setCandidate(undefined) })

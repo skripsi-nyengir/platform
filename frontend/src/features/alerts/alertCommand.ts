@@ -1,4 +1,5 @@
 import type { AlertCommandRequest } from '../../contracts/common'
+import { randomId } from '../../lib/id'
 
 export interface AlertLifecycleCommand {
   alertId: string
@@ -12,7 +13,7 @@ export function createAlertLifecycleCommand(
   note?: string,
 ): AlertLifecycleCommand {
   const body: AlertCommandRequest = {
-    command_id: crypto.randomUUID(),
+    command_id: randomId(),
   }
   if (note !== undefined) body.note = note
   return { alertId, action, body }
