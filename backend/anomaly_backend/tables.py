@@ -729,6 +729,10 @@ replay_result_staging = Table(
     Column("stride", Integer, nullable=False),
     Column("segment_id", Integer, nullable=False),
     Column("eligible_window_ordinal", BigInteger, nullable=False),
+    Column("recon_temperature_c", Float, nullable=True),
+    Column("recon_relative_humidity_pct", Float, nullable=True),
+    Column("band_half_temperature_c", Float, nullable=True),
+    Column("band_half_relative_humidity_pct", Float, nullable=True),
     CheckConstraint(
         _FINITE_SCORE_CHECK, name="ck_replay_result_staging_score_finite"
     ),
@@ -794,6 +798,10 @@ inference_results = Table(
     Column("stride", Integer, nullable=False),
     Column("segment_id", Integer, nullable=False),
     Column("replay_job_id", Text, ForeignKey("replay_jobs.job_id")),
+    Column("recon_temperature_c", Float, nullable=True),
+    Column("recon_relative_humidity_pct", Float, nullable=True),
+    Column("band_half_temperature_c", Float, nullable=True),
+    Column("band_half_relative_humidity_pct", Float, nullable=True),
     CheckConstraint(
         _FINITE_SCORE_CHECK, name="ck_inference_results_m2_score_finite"
     ),

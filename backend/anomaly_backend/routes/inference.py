@@ -91,6 +91,16 @@ async def inference_results(
             is_anomaly=cast(bool, row["is_anomaly"]),
             model_version=cast(str, row["model_version"]),
             score_provenance=cast(ScoreProvenance, row["score_provenance"]),
+            recon_temperature_c=cast(float | None, row["recon_temperature_c"]),
+            recon_relative_humidity_pct=cast(
+                float | None, row["recon_relative_humidity_pct"]
+            ),
+            band_half_temperature_c=cast(
+                float | None, row["band_half_temperature_c"]
+            ),
+            band_half_relative_humidity_pct=cast(
+                float | None, row["band_half_relative_humidity_pct"]
+            ),
         )
         for row in rows[: query.limit]
     ]

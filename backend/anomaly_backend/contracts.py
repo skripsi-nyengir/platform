@@ -286,6 +286,10 @@ class InferencePoint(StrictModel):
     is_anomaly: bool
     model_version: str
     score_provenance: ScoreProvenance
+    recon_temperature_c: float | None = None
+    recon_relative_humidity_pct: float | None = None
+    band_half_temperature_c: float | None = None
+    band_half_relative_humidity_pct: float | None = None
 
     @model_validator(mode="after")
     def validate_window(self) -> InferencePoint:

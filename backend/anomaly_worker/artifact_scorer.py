@@ -87,8 +87,23 @@ class ArtifactScorer:
             reconstruction = self._model(inputs)
             errors = (inputs - reconstruction).square().mean(dim=(1, 2))
         scores = errors.cpu().tolist()
+        # CONTEXT_END scores the window's last sample, so its reconstruction is
+        # the model's expected signal at score_ts (the tolerance-band centre).
+        recon_at_target = (
+            reconstruction[:, -1, :].cpu().tolist()
+            if self.temporal_semantics is TemporalSemantics.CONTEXT_END
+            else None
+        )
         points = tuple(
-            ScorePoint(score_ts=batch.target_ts[index], score=float(scores[index]))
+            ScorePoint(
+                score_ts=batch.target_ts[index],
+                score=float(scores[index]),
+                reconstruction=(
+                    tuple(float(value) for value in recon_at_target[index])
+                    if recon_at_target is not None
+                    else None
+                ),
+            )
             for index in range(batch.size)
         )
         result = ScoreBatchResult(points=points)

@@ -297,7 +297,13 @@ def _score_batch(
     connection: psycopg.Connection[dict[str, Any]],
     job: dict[str, Any],
     targets: list[dict[str, Any]],
-) -> tuple[ScoreBatch, list[dict[str, Any]], float]:
+) -> tuple[
+    ScoreBatch,
+    list[dict[str, Any]],
+    float,
+    tuple[float, float],
+    tuple[float, float],
+]:
     version = connection.execute(
         """
         SELECT *
@@ -415,7 +421,7 @@ def _score_batch(
             else None
         ),
     )
-    return batch, eligible, float(version["threshold"])
+    return batch, eligible, float(version["threshold"]), minimum, maximum
 
 
 def _default_checkpoint() -> dict[str, Any]:
@@ -571,7 +577,9 @@ def process_chunk(
 
     last_target_index = int(targets[-1]["corpus_index"])
     try:
-        batch, eligible, threshold = _score_batch(connection, job, targets)
+        batch, eligible, threshold, minimum, maximum = _score_batch(
+            connection, job, targets
+        )
     except ReplayWorkerError as error:
         if str(error) != "batch contains no eligible windows":
             raise
@@ -658,7 +666,26 @@ def process_chunk(
         )
     results = scorer.score(batch)
     staged_rows = []
+    band_half = tuple(
+        (maximum[channel] - minimum[channel]) * (threshold ** 0.5)
+        for channel in range(2)
+    )
     for metadata, point in zip(eligible, results.points, strict=True):
+        recon = point.reconstruction
+        if recon is not None:
+            recon_temperature_c: float | None = (
+                recon[0] * (maximum[0] - minimum[0]) + minimum[0]
+            )
+            recon_relative_humidity_pct: float | None = (
+                recon[1] * (maximum[1] - minimum[1]) + minimum[1]
+            )
+            band_half_temperature_c: float | None = band_half[0]
+            band_half_relative_humidity_pct: float | None = band_half[1]
+        else:
+            recon_temperature_c = None
+            recon_relative_humidity_pct = None
+            band_half_temperature_c = None
+            band_half_relative_humidity_pct = None
         staged_rows.append(
             {
                 "job_id": job["job_id"],
@@ -678,6 +705,10 @@ def process_chunk(
                 "eligible_window_ordinal": metadata[
                     "eligible_window_ordinal"
                 ],
+                "recon_temperature_c": recon_temperature_c,
+                "recon_relative_humidity_pct": recon_relative_humidity_pct,
+                "band_half_temperature_c": band_half_temperature_c,
+                "band_half_relative_humidity_pct": band_half_relative_humidity_pct,
             }
         )
 
@@ -696,14 +727,18 @@ def process_chunk(
                 job_id, score_ts, window_start_ts, window_end_ts,
                 model_version, score, threshold, is_anomaly,
                 score_provenance, source_start_index, source_end_index,
-                reading_count, stride, segment_id, eligible_window_ordinal
+                reading_count, stride, segment_id, eligible_window_ordinal,
+                recon_temperature_c, recon_relative_humidity_pct,
+                band_half_temperature_c, band_half_relative_humidity_pct
             ) VALUES (
                 %(job_id)s, %(score_ts)s, %(window_start_ts)s,
                 %(window_end_ts)s, %(model_version)s, %(score)s,
                 %(threshold)s, %(is_anomaly)s, %(score_provenance)s,
                 %(source_start_index)s, %(source_end_index)s,
                 %(reading_count)s, %(stride)s, %(segment_id)s,
-                %(eligible_window_ordinal)s
+                %(eligible_window_ordinal)s,
+                %(recon_temperature_c)s, %(recon_relative_humidity_pct)s,
+                %(band_half_temperature_c)s, %(band_half_relative_humidity_pct)s
             )
             """,
                 staged_rows,
@@ -788,13 +823,17 @@ def publish_job(
                 device_id, corpus_id, window_start_ts, window_end_ts,
                 score_ts, model_version, score, threshold, is_anomaly,
                 score_provenance, source_start_index, source_end_index,
-                reading_count, stride, segment_id, replay_job_id
+                reading_count, stride, segment_id, replay_job_id,
+                recon_temperature_c, recon_relative_humidity_pct,
+                band_half_temperature_c, band_half_relative_humidity_pct
             )
             SELECT
                 %s, %s, window_start_ts, window_end_ts, score_ts,
                 model_version, score, threshold, is_anomaly,
                 score_provenance, source_start_index, source_end_index,
-                reading_count, stride, segment_id, job_id
+                reading_count, stride, segment_id, job_id,
+                recon_temperature_c, recon_relative_humidity_pct,
+                band_half_temperature_c, band_half_relative_humidity_pct
             FROM replay_result_staging
             WHERE job_id = %s
             ORDER BY score_ts

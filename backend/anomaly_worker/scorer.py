@@ -55,6 +55,7 @@ class ScoreBatch:
 class ScorePoint:
     score_ts: datetime
     score: float
+    reconstruction: tuple[float, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -576,6 +576,10 @@ def _all_database_rows(fixture: JSONDict) -> dict[str, list[dict[str, object]]]:
                 else 2
             ),
             replay_job_id=None,
+            recon_temperature_c=None,
+            recon_relative_humidity_pct=None,
+            band_half_temperature_c=None,
+            band_half_relative_humidity_pct=None,
         )
 
     alert_rows = _database_rows(

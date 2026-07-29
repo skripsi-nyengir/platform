@@ -26,7 +26,11 @@ _INFERENCE_RESULTS = text(
         threshold,
         is_anomaly,
         model_version,
-        score_provenance
+        score_provenance,
+        recon_temperature_c,
+        recon_relative_humidity_pct,
+        band_half_temperature_c,
+        band_half_relative_humidity_pct
     FROM inference_results
     WHERE device_id = :device_id
       AND score_ts >= :from_ts
