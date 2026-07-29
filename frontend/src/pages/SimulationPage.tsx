@@ -13,7 +13,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { getInjectionEvents } from '../api/injection'
 import { getSimulationModels, setSimulationActiveModel } from '../api/simulation'
 import { ApiErrorPanel } from '../components/states/ApiErrorPanel'
@@ -29,12 +29,17 @@ import { useTelemetryHistoryQuery } from '../features/telemetry/queries'
 import { randomId } from '../lib/id'
 import { tokens } from '../theme/tokens'
 
-export const simulationDemoWindow = Object.freeze({
+const simulationDemoWindow = Object.freeze({
   from: '2026-04-19T00:49:45',
   to: '2026-04-19T01:49:45',
 })
 
 const simulationModelsKey = ['simulation', 'models'] as const
+const simulationArtifactVersions = [
+  'artifact-lstm-ae-v3',
+  'artifact-conv1d-v3',
+  'artifact-transformer-v3',
+] as const
 const technicalTextSx = {
   fontFamily: tokens.font.data,
   fontVariantNumeric: 'tabular-nums',
@@ -102,35 +107,50 @@ function ModelCard({
   )
 }
 
-function SimulationResults({ modelVersion }: { modelVersion: string }) {
+function SimulationResults({ modelVersion, models }: { modelVersion: string; models: readonly SimModel[] }) {
   const telemetry = useTelemetryHistoryQuery({
     deviceId: simDeviceId,
     ...simulationDemoWindow,
     bucket: 'raw',
     limit: 2_000,
   })
-  const inference = useInferenceResultsQuery({
+  const lstmInference = useInferenceResultsQuery({
     deviceId: simDeviceId,
     ...simulationDemoWindow,
     bucket: 'raw',
     limit: 2_000,
-    modelVersion,
+    modelVersion: simulationArtifactVersions[0],
+  })
+  const conv1dInference = useInferenceResultsQuery({
+    deviceId: simDeviceId,
+    ...simulationDemoWindow,
+    bucket: 'raw',
+    limit: 2_000,
+    modelVersion: simulationArtifactVersions[1],
+  })
+  const transformerInference = useInferenceResultsQuery({
+    deviceId: simDeviceId,
+    ...simulationDemoWindow,
+    bucket: 'raw',
+    limit: 2_000,
+    modelVersion: simulationArtifactVersions[2],
   })
   const injections = useQuery({
     queryKey: ['simulation', 'injections', simDeviceId],
     queryFn: ({ signal }) => getInjectionEvents(simDeviceId, signal),
     staleTime: Number.POSITIVE_INFINITY,
   })
-  const firstError = telemetry.error ?? inference.error ?? injections.error
+  const inferenceQueries = [lstmInference, conv1dInference, transformerInference] as const
+  const firstError = telemetry.error ?? inferenceQueries.find((query) => query.error !== null)?.error ?? injections.error
 
-  if (telemetry.data === undefined || inference.data === undefined || injections.data === undefined) {
+  if (telemetry.data === undefined || inferenceQueries.some((query) => query.data === undefined) || injections.data === undefined) {
     if (firstError !== null) {
       return (
         <ApiErrorPanel
           error={firstError}
           onRetry={() => void Promise.all([
-            telemetry.refetch(),
-            inference.refetch(),
+           telemetry.refetch(),
+            ...inferenceQueries.map((query) => query.refetch()),
             injections.refetch(),
           ])}
         />
@@ -139,7 +159,7 @@ function SimulationResults({ modelVersion }: { modelVersion: string }) {
     return <PanelSkeleton label="Loading simulation results" />
   }
 
-  if (telemetry.data.points.length === 0 || inference.data.points.length === 0) {
+  if (telemetry.data.points.length === 0 || inferenceQueries.some((query) => query.data?.points.length === 0)) {
     return (
       <EmptyState
         title="Replay returned no chart points"
@@ -148,11 +168,18 @@ function SimulationResults({ modelVersion }: { modelVersion: string }) {
     )
   }
 
+  const modelResults = simulationArtifactVersions.flatMap((version, index) => {
+    const model = models.find((candidate) => candidate.version === version)
+    const inference = inferenceQueries[index].data
+    return model === undefined || inference === undefined ? [] : [{ model, inference: inference.points }]
+  })
+
   return (
     <SimulationCharts
       {...simulationDemoWindow}
       telemetry={telemetry.data.points}
-      inference={inference.data.points}
+      modelResults={modelResults}
+      activeModelVersion={modelVersion}
       injections={injections.data.events}
     />
   )
@@ -166,25 +193,20 @@ export function SimulationPage() {
   })
   const createReplay = useCreateReplayMutation()
   const [jobId, setJobId] = useState<string>()
-  const [completedModelVersion, setCompletedModelVersion] = useState<string>()
   const replayStatus = useReplayJobQuery(jobId)
   const job = replayStatus.data?.job ?? createReplay.data?.job
   const terminal = job?.status === 'succeeded' || job?.status === 'failed'
   const replayRunning = job !== undefined && !terminal
+  const completedModelVersion = job?.status === 'succeeded' ? job.model_version : undefined
   const activeModel = models.data?.models.find((model) => model.is_active)
   const activation = useMutation({
     mutationFn: (modelVersion: string) => setSimulationActiveModel(modelVersion),
     onSuccess: async () => {
       setJobId(undefined)
-      setCompletedModelVersion(undefined)
       createReplay.reset()
       await queryClient.invalidateQueries({ queryKey: simulationModelsKey })
     },
   })
-
-  useEffect(() => {
-    if (job?.status === 'succeeded') setCompletedModelVersion(job.model_version)
-  }, [job])
 
   const runReplay = () => {
     if (activeModel === undefined) return
@@ -193,7 +215,7 @@ export function SimulationPage() {
       device_id: simDeviceId,
       ...simulationDemoWindow,
     })
-    setCompletedModelVersion(undefined)
+    createReplay.reset()
     createReplay.mutate(request, {
       onSuccess: (response) => setJobId(response.job.job_id),
     })
@@ -304,7 +326,7 @@ export function SimulationPage() {
             />
           </Paper>
         ) : (
-          <SimulationResults modelVersion={completedModelVersion} />
+          <SimulationResults modelVersion={completedModelVersion} models={models.data?.models ?? []} />
         )}
       </Stack>
     </Stack>

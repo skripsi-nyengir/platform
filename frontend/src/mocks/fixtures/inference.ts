@@ -21,6 +21,10 @@ function inferencePoint(
     is_anomaly: score > 1,
     model_version: fixtureModelVersion,
     score_provenance: 'simulated_preview',
+    recon_temperature_c: null,
+    recon_relative_humidity_pct: null,
+    band_half_temperature_c: null,
+    band_half_relative_humidity_pct: null,
   })
 }
 

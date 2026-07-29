@@ -18,9 +18,9 @@ describe('SimulationPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Run injected replay' }))
 
-    expect(await screen.findByRole('heading', { name: 'Injected telemetry' })).toBeVisible()
-    expect(screen.getByRole('heading', { name: 'Score vs threshold' })).toBeVisible()
-    expect(screen.getByRole('heading', { name: 'Detection ribbon' })).toBeVisible()
-    expect(screen.getByRole('heading', { name: 'Summary figures' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Active model · LSTM-AE' })).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Model comparison' })).toBeVisible()
+    expect(screen.getAllByRole('img', { name: 'Temperature signal and reconstruction band' })).toHaveLength(4)
+    expect(screen.getByRole('heading', { name: 'Active-model summary' })).toBeVisible()
   })
 })

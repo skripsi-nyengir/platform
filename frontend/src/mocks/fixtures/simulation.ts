@@ -105,6 +105,11 @@ export const simulationTelemetryPoints = Object.freeze(simulationTelemetryValues
 
 export function simulationInferencePoints(modelVersion: string): readonly InferencePoint[] {
   const threshold = modelDefinitions.find((model) => model.version === modelVersion)?.threshold ?? modelDefinitions[0].threshold
+  const reconstruction = {
+    'artifact-lstm-ae-v3': { values: [27.12, 27.18, 27.1, 27.09, 27.05, 27, 27.01], halfBand: 0.28 },
+    'artifact-conv1d-v3': { values: [27.08, 27.2, 27.13, 27.1, 27.07, 27.02, 27.03], halfBand: 0.22 },
+    'artifact-transformer-v3': { values: [27.15, 27.21, 27.12, 27.11, 27.08, 27.04, 27.02], halfBand: 0.34 },
+  }[modelVersion] ?? { values: [27.12, 27.18, 27.1, 27.09, 27.05, 27, 27.01], halfBand: 0.28 }
   const values = [
     ['2026-04-19T00:53:00', '2026-04-19T00:55:00', threshold * 1.4],
     ['2026-04-19T00:56:00', '2026-04-19T00:58:00', threshold * 1.2],
@@ -114,7 +119,7 @@ export function simulationInferencePoints(modelVersion: string): readonly Infere
     ['2026-04-19T01:35:00', '2026-04-19T01:37:00', threshold * 0.5],
     ['2026-04-19T01:43:00', '2026-04-19T01:45:00', threshold * 0.4],
   ] as const
-  return values.map(([window_start_ts, window_end_ts, score]) => ({
+  return values.map(([window_start_ts, window_end_ts, score], index) => ({
     window_start_ts,
     window_end_ts,
     score_ts: window_end_ts,
@@ -123,5 +128,9 @@ export function simulationInferencePoints(modelVersion: string): readonly Infere
     is_anomaly: score > threshold,
     model_version: modelVersion,
     score_provenance: 'artifact_backed',
+    recon_temperature_c: reconstruction.values[index] ?? null,
+    recon_relative_humidity_pct: null,
+    band_half_temperature_c: reconstruction.halfBand,
+    band_half_relative_humidity_pct: null,
   }))
 }

@@ -18,6 +18,10 @@ export const InferencePointSchema = z
     is_anomaly: z.boolean(),
     model_version: z.string(),
     score_provenance: ScoreProvenanceSchema,
+    recon_temperature_c: z.number().nullable().optional(),
+    recon_relative_humidity_pct: z.number().nullable().optional(),
+    band_half_temperature_c: z.number().nonnegative().nullable().optional(),
+    band_half_relative_humidity_pct: z.number().nonnegative().nullable().optional(),
   })
   .refine(
     (value) => compareHistoricalDateTimes(value.window_start_ts, value.window_end_ts) < 0,
