@@ -349,11 +349,14 @@ async def submit_replay_job(
             )
         ).mappings().one()
         runtime_kind = cast(str, version["runtime_kind"])
-        if runtime_kind != "preview_simulator":
+        if runtime_kind == "preview_simulator":
+            provenance = "simulated_preview"
+        elif runtime_kind == "artifact":
+            provenance = "artifact_backed"
+        else:
             raise Conflict(
                 "The selected model has no supported replay adapter"
             )
-        provenance = "simulated_preview"
         logical_hash = _hash_payload(
             {
                 "device_id": device_id,

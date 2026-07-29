@@ -80,9 +80,19 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MODEL_ARTIFACTS_PATH: /models
+    volumes:
+      - "${MODEL_ARTIFACTS_DIR:-./REPLACE_WITH_MODEL_ARTIFACTS}:/models:ro"
     depends_on:
       seed:
         condition: service_completed_successfully
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     restart: unless-stopped
     networks:
       - backend

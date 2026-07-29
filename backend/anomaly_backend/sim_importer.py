@@ -213,6 +213,16 @@ def _upsert_corpus(
     ).fetchone()
     if corpus_row is None or corpus_row["corpus_id"] != SIM_CORPUS_ID:
         raise SimImportError("simulation corpus identity resolves to an unexpected corpus")
+    connection.execute(
+        """
+        INSERT INTO published_corpora (device_id, corpus_id, published_at)
+        VALUES (%s, %s, now())
+        ON CONFLICT (device_id) DO UPDATE SET
+            corpus_id = EXCLUDED.corpus_id,
+            published_at = EXCLUDED.published_at
+        """,
+        (SIM_DEVICE_ID, SIM_CORPUS_ID),
+    )
     return str(corpus_row["corpus_id"])
 
 

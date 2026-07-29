@@ -15,6 +15,7 @@ _LATEST = text(
         FROM telemetry
         JOIN devices USING (device_id)
         WHERE devices.is_active
+          AND devices.telemetry_kind = 'historical_replay'
     ), ranked AS (
         SELECT
             device_id,
@@ -25,6 +26,7 @@ _LATEST = text(
         FROM telemetry
         JOIN devices USING (device_id)
         WHERE devices.is_active
+          AND devices.telemetry_kind = 'historical_replay'
           AND (
             CAST(:device_id AS text) IS NULL
             OR device_id = CAST(:device_id AS text)

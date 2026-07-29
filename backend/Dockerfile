@@ -36,7 +36,10 @@ WORKDIR /app
 
 RUN pip install --disable-pip-version-check --no-cache-dir \
     "psycopg[binary]==3.3.2" \
-    "sqlalchemy==2.0.51"
+    "sqlalchemy==2.0.51" \
+    "numpy==2.4.6"
+RUN pip install --disable-pip-version-check --no-cache-dir \
+    "torch==2.13.0" --index-url https://download.pytorch.org/whl/cu130
 COPY anomaly_backend ./anomaly_backend
 COPY anomaly_worker ./anomaly_worker
 CMD ["python", "-m", "anomaly_worker.service"]

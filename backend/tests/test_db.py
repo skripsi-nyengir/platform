@@ -209,8 +209,11 @@ def test_compose_enforces_the_database_seed_api_nginx_dependency_chain() -> None
     assert "urllib.request" in services["api"]
     assert "http://127.0.0.1:8000/health" in services["api"]
     assert "      api:\n        condition: service_healthy" in services["nginx"]
-    for name in ("migrate", "seed", "api", "worker", "eda-cli"):
+    for name in ("migrate", "seed", "api", "eda-cli"):
         assert _environment_keys(services[name]) == set(DATABASE_ENV)
+    assert _environment_keys(services["worker"]) == set(DATABASE_ENV) | {
+        "MODEL_ARTIFACTS_PATH",
+    }
     assert _environment_keys(services["eda-worker"]) == set(DATABASE_ENV) | {
         "EDA_WORKER_LEASE_SECONDS",
         "EDA_WORKER_HEARTBEAT_SECONDS",
@@ -239,6 +242,9 @@ def test_compose_uses_only_checked_in_build_contexts_and_private_backend_network
         assert "      - backend" in services[name]
         assert "      - public" not in services[name]
     assert "    build:\n      context: ./backend\n      target: worker" in services["worker"]
+    assert services["worker"].count(":ro\"") == 1
+    assert "driver: nvidia" in services["worker"]
+    assert "capabilities: [gpu]" in services["worker"]
     assert (
         "    build:\n      context: ./backend\n      target: eda-worker"
         in services["eda-worker"]

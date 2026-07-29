@@ -17,6 +17,7 @@ from anomaly_worker.scorer import (
     CHANNELS,
     PreviewSimulatorScorer,
     ScoreBatch,
+    Scorer,
     TemporalSemantics,
 )
 
@@ -627,7 +628,7 @@ def process_chunk(
 
     temporal_row = connection.execute(
         """
-        SELECT temporal_semantics, runtime_kind
+        SELECT temporal_semantics, runtime_kind, manifest_sha256
         FROM model_versions
         WHERE version = %s
         """,
@@ -635,18 +636,26 @@ def process_chunk(
     ).fetchone()
     if temporal_row is None:
         raise ReplayWorkerError("job model temporal semantics is missing")
-    if (
-        temporal_row["runtime_kind"] != "preview_simulator"
-        or job["score_provenance"] != "simulated_preview"
-    ):
+    temporal = TemporalSemantics(str(temporal_row["temporal_semantics"]))
+    runtime_kind = temporal_row["runtime_kind"]
+    provenance = job["score_provenance"]
+    if runtime_kind == "preview_simulator" and provenance == "simulated_preview":
+        scorer: Scorer = PreviewSimulatorScorer(
+            archive_sha256=str(job["archive_sha256"]),
+            temporal_semantics=temporal,
+        )
+    elif runtime_kind == "artifact" and provenance == "artifact_backed":
+        from anomaly_worker.artifact_scorer import ArtifactScorer
+
+        scorer = ArtifactScorer(
+            model_version=str(job["model_version"]),
+            manifest_sha256=str(temporal_row["manifest_sha256"]),
+            temporal_semantics=temporal,
+        )
+    else:
         raise ReplayWorkerError(
             "job scorer adapter and provenance are not supported"
         )
-    temporal = TemporalSemantics(str(temporal_row["temporal_semantics"]))
-    scorer = PreviewSimulatorScorer(
-        archive_sha256=str(job["archive_sha256"]),
-        temporal_semantics=temporal,
-    )
     results = scorer.score(batch)
     staged_rows = []
     for metadata, point in zip(eligible, results.points, strict=True):

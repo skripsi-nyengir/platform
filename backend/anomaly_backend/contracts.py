@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
 SensorId = Literal["b02f3872-ruang-produksi"]
+CorpusDeviceId = Literal["b02f3872-ruang-produksi", "b02f3872-simulasi-injeksi"]
 Bucket = Literal["raw", "1m", "5m", "15m", "1h", "1d"]
 Freshness = Literal["fresh", "stale", "unknown"]
 Availability = Literal["online", "offline", "unknown"]
@@ -756,7 +757,7 @@ class ModelActivationResponse(StrictModel):
 
 class ReplayJobRequest(StrictModel):
     command_id: Annotated[str, Field(min_length=1, max_length=128)]
-    device_id: SensorId
+    device_id: CorpusDeviceId
     from_ts: HistoricalDateTime = Field(alias="from")
     to_ts: HistoricalDateTime = Field(alias="to")
 
@@ -773,7 +774,7 @@ class ReplayJobRequest(StrictModel):
 
 class ReplayJobItem(StrictModel):
     job_id: str
-    device_id: SensorId
+    device_id: CorpusDeviceId
     from_ts: HistoricalDateTime = Field(alias="from")
     to_ts: HistoricalDateTime = Field(alias="to")
     time_zone: Literal["Asia/Jakarta"]
