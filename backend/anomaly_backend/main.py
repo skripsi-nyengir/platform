@@ -11,6 +11,7 @@ from anomaly_backend.routes.alerts import router as alerts_router
 from anomaly_backend.routes.eda import router as eda_router
 from anomaly_backend.routes.evaluations import router as evaluations_router
 from anomaly_backend.routes.inference import router as inference_router
+from anomaly_backend.routes.injection import router as injection_router
 from anomaly_backend.routes.model_registry import router as model_registry_router
 from anomaly_backend.routes.offline_evaluations import router as offline_evaluations_router
 from anomaly_backend.routes.preview import router as preview_router
@@ -37,6 +38,7 @@ _PRODUCTION_ROUTERS = (
     preview_router,
     telemetry_router,
     inference_router,
+    injection_router,
     alerts_router,
     eda_router,
     evaluations_router,

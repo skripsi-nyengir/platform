@@ -16,6 +16,10 @@ Availability = Literal["online", "offline", "unknown"]
 AlertStatus = Literal["detected", "acknowledged", "resolved"]
 ScoreProvenance = Literal["simulated_preview", "artifact_backed"]
 DetectionBasis = Literal["simulated_preview", "artifact_backed"]
+InjectionFamily = Literal[
+    "spike", "drift", "stuck", "erratic", "bias", "data_loss", "garbage"
+]
+InjectionSeverity = Literal["low", "medium", "high"]
 LivenessState = Literal["alive", "not_alive", "unknown"]
 ReadinessState = Literal["ready", "not_ready", "unknown"]
 CursorScope = Literal["telemetry", "inference", "alert-events"]
@@ -183,6 +187,27 @@ class TelemetryPoint(StrictModel):
     relative_humidity_pct: float | None
     sample_count: Annotated[int, Field(ge=0)]
     gap_before: bool
+
+
+class SimInjectionEvent(StrictModel):
+    event_id: str
+    family: InjectionFamily
+    severity: InjectionSeverity
+    channel: str
+    channel_index: Annotated[int, Field(ge=0)]
+    start_ts: HistoricalDateTime
+    end_ts: HistoricalDateTime
+    start_idx: Annotated[int, Field(ge=0)]
+    end_idx_exclusive: Annotated[int, Field(ge=0)]
+    segment_index: Annotated[int, Field(ge=0)]
+
+
+class InjectionEventsResponse(StrictModel):
+    request_id: str
+    device_id: CorpusDeviceId
+    time_zone: Literal["Asia/Jakarta"]
+    events: list[SimInjectionEvent]
+    returned_count: Annotated[int, Field(ge=0)]
 
 
 class TelemetryHistoryQuery(StrictModel):
