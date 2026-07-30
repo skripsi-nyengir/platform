@@ -258,6 +258,12 @@ class SimAlertEventModel(StrictModel):
     peak_score: float
 
 
+class OperationalBucketModel(StrictModel):
+    bucket_start: HistoricalDateTime
+    bucket_end: HistoricalDateTime
+    event_count: int
+
+
 class SimMetricsResponse(StrictModel):
     request_id: str
     device_id: CorpusDeviceId
@@ -272,6 +278,8 @@ class SimMetricsResponse(StrictModel):
     bins_scope: ScopeMetricsModel
     operational_event_count: int
     operational_events: list[SimAlertEventModel]
+    bucket_hours: int | None = None
+    operational_buckets: list[OperationalBucketModel] = []
 
 
 class TelemetryHistoryQuery(StrictModel):

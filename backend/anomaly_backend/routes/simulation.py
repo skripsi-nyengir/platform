@@ -1,4 +1,5 @@
 from typing import Annotated, cast
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.engine import RowMapping
@@ -6,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from anomaly_backend.contracts import (
     CorpusDeviceId,
+    OperationalBucketModel,
     ScopeMetricsModel,
     SetSimActiveModelRequest,
     SetSimActiveModelResponse,
@@ -13,12 +15,18 @@ from anomaly_backend.contracts import (
     SimMetricsResponse,
     SimModel,
     SimModelsResponse,
+    format_historical_datetime,
 )
 from anomaly_backend.db import get_connection
 from anomaly_backend.evaluation import ScopeMetrics
 from anomaly_backend.problems import NotFound, new_request_id
-from anomaly_backend.sim_metrics import assemble_sim_metrics
-from anomaly_backend.sql import set_sim_active_model, sim_metrics_source, sim_model_rows
+from anomaly_backend.sim_metrics import assemble_sim_metrics, bucket_operational_events
+from anomaly_backend.sql import (
+    set_sim_active_model,
+    sim_event_start_timestamps,
+    sim_metrics_source,
+    sim_model_rows,
+)
 
 
 router = APIRouter()
@@ -60,6 +68,7 @@ async def simulation_metrics(
     model_version: Annotated[str, Query(min_length=1)],
     connection: Annotated[AsyncConnection, Depends(get_connection)],
     cooldown_samples: Annotated[int, Query(ge=1)] = 10,
+    bucket_hours: Annotated[int | None, Query(ge=1)] = None,
 ) -> SimMetricsResponse:
     source = await sim_metrics_source(
         connection, device_id=_SIM_DEVICE_ID, model_version=model_version
@@ -78,6 +87,27 @@ async def simulation_metrics(
         segment_rows=cast(list, source["segment_rows"]),
         cooldown_samples=cooldown_samples,
     )
+    buckets: list[OperationalBucketModel] = []
+    if bucket_hours is not None and source["corpus_from"] is not None:
+        ts_by_idx = await sim_event_start_timestamps(
+            connection,
+            device_id=_SIM_DEVICE_ID,
+            indices=[event.start_idx for event in metrics.operational_events],
+        )
+        buckets = [
+            OperationalBucketModel(
+                bucket_start=format_historical_datetime(bucket.bucket_start),
+                bucket_end=format_historical_datetime(bucket.bucket_end),
+                event_count=bucket.event_count,
+            )
+            for bucket in bucket_operational_events(
+                metrics.operational_events,
+                ts_by_idx,
+                cast(datetime, source["corpus_from"]),
+                cast(datetime, source["corpus_to"]),
+                bucket_hours,
+            )
+        ]
     return SimMetricsResponse(
         request_id=new_request_id(),
         device_id=_SIM_DEVICE_ID,
@@ -101,6 +131,8 @@ async def simulation_metrics(
             )
             for event in metrics.operational_events
         ],
+        bucket_hours=bucket_hours,
+        operational_buckets=buckets,
     )
 
 

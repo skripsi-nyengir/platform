@@ -74,3 +74,42 @@ def test_assemble_reproduces_step7(golden: dict[str, np.ndarray], model: str) ->
     # Operational events are ground-truth-free and must not exceed candidate points.
     assert metrics.operational_event_count >= 1
     assert all(e.n_candidates >= 1 for e in metrics.operational_events)
+
+
+def test_bucket_operational_events_keeps_empty_buckets() -> None:
+    from datetime import datetime
+
+    from anomaly_backend.operational import AlertEvent
+    from anomaly_backend.sim_metrics import bucket_operational_events
+
+    corpus_from = datetime(2026, 4, 19, 0, 0, 0)
+    corpus_to = datetime(2026, 4, 19, 3, 0, 0)
+    events = [
+        AlertEvent(0, 5, 5, 1, 0.9),
+        AlertEvent(0, 700, 700, 1, 0.9),
+        AlertEvent(0, 720, 720, 1, 0.9),
+    ]
+    ts_by_idx = {
+        5: datetime(2026, 4, 19, 0, 10),
+        700: datetime(2026, 4, 19, 1, 10),
+        720: datetime(2026, 4, 19, 1, 50),
+    }
+    buckets = bucket_operational_events(events, ts_by_idx, corpus_from, corpus_to, bucket_hours=1)
+    # 0:00 -> 1 event, 1:00 -> 2 events, 2:00 and 3:00 buckets stay present at 0.
+    assert [b.event_count for b in buckets] == [1, 2, 0, 0]
+    assert buckets[0].bucket_start == corpus_from
+    assert buckets[1].bucket_start == datetime(2026, 4, 19, 1, 0)
+
+
+def test_bucket_operational_events_daily_and_skips_unknown_index() -> None:
+    from datetime import datetime
+
+    from anomaly_backend.operational import AlertEvent
+    from anomaly_backend.sim_metrics import bucket_operational_events
+
+    corpus_from = datetime(2026, 4, 19, 0, 0, 0)
+    corpus_to = datetime(2026, 4, 21, 0, 0, 0)
+    events = [AlertEvent(0, 1, 1, 1, 0.9), AlertEvent(0, 2, 2, 1, 0.9)]
+    ts_by_idx = {1: datetime(2026, 4, 20, 5, 0)}  # idx 2 missing -> skipped
+    buckets = bucket_operational_events(events, ts_by_idx, corpus_from, corpus_to, bucket_hours=24)
+    assert [b.event_count for b in buckets] == [0, 1, 0]

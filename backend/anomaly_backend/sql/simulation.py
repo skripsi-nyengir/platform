@@ -98,11 +98,22 @@ _SIM_SEGMENTS = text(
     """
 )
 
-_SIM_FRAME_COUNT = text(
+_SIM_CORPUS_RANGE = text(
     """
-    SELECT coalesce(max(corpus_index) + 1, 0) AS frame_count
+    SELECT
+        coalesce(max(corpus_index) + 1, 0) AS frame_count,
+        min(ts) AS corpus_from,
+        max(ts) AS corpus_to
     FROM telemetry
     WHERE device_id = :device_id
+    """
+)
+
+_SIM_EVENT_TIMESTAMPS = text(
+    """
+    SELECT corpus_index, ts
+    FROM telemetry
+    WHERE device_id = :device_id AND corpus_index = ANY(:indices)
     """
 )
 
@@ -122,14 +133,32 @@ async def sim_metrics_source(
     windows = (await connection.execute(_SIM_WINDOW_SCORES, params)).all()
     events = (await connection.execute(_SIM_EVENTS, {"device_id": device_id})).all()
     segments = (await connection.execute(_SIM_SEGMENTS, {"device_id": device_id})).all()
-    frame_count = (
-        await connection.execute(_SIM_FRAME_COUNT, {"device_id": device_id})
-    ).scalar_one()
+    corpus = (
+        await connection.execute(_SIM_CORPUS_RANGE, {"device_id": device_id})
+    ).mappings().one()
     return {
         "window_size": int(meta["window_size"]),
         "threshold": float(meta["threshold"]),
-        "frame_count": int(frame_count),
+        "frame_count": int(corpus["frame_count"]),
+        "corpus_from": corpus["corpus_from"],
+        "corpus_to": corpus["corpus_to"],
         "window_rows": [(r[0], r[1], r[2]) for r in windows],
         "event_rows": [(r[0], r[1]) for r in events],
         "segment_rows": [(r[0], r[1]) for r in segments],
     }
+
+
+async def sim_event_start_timestamps(
+    connection: AsyncConnection,
+    *,
+    device_id: CorpusDeviceId,
+    indices: list[int],
+) -> dict[int, object]:
+    if not indices:
+        return {}
+    rows = (
+        await connection.execute(
+            _SIM_EVENT_TIMESTAMPS, {"device_id": device_id, "indices": indices}
+        )
+    ).all()
+    return {int(r[0]): r[1] for r in rows}

@@ -7,8 +7,9 @@ three-scope metrics and the operational event list from the same point scores.
 """
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 import numpy as np
 
@@ -85,3 +86,49 @@ def assemble_sim_metrics(
         operational_event_count=len(events),
         operational_events=events,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class OperationalBucket:
+    bucket_start: datetime
+    bucket_end: datetime
+    event_count: int
+
+
+def bucket_operational_events(
+    events: Sequence[AlertEvent],
+    event_start_ts: Mapping[int, datetime],
+    corpus_from: datetime,
+    corpus_to: datetime,
+    bucket_hours: int,
+) -> list[OperationalBucket]:
+    """Group operational events into fixed time buckets across the corpus range.
+
+    Each event is placed in the bucket of its start timestamp. Empty buckets are
+    kept so the result is a continuous operational-period timeline (events per
+    period), not just periods that happened to fire.
+    """
+    if bucket_hours < 1:
+        raise ValueError("bucket_hours must be >= 1")
+    if corpus_to < corpus_from:
+        raise ValueError("corpus_to must not precede corpus_from")
+    width = timedelta(hours=bucket_hours)
+    edges: list[datetime] = []
+    edge = corpus_from
+    while edge <= corpus_to:
+        edges.append(edge)
+        edge = edge + width
+    if not edges:
+        edges.append(corpus_from)
+    counts = [0] * len(edges)
+    for event in events:
+        timestamp = event_start_ts.get(event.start_idx)
+        if timestamp is None:
+            continue
+        index = int((timestamp - corpus_from) // width)
+        if 0 <= index < len(counts):
+            counts[index] += 1
+    return [
+        OperationalBucket(edges[i], edges[i] + width, counts[i])
+        for i in range(len(edges))
+    ]
