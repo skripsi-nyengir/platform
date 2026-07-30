@@ -13,41 +13,80 @@ import {
   Typography,
 } from '@mui/material'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { ApiError } from '../api/errors'
 import { getInjectionEvents } from '../api/injection'
 import { getSimulationModels, setSimulationActiveModel } from '../api/simulation'
 import { ApiErrorPanel } from '../components/states/ApiErrorPanel'
 import { EmptyState } from '../components/states/EmptyState'
 import { PanelSkeleton } from '../components/states/PanelSkeleton'
-import { simDeviceId } from '../contracts/common'
+import {
+  HistoricalDateTimeSchema,
+  compareHistoricalDateTimes,
+  simDeviceId,
+  type HistoricalDateTime,
+} from '../contracts/common'
+import type { SimInjectionEvent } from '../contracts/injection'
 import { ReplayJobRequestSchema } from '../contracts/preview'
-import type { SimModel } from '../contracts/simulation'
+import {
+  simModelWindowSizes,
+  type SimModel,
+} from '../contracts/simulation'
 import { useInferenceResultsQuery } from '../features/inference/queries'
 import { useCreateReplayMutation, useReplayJobQuery } from '../features/preview/queries'
+import { InjectionEventNavigator } from '../features/simulation/InjectionEventNavigator'
 import { SimulationCharts } from '../features/simulation/SimulationCharts'
+import { SimulationMetricsPanels } from '../features/simulation/SimulationMetricsPanels'
+import { useSimulationMetricsQuery } from '../features/simulation/queries'
 import { useTelemetryHistoryQuery } from '../features/telemetry/queries'
 import { randomId } from '../lib/id'
 import { tokens } from '../theme/tokens'
 
-const simulationDemoWindow = Object.freeze({
-  from: '2026-04-19T00:49:45',
-  to: '2026-04-19T01:49:45',
-})
-
 const simulationModelsKey = ['simulation', 'models'] as const
-const simulationArtifactVersions = [
-  'artifact-lstm-ae-v3',
-  'artifact-conv1d-v3',
-  'artifact-transformer-v3',
-] as const
 const technicalTextSx = {
   fontFamily: tokens.font.data,
   fontVariantNumeric: 'tabular-nums',
   overflowWrap: 'anywhere',
 } as const
 
+interface SimulationWindow {
+  from: HistoricalDateTime
+  to: HistoricalDateTime
+}
+
 function shortHash(value: string): string {
   return `${value.slice(0, 12)}…`
+}
+
+function isReplayOverlapError(error: unknown): error is ApiError {
+  return error instanceof ApiError &&
+    error.status === 409 &&
+    error.message.includes('Replay interval overlaps existing job')
+}
+
+function fullInjectionWindow(events: readonly SimInjectionEvent[]): SimulationWindow | undefined {
+  const first = events[0]
+  const last = events.at(-1)
+  return first === undefined || last === undefined
+    ? undefined
+    : { from: first.start_ts, to: last.end_ts }
+}
+
+function shiftHistoricalDateTime(value: HistoricalDateTime, minutes: number): HistoricalDateTime {
+  const shifted = new Date(Date.parse(`${value}Z`) + minutes * 60_000)
+  return HistoricalDateTimeSchema.parse(shifted.toISOString().slice(0, 19))
+}
+
+function eventDetailWindow(
+  event: SimInjectionEvent,
+  corpus: SimulationWindow,
+): SimulationWindow {
+  const paddedFrom = shiftHistoricalDateTime(event.start_ts, -10)
+  const paddedTo = shiftHistoricalDateTime(event.end_ts, 10)
+  return {
+    from: compareHistoricalDateTimes(paddedFrom, corpus.from) < 0 ? corpus.from : paddedFrom,
+    to: compareHistoricalDateTimes(paddedTo, corpus.to) > 0 ? corpus.to : paddedTo,
+  }
 }
 
 function ModelCard({
@@ -86,14 +125,15 @@ function ModelCard({
               {model.is_active ? <Chip label="Active" color="primary" size="small" /> : null}
               {selecting ? <Chip label="Selecting…" size="small" /> : null}
             </Stack>
+            <Typography variant="caption" color="text.secondary" sx={technicalTextSx}>{model.version}</Typography>
             <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: 1, m: 0 }}>
               <Typography component="dt" variant="caption" color="text.secondary">Threshold</Typography>
               <Typography component="dd" variant="body2" sx={{ ...technicalTextSx, m: 0, textAlign: 'right' }}>
                 {String(model.threshold)}
               </Typography>
-              <Typography component="dt" variant="caption" color="text.secondary">Score key</Typography>
+              <Typography component="dt" variant="caption" color="text.secondary">Window size</Typography>
               <Typography component="dd" variant="body2" sx={{ ...technicalTextSx, m: 0, textAlign: 'right' }}>
-                {model.score_key}
+                {simModelWindowSizes[model.version]}
               </Typography>
               <Typography component="dt" variant="caption" color="text.secondary">Manifest</Typography>
               <Typography component="dd" variant="body2" title={model.manifest_sha256} sx={{ ...technicalTextSx, m: 0, textAlign: 'right' }}>
@@ -107,81 +147,72 @@ function ModelCard({
   )
 }
 
-function SimulationResults({ modelVersion, models }: { modelVersion: string; models: readonly SimModel[] }) {
+function ReplayVisualization({
+  model,
+  injections,
+  corpusWindow,
+}: {
+  model: SimModel
+  injections: readonly SimInjectionEvent[]
+  corpusWindow: SimulationWindow
+}) {
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const selectedEvent = injections[selectedIndex] ?? injections[0]
+  const window = useMemo(
+    () => selectedEvent === undefined ? corpusWindow : eventDetailWindow(selectedEvent, corpusWindow),
+    [corpusWindow, selectedEvent],
+  )
   const telemetry = useTelemetryHistoryQuery({
     deviceId: simDeviceId,
-    ...simulationDemoWindow,
+    ...window,
     bucket: 'raw',
-    limit: 2_000,
+    limit: 5_000,
   })
-  const lstmInference = useInferenceResultsQuery({
+  const inference = useInferenceResultsQuery({
     deviceId: simDeviceId,
-    ...simulationDemoWindow,
+    ...window,
     bucket: 'raw',
-    limit: 2_000,
-    modelVersion: simulationArtifactVersions[0],
+    limit: 5_000,
+    modelVersion: model.version,
   })
-  const conv1dInference = useInferenceResultsQuery({
-    deviceId: simDeviceId,
-    ...simulationDemoWindow,
-    bucket: 'raw',
-    limit: 2_000,
-    modelVersion: simulationArtifactVersions[1],
-  })
-  const transformerInference = useInferenceResultsQuery({
-    deviceId: simDeviceId,
-    ...simulationDemoWindow,
-    bucket: 'raw',
-    limit: 2_000,
-    modelVersion: simulationArtifactVersions[2],
-  })
-  const injections = useQuery({
-    queryKey: ['simulation', 'injections', simDeviceId],
-    queryFn: ({ signal }) => getInjectionEvents(simDeviceId, signal),
-    staleTime: Number.POSITIVE_INFINITY,
-  })
-  const inferenceQueries = [lstmInference, conv1dInference, transformerInference] as const
-  const firstError = telemetry.error ?? inferenceQueries.find((query) => query.error !== null)?.error ?? injections.error
+  const firstError = telemetry.error ?? inference.error
 
-  if (telemetry.data === undefined || inferenceQueries.some((query) => query.data === undefined) || injections.data === undefined) {
-    if (firstError !== null) {
-      return (
-        <ApiErrorPanel
-          error={firstError}
-          onRetry={() => void Promise.all([
-           telemetry.refetch(),
-            ...inferenceQueries.map((query) => query.refetch()),
-            injections.refetch(),
-          ])}
-        />
-      )
-    }
-    return <PanelSkeleton label="Loading simulation results" />
+  if (selectedEvent === undefined) {
+    return <EmptyState title="No injection events" detail="The simulation corpus has no injected events to inspect." />
   }
-
-  if (telemetry.data.points.length === 0 || inferenceQueries.some((query) => query.data?.points.length === 0)) {
-    return (
-      <EmptyState
-        title="Replay returned no chart points"
-        detail="Run the injected replay again or inspect the replay status before comparing results."
-      />
-    )
-  }
-
-  const modelResults = simulationArtifactVersions.flatMap((version, index) => {
-    const model = models.find((candidate) => candidate.version === version)
-    const inference = inferenceQueries[index].data
-    return model === undefined || inference === undefined ? [] : [{ model, inference: inference.points }]
-  })
 
   return (
-    <SimulationCharts
-      {...simulationDemoWindow}
-      telemetry={telemetry.data.points}
-      modelResults={modelResults}
-      activeModelVersion={modelVersion}
-      injections={injections.data.events}
-    />
+    <Stack spacing={3}>
+      <InjectionEventNavigator
+        events={injections}
+        selectedIndex={selectedIndex}
+        onSelect={setSelectedIndex}
+      />
+      {telemetry.data === undefined || inference.data === undefined ? (
+        firstError === null ? (
+          <PanelSkeleton label="Loading selected event telemetry" />
+        ) : (
+          <ApiErrorPanel
+            error={firstError}
+            onRetry={() => void Promise.all([telemetry.refetch(), inference.refetch()])}
+          />
+        )
+      ) : telemetry.data.points.length === 0 || inference.data.points.length === 0 ? (
+        <Paper variant="outlined" sx={{ p: 4 }}>
+          <EmptyState
+            title="No chart detail for this event"
+            detail="The model has metrics, but raw telemetry or inference points are unavailable in this event window."
+          />
+        </Paper>
+      ) : (
+        <SimulationCharts
+          {...window}
+          telemetry={telemetry.data.points}
+          inference={inference.data.points}
+          model={model}
+        />
+      )}
+    </Stack>
   )
 }
 
@@ -191,14 +222,23 @@ export function SimulationPage() {
     queryKey: simulationModelsKey,
     queryFn: ({ signal }) => getSimulationModels(signal),
   })
+  const injections = useQuery({
+    queryKey: ['simulation', 'injections', simDeviceId],
+    queryFn: ({ signal }) => getInjectionEvents(simDeviceId, signal),
+    staleTime: Number.POSITIVE_INFINITY,
+  })
+  const activeModel = models.data?.models.find((model) => model.is_active)
+  const metrics = useSimulationMetricsQuery(activeModel?.version)
+  const corpusWindow = useMemo(
+    () => fullInjectionWindow(injections.data?.events ?? []),
+    [injections.data?.events],
+  )
   const createReplay = useCreateReplayMutation()
   const [jobId, setJobId] = useState<string>()
   const replayStatus = useReplayJobQuery(jobId)
   const job = replayStatus.data?.job ?? createReplay.data?.job
   const terminal = job?.status === 'succeeded' || job?.status === 'failed'
   const replayRunning = job !== undefined && !terminal
-  const completedModelVersion = job?.status === 'succeeded' ? job.model_version : undefined
-  const activeModel = models.data?.models.find((model) => model.is_active)
   const activation = useMutation({
     mutationFn: (modelVersion: string) => setSimulationActiveModel(modelVersion),
     onSuccess: async () => {
@@ -208,16 +248,28 @@ export function SimulationPage() {
     },
   })
 
+  useEffect(() => {
+    if (job?.status !== 'succeeded') return
+    void queryClient.invalidateQueries({ queryKey: ['simulation', 'metrics', job.model_version] })
+    void queryClient.invalidateQueries({ queryKey: ['inference', 'results', simDeviceId] })
+  }, [job?.job_id, job?.model_version, job?.status, queryClient])
+
+  const missingReplay = metrics.error instanceof ApiError && metrics.error.status === 404
+  const replayConflict = isReplayOverlapError(createReplay.error)
+
   const runReplay = () => {
-    if (activeModel === undefined) return
+    if (activeModel === undefined || corpusWindow === undefined) return
     const request = ReplayJobRequestSchema.parse({
       command_id: randomId(),
       device_id: simDeviceId,
-      ...simulationDemoWindow,
+      ...corpusWindow,
     })
     createReplay.reset()
     createReplay.mutate(request, {
       onSuccess: (response) => setJobId(response.job.job_id),
+      onError: (error) => {
+        if (isReplayOverlapError(error)) void metrics.refetch()
+      },
     })
   }
 
@@ -226,7 +278,7 @@ export function SimulationPage() {
       <Stack spacing={0.5}>
         <Typography variant="h1" sx={{ textWrap: 'balance' }}>Anomaly simulation</Typography>
         <Typography color="text.secondary" sx={{ textWrap: 'pretty' }}>
-          Select an artifact model, replay the injected corpus, and compare detections with ground truth.
+          Select an artifact model, replay the complete injected corpus, and inspect server-evaluated detections.
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={technicalTextSx}>
           Device: {simDeviceId} · Asia/Jakarta (WIB)
@@ -237,7 +289,7 @@ export function SimulationPage() {
         <Stack spacing={0.5}>
           <Typography id="simulation-models-heading" variant="h2">1 · Pick an artifact model</Typography>
           <Typography variant="body2" color="text.secondary">
-            Each card exposes the artifact calibration used by the next replay.
+            Artifact calibration and manifest identity are shown exactly as registered.
           </Typography>
         </Stack>
         {models.data === undefined ? (
@@ -249,7 +301,7 @@ export function SimulationPage() {
         ) : (
           <Grid container spacing={2}>
             {models.data.models.map((model) => (
-              <Grid key={model.version} size={{ xs: 12, md: 4 }}>
+              <Grid key={model.version} size={{ sm: 6, lg: 4 }}>
                 <ModelCard
                   model={model}
                   disabled={activation.isPending || replayRunning}
@@ -266,24 +318,35 @@ export function SimulationPage() {
       <Paper component="section" aria-labelledby="simulation-replay-heading" variant="outlined" sx={{ p: 4 }}>
         <Stack spacing={2}>
           <Stack spacing={0.5}>
-            <Typography id="simulation-replay-heading" variant="h2">2 · Run injected replay</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Fixed one-hour demo window · {simulationDemoWindow.from} – {simulationDemoWindow.to} WIB
+            <Typography id="simulation-replay-heading" variant="h2">2 · Populate replay data</Typography>
+            <Typography variant="body2" color="text.secondary" sx={technicalTextSx}>
+              {corpusWindow === undefined
+                ? 'Loading injected corpus range…'
+                : `${corpusWindow.from} – ${corpusWindow.to} WIB · ${injections.data?.events.length.toLocaleString('id-ID')} injected events`}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Active artifact: <Box component="span" sx={technicalTextSx}>{activeModel?.display_name ?? 'Unavailable'}</Box>
             </Typography>
           </Stack>
-          <Box>
-            <Button
-              variant="contained"
-              disabled={activeModel === undefined || activation.isPending || createReplay.isPending || replayRunning}
-              onClick={runReplay}
-            >
-              {replayRunning ? 'Replay running…' : 'Run injected replay'}
-            </Button>
-          </Box>
-          {createReplay.isError ? <Alert severity="error">{createReplay.error.message}</Alert> : null}
+          {injections.isError ? (
+            <ApiErrorPanel error={injections.error} onRetry={() => void injections.refetch()} />
+          ) : null}
+          {replayConflict ? (
+            <Alert severity="info">A replay already exists for this model; showing stored results.</Alert>
+          ) : metrics.data !== undefined ? (
+            <Alert severity="info">Replay already computed — showing stored results.</Alert>
+          ) : missingReplay ? (
+            <Box>
+              <Button
+                variant="contained"
+                disabled={activeModel === undefined || corpusWindow === undefined || activation.isPending || createReplay.isPending || replayRunning}
+                onClick={runReplay}
+              >
+                {replayRunning ? 'Replay running…' : 'Run injected replay'}
+              </Button>
+            </Box>
+          ) : null}
+          {createReplay.isError && !replayConflict ? <Alert severity="error">{createReplay.error.message}</Alert> : null}
           {replayStatus.isError ? (
             <ApiErrorPanel error={replayStatus.error} onRetry={() => void replayStatus.refetch()} />
           ) : null}
@@ -313,20 +376,49 @@ export function SimulationPage() {
 
       <Stack component="section" aria-labelledby="simulation-results-heading" spacing={2}>
         <Stack spacing={0.5}>
-          <Typography id="simulation-results-heading" variant="h2">3 · Compare detections</Typography>
+          <Typography id="simulation-results-heading" variant="h2">3 · Research and operations</Typography>
           <Typography variant="body2" color="text.secondary">
-            All time-based panels use the same replay window and time scale.
+            Server-owned evaluation metrics stay separate from the raw telemetry diagnostic below.
           </Typography>
         </Stack>
-        {completedModelVersion === undefined ? (
-          <Paper variant="outlined" sx={{ p: 4 }}>
-            <EmptyState
-              title="Run a replay to reveal results"
-              detail="The charts remain tied to the artifact version recorded by the completed replay."
-            />
-          </Paper>
+        {activeModel === undefined ? (
+          <PanelSkeleton label="Loading selected model" />
+        ) : metrics.data === undefined ? (
+          metrics.isError ? (
+            missingReplay ? (
+              <Paper variant="outlined" sx={{ p: 4 }}>
+                <EmptyState
+                  title="No replay data for this model yet"
+                  detail={`${activeModel.display_name} has no inference results on the simulation device. Run the full-corpus replay to generate them.`}
+                />
+              </Paper>
+            ) : (
+              <ApiErrorPanel error={metrics.error} onRetry={() => void metrics.refetch()} />
+            )
+          ) : (
+            <PanelSkeleton label="Loading server detection metrics" />
+          )
         ) : (
-          <SimulationResults modelVersion={completedModelVersion} models={models.data?.models ?? []} />
+          <Stack spacing={3}>
+            <SimulationMetricsPanels metrics={metrics.data} />
+            {injections.data === undefined || corpusWindow === undefined ? (
+              injections.isError ? (
+                <ApiErrorPanel error={injections.error} onRetry={() => void injections.refetch()} />
+              ) : (
+                <PanelSkeleton label="Loading full injection corpus" />
+              )
+            ) : injections.data.events.length === 0 ? (
+              <Paper variant="outlined" sx={{ p: 4 }}>
+                <EmptyState title="No injection events" detail="The simulation corpus returned no ground-truth events." />
+              </Paper>
+            ) : (
+              <ReplayVisualization
+                model={activeModel}
+                injections={injections.data.events}
+                corpusWindow={corpusWindow}
+              />
+            )}
+          </Stack>
         )}
       </Stack>
     </Stack>

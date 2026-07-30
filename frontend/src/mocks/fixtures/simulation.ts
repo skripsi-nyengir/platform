@@ -1,7 +1,13 @@
 import { simDeviceId } from '../../contracts/common'
 import type { InferencePoint } from '../../contracts/inference'
 import type { SimInjectionEvent } from '../../contracts/injection'
-import type { SimModelsResponse } from '../../contracts/simulation'
+import {
+  simModelWindowSizes,
+  type SimulationMetricsResponse,
+  type SimulationScopeMetrics,
+  type SimModelVersion,
+  type SimModelsResponse,
+} from '../../contracts/simulation'
 import type { TelemetryPoint } from '../../contracts/telemetry'
 
 const modelDefinitions = [
@@ -29,6 +35,22 @@ const modelDefinitions = [
     threshold: 0.0003650374799326533,
     manifest_sha256: '21ec02b261b64f4491f0e5ecac1cbc41cba55fb7cb07d85b0596ca467e213b3b',
   },
+  {
+    version: 'artifact-gru-v3',
+    model_key: 'artifact-gru',
+    display_name: 'GRU-AE',
+    score_key: 'global_mse',
+    threshold: 0.0005618056084495022,
+    manifest_sha256: '0506d1da27d92a259e62c32ce43db7fd19dfa8ad679c08c6d67bf727653a2caa',
+  },
+  {
+    version: 'artifact-rnn-v3',
+    model_key: 'artifact-rnn',
+    display_name: 'RNN-AE',
+    score_key: 'global_mse',
+    threshold: 0.0005023972923204374,
+    manifest_sha256: 'c801a284c95c16ce9031a24f774d941c314bc0758e7b20d593af64fb630f0ebd',
+  },
 ] as const
 
 export function simulationModelsResponse(activeModelVersion: string): SimModelsResponse {
@@ -42,44 +64,71 @@ export function simulationModelsResponse(activeModelVersion: string): SimModelsR
   }
 }
 
-export const simulationInjectionEvents = Object.freeze([
-  {
-    event_id: 'injection-spike-001',
-    family: 'spike',
-    severity: 'high',
-    channel: 'suhu',
-    channel_index: 0,
-    start_ts: '2026-04-19T00:54:36',
-    end_ts: '2026-04-19T00:58:08',
-    start_idx: 51,
-    end_idx_exclusive: 89,
-    segment_index: 0,
-  },
-  {
-    event_id: 'injection-drift-002',
-    family: 'drift',
-    severity: 'medium',
-    channel: 'rh',
-    channel_index: 1,
-    start_ts: '2026-04-19T01:18:00',
-    end_ts: '2026-04-19T01:22:00',
-    start_idx: 290,
-    end_idx_exclusive: 333,
-    segment_index: 0,
-  },
-  {
-    event_id: 'injection-loss-003',
-    family: 'data_loss',
-    severity: 'low',
-    channel: 'suhu',
-    channel_index: 0,
-    start_ts: '2026-04-19T01:35:00',
-    end_ts: '2026-04-19T01:38:00',
-    start_idx: 470,
-    end_idx_exclusive: 503,
-    segment_index: 0,
-  },
-] satisfies SimInjectionEvent[])
+const injectionFamilies = ['spike', 'drift', 'stuck', 'erratic', 'bias', 'data_loss', 'garbage'] as const
+const injectionSeverities = ['low', 'medium', 'high'] as const
+const injectionCorpusStart = Date.parse('2026-04-19T00:54:36Z')
+
+export const simulationInjectionEvents = Object.freeze(Array.from({ length: 210 }, (_, index) => {
+  const start = new Date(injectionCorpusStart + index * 51 * 60 * 1_000)
+  const end = new Date(start.getTime() + 3 * 60 * 1_000 + 32 * 1_000)
+  return {
+    event_id: `injection-${String(index + 1).padStart(3, '0')}`,
+    family: injectionFamilies[index % injectionFamilies.length],
+    severity: injectionSeverities[index % injectionSeverities.length],
+    channel: index % 2 === 0 ? 'suhu' : 'rh',
+    channel_index: index % 2,
+    start_ts: start.toISOString().slice(0, 19),
+    end_ts: end.toISOString().slice(0, 19),
+    start_idx: index * 500 + 48,
+    end_idx_exclusive: index * 500 + 84,
+    segment_index: Math.floor(index / 12),
+  }
+}) satisfies SimInjectionEvent[])
+
+function scope<T extends 'timestamp' | 'overlapping_model_windows' | 'non_overlapping_evaluation_bins'>(
+  name: T,
+  values: readonly [number, number, number, number, number, number, number],
+): Omit<SimulationScopeMetrics, 'scope'> & { scope: T } {
+  const [precision, recall, f1, tn, fp, fn, tp] = values
+  const nEvaluated = tn + fp + fn + tp
+  return {
+    scope: name,
+    precision,
+    recall,
+    f1,
+    accuracy: (tn + tp) / nEvaluated,
+    tn,
+    fp,
+    fn,
+    tp,
+    n_evaluated: nEvaluated,
+    n_anomalous: fn + tp,
+  }
+}
+
+export function simulationMetricsResponse(modelVersion: SimModelVersion): SimulationMetricsResponse {
+  const model = modelDefinitions.find((candidate) => candidate.version === modelVersion)
+  if (model === undefined) throw new Error(`Missing simulation model fixture: ${modelVersion}`)
+  const operationalEvents = [
+    { segment_id: 0, start_idx: 51, end_idx: 88, n_candidates: 38, peak_score: model.threshold * 2.1 },
+    { segment_id: 4, start_idx: 20_112, end_idx: 20_164, n_candidates: 53, peak_score: model.threshold * 3.4 },
+  ]
+  return {
+    request_id: 'req_simulation_metrics',
+    device_id: simDeviceId,
+    model_version: modelVersion,
+    threshold: model.threshold,
+    window_size: simModelWindowSizes[modelVersion],
+    frame_count: 105_767,
+    event_count: simulationInjectionEvents.length,
+    scored_windows: 105_237,
+    timestamp_scope: scope('timestamp', [0.52, 0.66, 0.58, 88_810, 6_372, 3_550, 7_027]),
+    overlapping_scope: scope('overlapping_model_windows', [0.64, 0.77, 0.7, 81_577, 7_224, 3_741, 12_695]),
+    bins_scope: scope('non_overlapping_evaluation_bins', [0.69, 0.8, 0.74, 1_552, 153, 85, 334]),
+    operational_event_count: operationalEvents.length,
+    operational_events: operationalEvents,
+  }
+}
 
 const simulationTelemetryValues = [
   ['2026-04-19T00:49:45', 27.04, 49.17],

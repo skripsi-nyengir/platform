@@ -2,10 +2,27 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getAlertEvents } from './alerts'
 import { computeEda, getEdaPeriods } from './eda'
 import { edaCacheHitResponse } from '../mocks/fixtures/eda'
+import { simulationMetricsResponse } from '../mocks/fixtures/simulation'
+import { getSimulationMetrics } from './simulation'
 
 afterEach(() => vi.unstubAllGlobals())
 
 describe('B02 API adapters', () => {
+  it('queries server-owned simulation metrics with the default cooldown', async () => {
+    const payload = simulationMetricsResponse('artifact-transformer-v3')
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify(payload), {
+      headers: { 'content-type': 'application/json' },
+    })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await getSimulationMetrics({ modelVersion: 'artifact-transformer-v3' })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/simulation/metrics?model_version=artifact-transformer-v3&cooldown_samples=10',
+      expect.anything(),
+    )
+  })
+
   it('queries selected alert lifecycle by alert id without corpus bounds', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
       request_id: 'req-events',

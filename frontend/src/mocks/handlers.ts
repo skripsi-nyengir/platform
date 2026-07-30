@@ -83,6 +83,7 @@ import {
 } from '../contracts/preview'
 import {
   SetSimActiveModelRequestSchema,
+  SimulationMetricsQuerySchema,
   type SetSimActiveModelResponse,
 } from '../contracts/simulation'
 import type { LatestTelemetrySensor, TelemetryPoint } from '../contracts/telemetry'
@@ -90,6 +91,7 @@ import { modelsResponse, previewDevice, replayJob } from './fixtures/preview'
 import {
   simulationInferencePoints,
   simulationInjectionEvents,
+  simulationMetricsResponse,
   simulationModelsResponse,
   simulationTelemetryPoints,
 } from './fixtures/simulation'
@@ -288,6 +290,25 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
     http.get('/api/simulation/models', () =>
       HttpResponse.json(simulationModelsResponse(state.simActiveModelVersion)),
     ),
+
+    http.get('/api/simulation/metrics', ({ request }) => {
+      const url = new URL(request.url)
+      const parsed = SimulationMetricsQuerySchema.safeParse({
+        modelVersion: queryValue(url, 'model_version'),
+        cooldownSamples: queryNumber(url, 'cooldown_samples'),
+      })
+      if (!parsed.success) return invalidQuery(request)
+      if (parsed.data.modelVersion === 'artifact-gru-v3') {
+        return problem(
+          404,
+          'req_simulation_metrics_missing',
+          'Replay results not found',
+          'No replay results exist for this model on the simulation device',
+          request.url,
+        )
+      }
+      return HttpResponse.json(simulationMetricsResponse(parsed.data.modelVersion))
+    }),
 
     http.post('/api/simulation/active-model', async ({ request }) => {
       const parsed = SetSimActiveModelRequestSchema.safeParse(await request.json())
