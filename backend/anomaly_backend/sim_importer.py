@@ -428,6 +428,8 @@ def _upsert_models(connection: psycopg.Connection[dict[str, Any]]) -> None:
                 ("artifact-lstm-ae", "LSTM-AE"),
                 ("artifact-conv1d", "Conv1D Autoencoder"),
                 ("artifact-transformer", "Transformer Autoencoder"),
+                ("artifact-gru", "GRU-AE"),
+                ("artifact-rnn", "RNN-AE"),
             ],
         )
         cursor.executemany(
@@ -439,7 +441,7 @@ def _upsert_models(connection: psycopg.Connection[dict[str, Any]]) -> None:
                 source_commit, source_config, manifest_sha256, created_at
             ) VALUES (
                 %s, %s, 'artifact', TRUE, 'artifact_reconstruction_v1',
-                %s, %s::jsonb, 30, 1, 'global_mse', %s, %s, %s::jsonb,
+                %s, %s::jsonb, %s, 1, 'global_mse', %s, %s, %s::jsonb,
                 'context_end', NULL, %s, %s, now()
             )
             ON CONFLICT (version) DO UPDATE SET
@@ -466,6 +468,7 @@ def _upsert_models(connection: psycopg.Connection[dict[str, Any]]) -> None:
                     "artifact-lstm-ae",
                     CONTRACT_VERSION,
                     json.dumps(CHANNELS),
+                    30,
                     "real reconstruction-error score from trained weights; unlike preview simulator rows, this is not synthesized",
                     0.0006799018211313575,
                     json.dumps(
@@ -483,6 +486,7 @@ def _upsert_models(connection: psycopg.Connection[dict[str, Any]]) -> None:
                     "artifact-conv1d",
                     CONTRACT_VERSION,
                     json.dumps(CHANNELS),
+                    30,
                     "real reconstruction-error score from trained weights; unlike preview simulator rows, this is not synthesized",
                     0.00033055954801966444,
                     json.dumps(
@@ -500,6 +504,7 @@ def _upsert_models(connection: psycopg.Connection[dict[str, Any]]) -> None:
                     "artifact-transformer",
                     CONTRACT_VERSION,
                     json.dumps(CHANNELS),
+                    30,
                     "real reconstruction-error score from trained weights; unlike preview simulator rows, this is not synthesized",
                     0.0003650374799326533,
                     json.dumps(
@@ -511,6 +516,42 @@ def _upsert_models(connection: psycopg.Connection[dict[str, Any]]) -> None:
                     ),
                     "stored artifact validation percentile",
                     "21ec02b261b64f4491f0e5ecac1cbc41cba55fb7cb07d85b0596ca467e213b3b",
+                ),
+                (
+                    "artifact-gru-v3",
+                    "artifact-gru",
+                    CONTRACT_VERSION,
+                    json.dumps(CHANNELS),
+                    10,
+                    "real reconstruction-error score from trained weights; unlike preview simulator rows, this is not synthesized",
+                    0.0005618056084495022,
+                    json.dumps(
+                        {
+                            "source": "artifact validation scores",
+                            "percentile": 99.5,
+                            "comparator": ">",
+                        }
+                    ),
+                    "stored artifact validation percentile",
+                    "0506d1da27d92a259e62c32ce43db7fd19dfa8ad679c08c6d67bf727653a2caa",
+                ),
+                (
+                    "artifact-rnn-v3",
+                    "artifact-rnn",
+                    CONTRACT_VERSION,
+                    json.dumps(CHANNELS),
+                    10,
+                    "real reconstruction-error score from trained weights; unlike preview simulator rows, this is not synthesized",
+                    0.0005023972923204374,
+                    json.dumps(
+                        {
+                            "source": "artifact validation scores",
+                            "percentile": 99.5,
+                            "comparator": ">",
+                        }
+                    ),
+                    "stored artifact validation percentile",
+                    "c801a284c95c16ce9031a24f774d941c314bc0758e7b20d593af64fb630f0ebd",
                 ),
             ],
         )
@@ -544,6 +585,18 @@ def _upsert_models(connection: psycopg.Connection[dict[str, Any]]) -> None:
                     SIM_DEVICE_ID,
                     "artifact-transformer-v3",
                 ),
+                (
+                    "activation-sim-artifact-gru",
+                    "activation-sim-artifact-gru",
+                    SIM_DEVICE_ID,
+                    "artifact-gru-v3",
+                ),
+                (
+                    "activation-sim-artifact-rnn",
+                    "activation-sim-artifact-rnn",
+                    SIM_DEVICE_ID,
+                    "artifact-rnn-v3",
+                ),
             ],
         )
         # Default the sim device to the LSTM artifact. DO NOTHING preserves a
@@ -570,7 +623,7 @@ def _assert_counts(connection: psycopg.Connection[dict[str, Any]], corpus_id: st
     model_row = connection.execute(
         """
         SELECT count(*) AS count FROM model_versions
-        WHERE version IN ('artifact-lstm-ae-v3', 'artifact-conv1d-v3', 'artifact-transformer-v3')
+        WHERE version IN ('artifact-lstm-ae-v3', 'artifact-conv1d-v3', 'artifact-transformer-v3', 'artifact-gru-v3', 'artifact-rnn-v3')
           AND runtime_kind = 'artifact'
         """
     ).fetchone()
@@ -580,7 +633,7 @@ def _assert_counts(connection: psycopg.Connection[dict[str, Any]], corpus_id: st
         or model_row is None
         or int(telemetry_row["count"]) != EXPECTED_ROW_COUNT
         or int(event_row["count"]) != EXPECTED_EVENT_COUNT
-        or int(model_row["count"]) != 3
+        or int(model_row["count"]) != 5
     ):
         raise SimImportError("simulation import did not reach its expected counts")
 

@@ -326,6 +326,7 @@ def test_direct_dependencies_are_exactly_pinned() -> None:
         "sqlalchemy[asyncio]==2.0.51",
         "psycopg[binary]==3.3.2",
         "alembic==1.18.5",
+        "numpy==2.4.6",
     ]
     assert pyproject["project"]["optional-dependencies"]["test"] == [
         "pytest==9.1.0",

@@ -29,6 +29,8 @@ _ARTIFACT_DIRS = {
     "artifact-lstm-ae-v3": "lstm",
     "artifact-conv1d-v3": "conv1d",
     "artifact-transformer-v3": "transformer",
+    "artifact-rnn-v3": "rnn",
+    "artifact-gru-v3": "gru",
 }
 
 

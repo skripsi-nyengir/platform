@@ -60,3 +60,76 @@ async def set_sim_active_model(
         )
         row = result.mappings().one_or_none()
     return cast(str, row["model_version"]) if row is not None else None
+
+
+_SIM_MODEL_META = text(
+    """
+    SELECT version, window_size, threshold
+    FROM model_versions
+    WHERE version = :model_version AND runtime_kind = 'artifact'
+    """
+)
+
+_SIM_WINDOW_SCORES = text(
+    """
+    SELECT source_start_index, source_end_index, score
+    FROM inference_results
+    WHERE device_id = :device_id AND model_version = :model_version
+    ORDER BY source_start_index
+    """
+)
+
+_SIM_EVENTS = text(
+    """
+    SELECT start_idx, end_idx_exclusive
+    FROM injection_events
+    WHERE device_id = :device_id
+    ORDER BY start_idx
+    """
+)
+
+_SIM_SEGMENTS = text(
+    """
+    SELECT min(corpus_index) AS seg_start, max(corpus_index) + 1 AS seg_end
+    FROM telemetry
+    WHERE device_id = :device_id
+    GROUP BY segment_id
+    ORDER BY seg_start
+    """
+)
+
+_SIM_FRAME_COUNT = text(
+    """
+    SELECT coalesce(max(corpus_index) + 1, 0) AS frame_count
+    FROM telemetry
+    WHERE device_id = :device_id
+    """
+)
+
+
+async def sim_metrics_source(
+    connection: AsyncConnection,
+    *,
+    device_id: CorpusDeviceId,
+    model_version: str,
+) -> dict[str, object] | None:
+    meta = (
+        await connection.execute(_SIM_MODEL_META, {"model_version": model_version})
+    ).mappings().one_or_none()
+    if meta is None:
+        return None
+    params = {"device_id": device_id, "model_version": model_version}
+    windows = (await connection.execute(_SIM_WINDOW_SCORES, params)).all()
+    events = (await connection.execute(_SIM_EVENTS, {"device_id": device_id})).all()
+    segments = (await connection.execute(_SIM_SEGMENTS, {"device_id": device_id})).all()
+    frame_count = (
+        await connection.execute(_SIM_FRAME_COUNT, {"device_id": device_id})
+    ).scalar_one()
+    return {
+        "window_size": int(meta["window_size"]),
+        "threshold": float(meta["threshold"]),
+        "frame_count": int(frame_count),
+        "window_rows": [(r[0], r[1], r[2]) for r in windows],
+        "event_rows": [(r[0], r[1]) for r in events],
+        "segment_rows": [(r[0], r[1]) for r in segments],
+    }

@@ -45,6 +45,7 @@ class ScoreBatch:
     target_ts: tuple[datetime, ...]
     target_raw_values: tuple[FloatChannels, ...] | None = None
     target_model_values: tuple[FloatChannels, ...] | None = None
+    window_size: int = WINDOW_SIZE
 
     @property
     def size(self) -> int:
@@ -90,12 +91,16 @@ def _validate_finite_pair(value: object, field: str) -> None:
             ) from error
 
 
-def _validate_values(values: tuple[FloatWindow, ...], size: int, field: str) -> None:
+def _validate_values(
+    values: tuple[FloatWindow, ...], size: int, window_size: int, field: str
+) -> None:
     if not isinstance(values, tuple) or len(values) != size:
         raise ScorerProtocolError(f"{field} batch dimension must equal N")
     for window in values:
-        if not isinstance(window, tuple) or len(window) != WINDOW_SIZE:
-            raise ScorerProtocolError(f"{field} must have shape [N,30,2]")
+        if not isinstance(window, tuple) or len(window) != window_size:
+            raise ScorerProtocolError(
+                f"{field} must have shape [N,{window_size},2]"
+            )
         for pair in window:
             _validate_finite_pair(pair, field)
 
@@ -118,8 +123,10 @@ def validate_batch(
     size = batch.size
     if size == 0:
         raise ScorerProtocolError("batch must contain at least one window")
-    _validate_values(batch.raw_values, size, "raw_values")
-    _validate_values(batch.model_values, size, "model_values")
+    if isinstance(batch.window_size, bool) or not isinstance(batch.window_size, int) or batch.window_size < 1:
+        raise ScorerProtocolError("window_size must be a positive integer")
+    _validate_values(batch.raw_values, size, batch.window_size, "raw_values")
+    _validate_values(batch.model_values, size, batch.window_size, "model_values")
 
     parallel = {
         "context_ts": batch.context_ts,
@@ -135,8 +142,10 @@ def validate_batch(
 
     for index in range(size):
         timestamps = batch.context_ts[index]
-        if not isinstance(timestamps, tuple) or len(timestamps) != WINDOW_SIZE:
-            raise ScorerProtocolError("context_ts must have shape [N,30]")
+        if not isinstance(timestamps, tuple) or len(timestamps) != batch.window_size:
+            raise ScorerProtocolError(
+                f"context_ts must have shape [N,{batch.window_size}]"
+            )
         for position, timestamp in enumerate(timestamps):
             _validate_timestamp(timestamp, "context_ts")
             if position and timestamp <= timestamps[position - 1]:
@@ -152,9 +161,11 @@ def validate_batch(
             or not isinstance(start_index, int)
             or not isinstance(end_index, int)
             or start_index < 0
-            or end_index - start_index != WINDOW_SIZE - 1
+            or end_index - start_index != batch.window_size - 1
         ):
-            raise ScorerProtocolError("context corpus indices must span 30 readings")
+            raise ScorerProtocolError(
+                f"context corpus indices must span {batch.window_size} readings"
+            )
         if index:
             previous_key = (
                 batch.segment_ids[index - 1],

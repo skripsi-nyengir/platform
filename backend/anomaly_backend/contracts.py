@@ -236,6 +236,44 @@ class SetSimActiveModelResponse(StrictModel):
     active_model_version: str
 
 
+class ScopeMetricsModel(StrictModel):
+    scope: str
+    precision: float
+    recall: float
+    f1: float
+    accuracy: float
+    tn: int
+    fp: int
+    fn: int
+    tp: int
+    n_evaluated: int
+    n_anomalous: int
+
+
+class SimAlertEventModel(StrictModel):
+    segment_id: int
+    start_idx: int
+    end_idx: int
+    n_candidates: int
+    peak_score: float
+
+
+class SimMetricsResponse(StrictModel):
+    request_id: str
+    device_id: CorpusDeviceId
+    model_version: str
+    threshold: float
+    window_size: int
+    frame_count: int
+    event_count: int
+    scored_windows: int
+    timestamp_scope: ScopeMetricsModel
+    overlapping_scope: ScopeMetricsModel
+    bins_scope: ScopeMetricsModel
+    operational_event_count: int
+    operational_events: list[SimAlertEventModel]
+
+
 class TelemetryHistoryQuery(StrictModel):
     _optional_non_nullable_fields: ClassVar[frozenset[str]] = frozenset({"cursor"})
 

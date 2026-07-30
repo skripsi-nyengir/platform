@@ -108,6 +108,157 @@ class TransformerAutoencoder(nn.Module):
         return cast(torch.Tensor, self.output_projection(reconstructed))
 
 
+# Recurrent autoencoders (window 10). Forward math is byte-faithful to the step8
+# checkpoints; do not refactor it (Gate A parity is the contract).
+class RnnEncoder(nn.Module):
+    def __init__(
+        self,
+        input_channels: int,
+        hidden_size: int,
+        latent_size: int,
+        num_layers: int,
+        dropout: float,
+        nonlinearity: str,
+    ) -> None:
+        super().__init__()
+        self.recurrent = nn.RNN(
+            input_size=input_channels,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            nonlinearity=nonlinearity,
+            dropout=dropout if num_layers > 1 else 0.0,
+            batch_first=True,
+        )
+        self.to_latent = nn.Linear(hidden_size, latent_size)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        _, hidden = self.recurrent(inputs)
+        return cast(torch.Tensor, self.to_latent(hidden[-1]))
+
+
+class RnnDecoder(nn.Module):
+    def __init__(
+        self,
+        latent_size: int,
+        hidden_size: int,
+        output_channels: int,
+        num_layers: int,
+        dropout: float,
+        nonlinearity: str,
+    ) -> None:
+        super().__init__()
+        self.recurrent = nn.RNN(
+            input_size=latent_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            nonlinearity=nonlinearity,
+            dropout=dropout if num_layers > 1 else 0.0,
+            batch_first=True,
+        )
+        self.to_output = nn.Linear(hidden_size, output_channels)
+
+    def forward(self, context: torch.Tensor, sequence_length: int) -> torch.Tensor:
+        repeated = context.unsqueeze(1).expand(-1, sequence_length, -1)
+        decoded, _ = self.recurrent(repeated)
+        return cast(torch.Tensor, self.to_output(decoded))
+
+
+class RnnAutoencoder(nn.Module):
+    def __init__(
+        self,
+        input_channels: int = 2,
+        hidden_size: int = 32,
+        latent_size: int = 8,
+        num_layers: int = 2,
+        dropout: float = 0.1,
+        nonlinearity: str = "tanh",
+    ) -> None:
+        super().__init__()
+        self.input_channels = int(input_channels)
+        self.encoder = RnnEncoder(
+            input_channels, hidden_size, latent_size, num_layers, dropout, nonlinearity
+        )
+        self.decoder = RnnDecoder(
+            latent_size, hidden_size, input_channels, num_layers, dropout, nonlinearity
+        )
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        reconstruction = self.decoder(self.encoder(inputs), inputs.shape[1])
+        return cast(torch.Tensor, reconstruction)
+
+
+class GruEncoder(nn.Module):
+    def __init__(
+        self,
+        input_channels: int,
+        hidden_size: int,
+        latent_size: int,
+        num_layers: int,
+        dropout: float,
+    ) -> None:
+        super().__init__()
+        self.recurrent = nn.GRU(
+            input_size=input_channels,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            dropout=dropout if num_layers > 1 else 0.0,
+            batch_first=True,
+        )
+        self.to_latent = nn.Linear(hidden_size, latent_size)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        _, hidden = self.recurrent(inputs)
+        return cast(torch.Tensor, self.to_latent(hidden[-1]))
+
+
+class GruDecoder(nn.Module):
+    def __init__(
+        self,
+        latent_size: int,
+        hidden_size: int,
+        output_channels: int,
+        num_layers: int,
+        dropout: float,
+    ) -> None:
+        super().__init__()
+        self.recurrent = nn.GRU(
+            input_size=latent_size,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            dropout=dropout if num_layers > 1 else 0.0,
+            batch_first=True,
+        )
+        self.to_output = nn.Linear(hidden_size, output_channels)
+
+    def forward(self, context: torch.Tensor, sequence_length: int) -> torch.Tensor:
+        repeated = context.unsqueeze(1).expand(-1, sequence_length, -1)
+        decoded, _ = self.recurrent(repeated)
+        return cast(torch.Tensor, self.to_output(decoded))
+
+
+class GruAutoencoder(nn.Module):
+    def __init__(
+        self,
+        input_channels: int = 2,
+        hidden_size: int = 32,
+        latent_size: int = 8,
+        num_layers: int = 2,
+        dropout: float = 0.1,
+    ) -> None:
+        super().__init__()
+        self.input_channels = int(input_channels)
+        self.encoder = GruEncoder(
+            input_channels, hidden_size, latent_size, num_layers, dropout
+        )
+        self.decoder = GruDecoder(
+            latent_size, hidden_size, input_channels, num_layers, dropout
+        )
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        reconstruction = self.decoder(self.encoder(inputs), inputs.shape[1])
+        return cast(torch.Tensor, reconstruction)
+
+
 def _load_lstm(state_dict: dict[str, Any]) -> nn.Module:
     model = LstmAutoencoder(LstmAutoencoderConfig(input_channels=2))
     renamed = {
@@ -133,10 +284,24 @@ def _load_transformer(state_dict: dict[str, Any]) -> nn.Module:
     return model
 
 
+def _load_rnn(state_dict: dict[str, Any]) -> nn.Module:
+    model = RnnAutoencoder()
+    model.load_state_dict(state_dict, strict=True)
+    return model
+
+
+def _load_gru(state_dict: dict[str, Any]) -> nn.Module:
+    model = GruAutoencoder()
+    model.load_state_dict(state_dict, strict=True)
+    return model
+
+
 _LOADERS = {
     "artifact-lstm-ae-v3": _load_lstm,
     "artifact-conv1d-v3": _load_conv1d,
     "artifact-transformer-v3": _load_transformer,
+    "artifact-rnn-v3": _load_rnn,
+    "artifact-gru-v3": _load_gru,
 }
 
 

@@ -252,8 +252,9 @@ def _context_rows(
     connection: psycopg.Connection[dict[str, Any]],
     job: dict[str, Any],
     targets: list[dict[str, Any]],
+    window_size: int,
 ) -> dict[int, dict[str, Any]]:
-    start = max(0, int(targets[0]["corpus_index"]) - 30)
+    start = max(0, int(targets[0]["corpus_index"]) - window_size)
     end = int(targets[-1]["corpus_index"])
     rows = connection.execute(
         """
@@ -315,8 +316,9 @@ def _score_batch(
     if version is None:
         raise ReplayWorkerError("job model snapshot no longer exists")
     temporal = TemporalSemantics(str(version["temporal_semantics"]))
-    required_preceding = 30 if temporal is TemporalSemantics.NEXT_TARGET else 29
-    contexts = _context_rows(connection, job, targets)
+    window_size = int(version["window_size"])
+    required_preceding = window_size if temporal is TemporalSemantics.NEXT_TARGET else window_size - 1
+    contexts = _context_rows(connection, job, targets, window_size)
     segment_starts = _segment_starts(
         connection,
         str(job["corpus_id"]),
@@ -350,7 +352,7 @@ def _score_batch(
             for index in range(start_index, end_index + 1)
         ]
         if (
-            len(window) != 30
+            len(window) != window_size
             or any(row is None for row in window)
             or any(int(cast(dict[str, Any], row)["segment_id"]) != segment_id for row in window)
         ):
@@ -377,7 +379,7 @@ def _score_batch(
         context_end_indices.append(end_index)
         segment_ids.append(segment_id)
         ordinal = (
-            end_index - segment_starts[segment_id] - 29
+            end_index - segment_starts[segment_id] - (window_size - 1)
         )
         if ordinal < 0:
             continue
@@ -420,6 +422,7 @@ def _score_batch(
             if temporal is TemporalSemantics.NEXT_TARGET
             else None
         ),
+        window_size=window_size,
     )
     return batch, eligible, float(version["threshold"]), minimum, maximum
 
@@ -699,7 +702,7 @@ def process_chunk(
                 "score_provenance": job["score_provenance"],
                 "source_start_index": metadata["source_start_index"],
                 "source_end_index": metadata["source_end_index"],
-                "reading_count": 30,
+                "reading_count": batch.window_size,
                 "stride": 1,
                 "segment_id": metadata["target"]["segment_id"],
                 "eligible_window_ordinal": metadata[
