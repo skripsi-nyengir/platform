@@ -30,6 +30,7 @@ import type { SimInjectionEvent } from '../contracts/injection'
 import { ReplayJobRequestSchema } from '../contracts/preview'
 import {
   simModelWindowSizes,
+  type SimulationBucketHours,
   type SimModel,
 } from '../contracts/simulation'
 import { useInferenceResultsQuery } from '../features/inference/queries'
@@ -218,6 +219,7 @@ function ReplayVisualization({
 
 export function SimulationPage() {
   const queryClient = useQueryClient()
+  const [bucketHours, setBucketHours] = useState<SimulationBucketHours>(24)
   const models = useQuery({
     queryKey: simulationModelsKey,
     queryFn: ({ signal }) => getSimulationModels(signal),
@@ -228,7 +230,7 @@ export function SimulationPage() {
     staleTime: Number.POSITIVE_INFINITY,
   })
   const activeModel = models.data?.models.find((model) => model.is_active)
-  const metrics = useSimulationMetricsQuery(activeModel?.version)
+  const metrics = useSimulationMetricsQuery(activeModel?.version, bucketHours)
   const corpusWindow = useMemo(
     () => fullInjectionWindow(injections.data?.events ?? []),
     [injections.data?.events],
@@ -400,7 +402,11 @@ export function SimulationPage() {
           )
         ) : (
           <Stack spacing={3}>
-            <SimulationMetricsPanels metrics={metrics.data} />
+            <SimulationMetricsPanels
+              metrics={metrics.data}
+              bucketHours={bucketHours}
+              onBucketHoursChange={setBucketHours}
+            />
             {injections.data === undefined || corpusWindow === undefined ? (
               injections.isError ? (
                 <ApiErrorPanel error={injections.error} onRetry={() => void injections.refetch()} />

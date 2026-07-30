@@ -106,13 +106,22 @@ function scope<T extends 'timestamp' | 'overlapping_model_windows' | 'non_overla
   }
 }
 
-export function simulationMetricsResponse(modelVersion: SimModelVersion): SimulationMetricsResponse {
+export function simulationMetricsResponse(
+  modelVersion: SimModelVersion,
+  bucketHours: number | null = null,
+): SimulationMetricsResponse {
   const model = modelDefinitions.find((candidate) => candidate.version === modelVersion)
   if (model === undefined) throw new Error(`Missing simulation model fixture: ${modelVersion}`)
   const operationalEvents = [
     { segment_id: 0, start_idx: 51, end_idx: 88, n_candidates: 38, peak_score: model.threshold * 2.1 },
     { segment_id: 4, start_idx: 20_112, end_idx: 20_164, n_candidates: 53, peak_score: model.threshold * 3.4 },
   ]
+  const firstBucketStart = Date.parse('2026-04-19T00:00:00Z')
+  const operationalBuckets = bucketHours === null ? [] : [2, 0].map((eventCount, index) => ({
+    bucket_start: new Date(firstBucketStart + index * bucketHours * 3_600_000).toISOString().slice(0, 19),
+    bucket_end: new Date(firstBucketStart + (index + 1) * bucketHours * 3_600_000).toISOString().slice(0, 19),
+    event_count: eventCount,
+  }))
   return {
     request_id: 'req_simulation_metrics',
     device_id: simDeviceId,
@@ -127,6 +136,8 @@ export function simulationMetricsResponse(modelVersion: SimModelVersion): Simula
     bins_scope: scope('non_overlapping_evaluation_bins', [0.69, 0.8, 0.74, 1_552, 153, 85, 334]),
     operational_event_count: operationalEvents.length,
     operational_events: operationalEvents,
+    bucket_hours: bucketHours,
+    operational_buckets: operationalBuckets,
   }
 }
 

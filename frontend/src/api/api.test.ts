@@ -23,6 +23,25 @@ describe('B02 API adapters', () => {
     )
   })
 
+  it('queries the selected operational bucket interval', async () => {
+    const payload = {
+      ...simulationMetricsResponse('artifact-transformer-v3'),
+      bucket_hours: 6,
+      operational_buckets: [],
+    }
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify(payload), {
+      headers: { 'content-type': 'application/json' },
+    })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await getSimulationMetrics({ modelVersion: 'artifact-transformer-v3', bucketHours: 6 })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/simulation/metrics?model_version=artifact-transformer-v3&cooldown_samples=10&bucket_hours=6',
+      expect.anything(),
+    )
+  })
+
   it('queries selected alert lifecycle by alert id without corpus bounds', async () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
       request_id: 'req-events',

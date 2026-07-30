@@ -24,6 +24,9 @@ export function getSimulationMetrics(
     model_version: queryInput.modelVersion,
     cooldown_samples: String(queryInput.cooldownSamples),
   })
+  if (queryInput.bucketHours !== undefined) {
+    query.set('bucket_hours', String(queryInput.bucketHours))
+  }
   return requestJson(`/api/simulation/metrics?${query}`, SimulationMetricsResponseSchema, {
     signal,
   })

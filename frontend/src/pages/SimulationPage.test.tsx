@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
@@ -26,6 +26,9 @@ describe('SimulationPage', () => {
     expect(screen.getByText('Primary thesis metric')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Operational alerts' })).toBeVisible()
     expect(screen.getByRole('table', { name: 'Operational alert events' })).toBeVisible()
+    expect(screen.getByRole('group', { name: 'Interval operasional' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Per hari', pressed: true })).toBeVisible()
+    expect(screen.getByRole('table', { name: 'Operational alerts by period' })).toBeVisible()
     expect(screen.getByText('Replay already computed — showing stored results.')).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Run injected replay' })).not.toBeInTheDocument()
 
@@ -39,6 +42,51 @@ describe('SimulationPage', () => {
 
     fireEvent.change(slider, { target: { value: '210' } })
     expect(await screen.findByRole('heading', { name: 'Event 210 of 210' })).toBeVisible()
+  })
+
+  it('refetches operational buckets when the interval changes and keeps zero-count periods', async () => {
+    const requestedBucketHours: string[] = []
+    server.use(
+      http.get('/api/simulation/metrics', ({ request }) => {
+        const url = new URL(request.url)
+        const bucketHours = url.searchParams.get('bucket_hours') ?? '24'
+        requestedBucketHours.push(bucketHours)
+        return HttpResponse.json({
+          ...simulationMetricsResponse('artifact-transformer-v3'),
+          bucket_hours: Number(bucketHours),
+          operational_buckets: bucketHours === '1'
+            ? [
+                {
+                  bucket_start: '2026-04-19T00:00:00',
+                  bucket_end: '2026-04-19T01:00:00',
+                  event_count: 2,
+                },
+                {
+                  bucket_start: '2026-04-19T01:00:00',
+                  bucket_end: '2026-04-19T02:00:00',
+                  event_count: 0,
+                },
+              ]
+            : [
+                {
+                  bucket_start: '2026-04-19T00:00:00',
+                  bucket_end: '2026-04-20T00:00:00',
+                  event_count: 2,
+                },
+              ],
+        })
+      }),
+    )
+    const user = userEvent.setup()
+    renderApp('/simulation')
+
+    expect(await screen.findByRole('button', { name: 'Per hari', pressed: true })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Per jam' }))
+
+    expect(await screen.findByRole('button', { name: 'Per jam', pressed: true })).toBeVisible()
+    expect(within(screen.getByRole('table', { name: 'Operational alerts by period' })).getByRole('cell', { name: '0' })).toBeVisible()
+    expect(requestedBucketHours).toContain('24')
+    expect(requestedBucketHours).toContain('1')
   })
 
   it('renders a clear empty state when the selected model has no replay results', async () => {

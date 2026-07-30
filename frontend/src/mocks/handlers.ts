@@ -296,6 +296,7 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
       const parsed = SimulationMetricsQuerySchema.safeParse({
         modelVersion: queryValue(url, 'model_version'),
         cooldownSamples: queryNumber(url, 'cooldown_samples'),
+        bucketHours: queryNumber(url, 'bucket_hours'),
       })
       if (!parsed.success) return invalidQuery(request)
       if (parsed.data.modelVersion === 'artifact-gru-v3') {
@@ -307,7 +308,10 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
           request.url,
         )
       }
-      return HttpResponse.json(simulationMetricsResponse(parsed.data.modelVersion))
+      return HttpResponse.json(simulationMetricsResponse(
+        parsed.data.modelVersion,
+        parsed.data.bucketHours ?? null,
+      ))
     }),
 
     http.post('/api/simulation/active-model', async ({ request }) => {

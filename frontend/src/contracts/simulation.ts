@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { simDeviceId } from './common'
+import { HistoricalDateTimeSchema, simDeviceId } from './common'
 
 export const SimModelVersionSchema = z.enum([
   'artifact-lstm-ae-v3',
@@ -86,9 +86,20 @@ export const SimulationOperationalEventSchema = z
   })
 export type SimulationOperationalEvent = z.infer<typeof SimulationOperationalEventSchema>
 
+export const SimulationOperationalBucketSchema = z.strictObject({
+  bucket_start: HistoricalDateTimeSchema,
+  bucket_end: HistoricalDateTimeSchema,
+  event_count: z.number().int().nonnegative(),
+})
+export type SimulationOperationalBucket = z.infer<typeof SimulationOperationalBucketSchema>
+
+export const SimulationBucketHoursSchema = z.union([z.literal(1), z.literal(6), z.literal(24)])
+export type SimulationBucketHours = z.infer<typeof SimulationBucketHoursSchema>
+
 export const SimulationMetricsQuerySchema = z.strictObject({
   modelVersion: SimModelVersionSchema,
   cooldownSamples: z.number().int().min(1).default(10),
+  bucketHours: z.number().int().min(1).optional(),
 })
 export type SimulationMetricsQuery = z.input<typeof SimulationMetricsQuerySchema>
 
@@ -117,6 +128,8 @@ export const SimulationMetricsResponseSchema = z
     bins_scope: BinsScopeSchema,
     operational_event_count: z.number().int().nonnegative(),
     operational_events: z.array(SimulationOperationalEventSchema),
+    bucket_hours: z.number().int().positive().nullable(),
+    operational_buckets: z.array(SimulationOperationalBucketSchema),
   })
   .refine(
     (value) => value.operational_event_count === value.operational_events.length,

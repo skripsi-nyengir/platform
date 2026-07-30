@@ -13,11 +13,14 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import type {
   SimulationMetricsResponse,
   SimulationScopeMetrics,
+  SimulationBucketHours,
 } from '../../contracts/simulation'
 import { tokens } from '../../theme/tokens'
 
@@ -38,6 +41,23 @@ function formatScore(value: number): string {
   return Math.abs(value) < 0.001
     ? value.toExponential(3)
     : value.toLocaleString('id-ID', { maximumFractionDigits: 6 })
+}
+
+const bucketIntervals = [
+  { hours: 24, label: 'Per hari' },
+  { hours: 6, label: 'Per 6 jam' },
+  { hours: 1, label: 'Per jam' },
+] as const satisfies readonly { hours: SimulationBucketHours; label: string }[]
+
+function formatBucketDateTime(value: string): string {
+  return new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(`${value}+07:00`))
 }
 
 function ScopeCard({
@@ -120,7 +140,15 @@ function ScopeCard({
   )
 }
 
-export function SimulationMetricsPanels({ metrics }: { metrics: SimulationMetricsResponse }) {
+export function SimulationMetricsPanels({
+  metrics,
+  bucketHours,
+  onBucketHoursChange,
+}: {
+  metrics: SimulationMetricsResponse
+  bucketHours: SimulationBucketHours
+  onBucketHoursChange: (value: SimulationBucketHours) => void
+}) {
   const scopes = [
     {
       label: 'Timestamp scope',
@@ -189,10 +217,67 @@ export function SimulationMetricsPanels({ metrics }: { metrics: SimulationMetric
             </Stack>
           </Grid>
           <Grid size={{ sm: 12, lg: 9 }}>
-            {metrics.operational_events.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">No operational alert events were produced.</Typography>
-            ) : (
+            <Stack spacing={3}>
               <Stack spacing={1}>
+                <Stack
+                  direction="row"
+                  spacing={2}
+                  useFlexGap
+                  sx={{ alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}
+                >
+                  <Stack spacing={0.25}>
+                    <Typography variant="h3">Alerts by period</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Zero-count periods remain visible for a continuous operational timeline.
+                    </Typography>
+                  </Stack>
+                  <ToggleButtonGroup
+                    exclusive
+                    size="small"
+                    value={bucketHours}
+                    aria-label="Interval operasional"
+                    onChange={(_, value: SimulationBucketHours | null) => {
+                      if (value !== null) onBucketHoursChange(value)
+                    }}
+                  >
+                    {bucketIntervals.map((interval) => (
+                      <ToggleButton
+                        key={interval.hours}
+                        value={interval.hours}
+                        aria-label={interval.label}
+                      >
+                        {interval.label}
+                      </ToggleButton>
+                    ))}
+                  </ToggleButtonGroup>
+                </Stack>
+                <TableContainer sx={{ maxHeight: tokens.size.control * 6 }}>
+                  <Table stickyHeader size="small" aria-label="Operational alerts by period">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Period start (WIB)</TableCell>
+                        <TableCell>Period end (WIB)</TableCell>
+                        <TableCell align="right">Alerts</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {metrics.operational_buckets.map((bucket) => (
+                        <TableRow key={bucket.bucket_start}>
+                          <TableCell sx={technicalTextSx}>{formatBucketDateTime(bucket.bucket_start)}</TableCell>
+                          <TableCell sx={technicalTextSx}>{formatBucketDateTime(bucket.bucket_end)}</TableCell>
+                          <TableCell align="right" sx={technicalTextSx}>{bucket.event_count}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Stack>
+
+              {metrics.operational_events.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">No operational alert events were produced.</Typography>
+              ) : (
+                <Stack spacing={1}>
+                  <Typography variant="h3">Merged alert events</Typography>
                 <Typography variant="caption" color="text.secondary">
                   Scroll to inspect all {metrics.operational_event_count.toLocaleString('id-ID')} merged alert events.
                 </Typography>
@@ -221,7 +306,8 @@ export function SimulationMetricsPanels({ metrics }: { metrics: SimulationMetric
                   </Table>
                 </TableContainer>
               </Stack>
-            )}
+              )}
+            </Stack>
           </Grid>
         </Grid>
       </Paper>
