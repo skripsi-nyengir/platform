@@ -468,9 +468,9 @@ def _upsert_models(connection: psycopg.Connection[dict[str, Any]]) -> None:
                     "artifact-lstm-ae",
                     CONTRACT_VERSION,
                     json.dumps(CHANNELS),
-                    30,
+                    10,
                     "real reconstruction-error score from trained weights; unlike preview simulator rows, this is not synthesized",
-                    0.0006799018211313575,
+                    0.0009487349475675721,
                     json.dumps(
                         {
                             "source": "artifact validation scores",
@@ -479,16 +479,16 @@ def _upsert_models(connection: psycopg.Connection[dict[str, Any]]) -> None:
                         }
                     ),
                     "stored artifact validation percentile",
-                    "f26a67d378c4b5a90e64f7dc3844d2971cb414d1bf60926fefa188b13df99212",
+                    "0dde621c1fe4117fd57602a94c30bd764e900108ceea3675fba6295e9500cccb",
                 ),
                 (
                     "artifact-conv1d-v3",
                     "artifact-conv1d",
                     CONTRACT_VERSION,
                     json.dumps(CHANNELS),
-                    30,
+                    10,
                     "real reconstruction-error score from trained weights; unlike preview simulator rows, this is not synthesized",
-                    0.00033055954801966444,
+                    0.0003201981883103135,
                     json.dumps(
                         {
                             "source": "artifact validation scores",
@@ -497,16 +497,16 @@ def _upsert_models(connection: psycopg.Connection[dict[str, Any]]) -> None:
                         }
                     ),
                     "stored artifact validation percentile",
-                    "189a935b547163d00505deb4f654d59ca36d7077e54b87f4b5c472cf41c5fcc6",
+                    "85c901e8fed463207a44151adc14772d3660384ae88daf9fcc53431e6acc39c9",
                 ),
                 (
                     "artifact-transformer-v3",
                     "artifact-transformer",
                     CONTRACT_VERSION,
                     json.dumps(CHANNELS),
-                    30,
+                    10,
                     "real reconstruction-error score from trained weights; unlike preview simulator rows, this is not synthesized",
-                    0.0003650374799326533,
+                    0.00026567234380490805,
                     json.dumps(
                         {
                             "source": "artifact validation scores",
@@ -515,7 +515,7 @@ def _upsert_models(connection: psycopg.Connection[dict[str, Any]]) -> None:
                         }
                     ),
                     "stored artifact validation percentile",
-                    "21ec02b261b64f4491f0e5ecac1cbc41cba55fb7cb07d85b0596ca467e213b3b",
+                    "364b0c73be1054b05a33924615d53ee1ebcb12af4bbb7d4efc0c1a144af3e015",
                 ),
                 (
                     "artifact-gru-v3",
