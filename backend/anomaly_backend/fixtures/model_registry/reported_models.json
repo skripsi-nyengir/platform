@@ -1,23 +1,18 @@
 {
   "items": [
     {
-      "id": "transformer_step5",
-      "family": "transformer",
-      "display_name": "Transformer Autoencoder",
+      "id": "conv1d_step5",
+      "family": "conv1d",
+      "display_name": "Conv1D Autoencoder",
       "architecture": {
-        "d_model": 32,
-        "n_heads": 4,
-        "encoder_layers": 2,
-        "decoder_layers": 2,
-        "ff_dim": 64,
-        "dropout": 0.1
+        "latent_channels": 16
       },
-      "param_count": 44002,
-      "best_val_mse": 5.157235643571508e-05,
-      "best_epoch": 8,
-      "model_sha256": "21ec02b261b64f4491f0e5ecac1cbc41cba55fb7cb07d85b0596ca467e213b3b",
+      "param_count": 7474,
+      "best_val_mse": 2.1572509291888413e-05,
+      "best_epoch": 4,
+      "model_sha256": "85c901e8fed463207a44151adc14772d3660384ae88daf9fcc53431e6acc39c9",
       "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
-      "window_size": 30,
+      "window_size": 10,
       "features": [
         "suhu",
         "rh"
@@ -27,18 +22,21 @@
       "summary": "Validation MSE reported from training; it was not computed by the platform, and no operational threshold is defined."
     },
     {
-      "id": "conv1d_step5",
-      "family": "conv1d",
-      "display_name": "Conv1D Autoencoder",
+      "id": "gru_step5",
+      "family": "gru",
+      "display_name": "GRU Autoencoder",
       "architecture": {
-        "latent_channels": 16
+        "hidden_size": 32,
+        "latent_size": 8,
+        "layers": 2,
+        "dropout": 0.1
       },
-      "param_count": 7474,
-      "best_val_mse": 1.8269720032613215e-05,
-      "best_epoch": 5,
-      "model_sha256": "189a935b547163d00505deb4f654d59ca36d7077e54b87f4b5c472cf41c5fcc6",
+      "param_count": 20490,
+      "best_val_mse": 6.004524724196261e-05,
+      "best_epoch": 13,
+      "model_sha256": "0506d1da27d92a259e62c32ce43db7fd19dfa8ad679c08c6d67bf727653a2caa",
       "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
-      "window_size": 30,
+      "window_size": 10,
       "features": [
         "suhu",
         "rh"
@@ -53,16 +51,66 @@
       "display_name": "LSTM Autoencoder",
       "architecture": {
         "hidden_size": 32,
-        "latent_size": 16,
+        "latent_size": 8,
         "layers": 2,
         "dropout": 0.1
       },
-      "param_count": 28498,
-      "best_val_mse": 4.789443077487578e-05,
+      "param_count": 27210,
+      "best_val_mse": 5.146170129209432e-05,
       "best_epoch": 24,
-      "model_sha256": "f26a67d378c4b5a90e64f7dc3844d2971cb414d1bf60926fefa188b13df99212",
+      "model_sha256": "0dde621c1fe4117fd57602a94c30bd764e900108ceea3675fba6295e9500cccb",
       "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
-      "window_size": 30,
+      "window_size": 10,
+      "features": [
+        "suhu",
+        "rh"
+      ],
+      "score_semantics": "window_mean_squared_reconstruction_error",
+      "report_source": "reported_model_registry",
+      "summary": "Validation MSE reported from training; it was not computed by the platform, and no operational threshold is defined."
+    },
+    {
+      "id": "rnn_step5",
+      "family": "rnn",
+      "display_name": "RNN Autoencoder",
+      "architecture": {
+        "hidden_size": 32,
+        "latent_size": 8,
+        "layers": 2,
+        "dropout": 0.1
+      },
+      "param_count": 7050,
+      "best_val_mse": 3.3277092602658214e-05,
+      "best_epoch": 15,
+      "model_sha256": "c801a284c95c16ce9031a24f774d941c314bc0758e7b20d593af64fb630f0ebd",
+      "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
+      "window_size": 10,
+      "features": [
+        "suhu",
+        "rh"
+      ],
+      "score_semantics": "window_mean_squared_reconstruction_error",
+      "report_source": "reported_model_registry",
+      "summary": "Validation MSE reported from training; it was not computed by the platform, and no operational threshold is defined."
+    },
+    {
+      "id": "transformer_step5",
+      "family": "transformer",
+      "display_name": "Transformer Autoencoder",
+      "architecture": {
+        "d_model": 32,
+        "n_heads": 4,
+        "encoder_layers": 2,
+        "decoder_layers": 2,
+        "ff_dim": 64,
+        "dropout": 0.1
+      },
+      "param_count": 43362,
+      "best_val_mse": 3.5587262735700976e-05,
+      "best_epoch": 17,
+      "model_sha256": "364b0c73be1054b05a33924615d53ee1ebcb12af4bbb7d4efc0c1a144af3e015",
+      "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
+      "window_size": 10,
       "features": [
         "suhu",
         "rh"

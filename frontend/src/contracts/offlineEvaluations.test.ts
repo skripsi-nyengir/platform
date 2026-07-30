@@ -6,13 +6,19 @@ import {
 } from './offlineEvaluations'
 
 describe('offline evaluations contract', () => {
-  it('accepts the LSTM evaluation and free-form event families', () => {
+  it('accepts all five trained model families and free-form event families', () => {
     const response: OfflineEvaluationsResponse = structuredClone(offlineEvaluationsResponse)
     response.items[0]!.metrics.event_hit_by_family.rare_family = 0.25
 
     const parsed = OfflineEvaluationsResponseSchema.parse(response)
 
-    expect(parsed.items[0]?.model_family).toBe('lstm')
+    expect(parsed.items.map((item) => item.model_family)).toEqual([
+      'conv1d',
+      'gru',
+      'lstm',
+      'rnn',
+      'transformer',
+    ])
     expect(parsed.items[0]?.metrics.event_hit_by_family.rare_family).toBe(0.25)
   })
 

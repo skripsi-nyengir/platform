@@ -24,10 +24,6 @@ import {
 } from '../contracts/eda'
 import { InferenceQuerySchema, type InferenceResponse } from '../contracts/inference'
 import {
-  ModelEvaluationsQuerySchema,
-  type ModelEvaluationsResponse,
-} from '../contracts/modelEvaluation'
-import {
   TelemetryHistoryQuerySchema,
   type TelemetryHistoryResponse,
 } from '../contracts/telemetry'
@@ -55,10 +51,6 @@ import {
   activeAnomalyInferenceBySensor,
   normalInferenceBySensor,
 } from './fixtures/inference'
-import {
-  modelEvaluationDetails,
-  modelEvaluationSummaries,
-} from './fixtures/modelEvaluations'
 import { modelRegistryResponse } from './fixtures/modelRegistry'
 import { offlineEvaluationsResponse } from './fixtures/offlineEvaluations'
 import {
@@ -76,9 +68,7 @@ import {
 } from './fixtures/telemetry'
 import type { MockApiState } from './state'
 import {
-  ModelActivationRequestSchema,
   ReplayJobRequestSchema,
-  type ModelActivationResponse,
   type ReplayJobResponse,
 } from '../contracts/preview'
 import {
@@ -87,7 +77,7 @@ import {
   type SetSimActiveModelResponse,
 } from '../contracts/simulation'
 import type { LatestTelemetrySensor, TelemetryPoint } from '../contracts/telemetry'
-import { modelsResponse, previewDevice, replayJob } from './fixtures/preview'
+import { previewDevice, replayJob } from './fixtures/preview'
 import {
   simulationInferencePoints,
   simulationInjectionEvents,
@@ -351,42 +341,13 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
       items: [structuredClone(previewDevice)],
     })),
 
-    http.get('/api/models', ({ request }) => {
-      const url = new URL(request.url)
-      if (queryValue(url, 'device_id') !== publicDeviceId) return invalidQuery(request)
-      return HttpResponse.json(modelsResponse(state.activeModelVersion))
-    }),
-
-    http.post('/api/model-activations', async ({ request }) => {
-      const parsed = ModelActivationRequestSchema.safeParse(await request.json())
-      if (!parsed.success) return invalidQuery(request)
-      const prior = state.activeModelVersion
-      state.activeModelVersion = parsed.data.model_version
-      const response = {
-        request_id: 'req_activation',
-        activation: {
-          activation_id: `activation-${parsed.data.command_id}`,
-          command_id: parsed.data.command_id,
-          device_id: publicDeviceId,
-          prior_model_version: prior,
-          model_version: parsed.data.model_version,
-          changed: prior !== parsed.data.model_version,
-          activated_at: '2026-07-24T08:00:00Z',
-          actor: 'preview-session',
-        },
-        active_model_version: state.activeModelVersion,
-        idempotent_request_replay: false,
-      } satisfies ModelActivationResponse
-      return HttpResponse.json(response)
-    }),
-
     http.post('/api/replay-jobs', async ({ request }) => {
       const parsed = ReplayJobRequestSchema.safeParse(await request.json())
       if (!parsed.success) return invalidQuery(request)
       const existing = state.replayJobs.get(parsed.data.command_id)
       const modelVersion = parsed.data.device_id === simDeviceId
         ? state.simActiveModelVersion
-        : state.activeModelVersion
+        : 'lstm_step5'
       const job = existing ?? replayJob(
         `replay-${parsed.data.command_id}`,
         parsed.data.from,
@@ -785,39 +746,6 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
     http.get('/api/offline-evaluations', () =>
       HttpResponse.json(structuredClone(offlineEvaluationsResponse)),
     ),
-
-    http.get('/api/model-evaluations', ({ request }) => {
-      const url = new URL(request.url)
-      const parsed = ModelEvaluationsQuerySchema.safeParse({
-        page: queryNumber(url, 'page'),
-        pageSize: queryNumber(url, 'page_size'),
-      })
-      if (!parsed.success) return invalidQuery(request)
-      const { page, pageSize } = parsed.data
-      const start = (page - 1) * pageSize
-      const body = {
-        request_id: 'req_model_evaluations',
-        items: modelEvaluationSummaries.slice(start, start + pageSize).map((item) => structuredClone(item)),
-        page,
-        page_size: pageSize,
-        total: modelEvaluationSummaries.length,
-      } satisfies ModelEvaluationsResponse
-      return HttpResponse.json(body)
-    }),
-
-    http.get('/api/model-evaluations/:version', ({ params }) => {
-      const version = pathParam(params.version)
-      const detail = Object.values(modelEvaluationDetails).find((item) => item.version === version)
-      return detail === undefined
-        ? problem(
-            404,
-            'req_model_not_found',
-            'Model evaluation not found',
-            `Model evaluation ${version} was not found`,
-            `/api/model-evaluations/${version}`,
-          )
-        : HttpResponse.json(structuredClone(detail))
-    }),
 
     http.get('/api/system/status', async () => {
       if (state.scenario === 'timeout') await delay(8_100)

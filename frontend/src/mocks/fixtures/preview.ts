@@ -1,8 +1,6 @@
 import { publicDeviceId, simDeviceId, type CorpusDeviceId } from '../../contracts/common'
 import type {
   Device,
-  ModelFamily,
-  ModelsResponse,
   ReplayJob,
 } from '../../contracts/preview'
 
@@ -15,40 +13,6 @@ export const previewDevice = Object.freeze({
   corpus_to: '2026-06-01T00:00:00',
   import_readiness: 'ready',
 } satisfies Device)
-
-const families = [
-  ['ewma', 'EWMA'],
-  ['pca', 'PCA'],
-  ['wsn-dense-ae', 'WSN Dense AE'],
-  ['lstm-ae', 'LSTM-AE'],
-  ['usad', 'USAD'],
-  ['cfc-autoencoder', 'CfC Autoencoder'],
-  ['mtad-gat', 'MTAD-GAT'],
-] as const
-
-export const previewModelFamilies = Object.freeze(families.map(([model_key, display_name]) => ({
-  model_key,
-  display_name,
-  artifact_status: 'pending',
-  versions: [{
-    version: `preview-${model_key}-v1`,
-    runtime_kind: 'preview_simulator',
-    selectable: true,
-    compatible: true,
-    artifact_status: 'pending',
-    score_provenance: 'simulated_preview',
-  }],
-} satisfies ModelFamily)))
-
-export function modelsResponse(activeModelVersion: string): ModelsResponse {
-  return {
-    request_id: 'req_models',
-    device_id: publicDeviceId,
-    active_activation_id: `activation-${activeModelVersion}`,
-    active_model_version: activeModelVersion,
-    families: previewModelFamilies.map((family) => structuredClone(family)),
-  }
-}
 
 export function replayJob(
   jobId: string,

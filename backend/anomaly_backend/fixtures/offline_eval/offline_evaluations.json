@@ -1,46 +1,219 @@
 {
   "items": [
-{
-  "model_family": "lstm",
-  "model_sha256": "f26a67d378c4b5a90e64f7dc3844d2971cb414d1bf60926fefa188b13df99212",
-  "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
-  "forward_validation": {
-    "recon_max_abs_diff": 0.0007296204566955566,
-    "score_rel_error": 0.003807021537795663,
-    "passed": true
-  },
-  "threshold": {
-    "value": 0.0004298445419408381,
-    "policy": "clean_val_quantile",
-    "alpha": 0.01,
-    "comparison": "strict_gt"
-  },
-  "n_val_windows": 105338,
-  "n_test_windows": 105564,
-  "n_events": 28,
-  "n_positive_windows": 1489,
-  "metrics": {
-    "window_precision": 0.46153846153846156,
-    "window_recall": 0.8381464069845533,
-    "window_f1": 0.5952778440257572,
-    "event_hit_rate": 0.9285714285714286,
-    "event_hit_by_family": {
-      "spike": 1.0,
-      "contextual_shift": 1.0,
-      "gradual_slope": 1.0,
-      "stuck": 1.0,
-      "dropout": 1.0,
-      "coe": 0.5
+    {
+      "model_family": "conv1d",
+      "model_sha256": "85c901e8fed463207a44151adc14772d3660384ae88daf9fcc53431e6acc39c9",
+      "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
+      "forward_validation": {
+        "recon_max_abs_diff": 0.0,
+        "score_rel_error": 0.0,
+        "passed": true
+      },
+      "threshold": {
+        "value": 0.00022889401589054614,
+        "policy": "clean_val_quantile",
+        "alpha": 0.01,
+        "comparison": "strict_gt"
+      },
+      "n_val_windows": 105327,
+      "n_test_windows": 105598,
+      "n_events": 210,
+      "n_positive_windows": 12432,
+      "metrics": {
+        "window_precision": 0.8214382265477156,
+        "window_recall": 0.4888191763191763,
+        "window_f1": 0.6129097327281897,
+        "event_hit_rate": 0.9238095238095239,
+        "event_hit_by_family": {
+          "bias": 1.0,
+          "data_loss": 0.9615384615384616,
+          "drift": 1.0,
+          "erratic": 1.0,
+          "garbage": 0.96875,
+          "spike": 1.0,
+          "stuck": 0.5172413793103449
+        },
+        "clean_test_fpr": 0.01296426068675543,
+        "composite_fc1": 0.7875649752878094,
+        "alert_rate": 0.07005814504062577
+      },
+      "provenance": {
+        "forward": "strict-loaded window-10 checkpoint; platform forward validated against self-regenerated Dandy step8 clean-val reconstruction because the shipped validation_reconstruction.npz is stale window-30",
+        "torch_version": "2.13.0+cu130",
+        "computed_at": "2026-07-30T13:40:37.121438Z"
+      }
     },
-    "clean_test_fpr": 0.013792580804061991,
-    "composite_fc1": 0.6166007905138341,
-    "alert_rate": 4.629043085272344
-  },
-  "provenance": {
-    "forward": "reverse-engineered from state-dict + hyperparams, validated against artifact validation_reconstruction.npz",
-    "torch_version": "2.12.1+cu130",
-    "computed_at": "2026-07-28T18:34:58.085621Z"
-  }
-}
+    {
+      "model_family": "gru",
+      "model_sha256": "0506d1da27d92a259e62c32ce43db7fd19dfa8ad679c08c6d67bf727653a2caa",
+      "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
+      "forward_validation": {
+        "recon_max_abs_diff": 0.00035750865936279297,
+        "score_rel_error": 0.0038041777269998424,
+        "passed": true
+      },
+      "threshold": {
+        "value": 0.0004142577527090907,
+        "policy": "clean_val_quantile",
+        "alpha": 0.01,
+        "comparison": "strict_gt"
+      },
+      "n_val_windows": 105327,
+      "n_test_windows": 105598,
+      "n_events": 210,
+      "n_positive_windows": 12432,
+      "metrics": {
+        "window_precision": 0.79149876511114,
+        "window_recall": 0.4897844272844273,
+        "window_f1": 0.6051180124223603,
+        "event_hit_rate": 0.9619047619047619,
+        "event_hit_by_family": {
+          "bias": 1.0,
+          "data_loss": 1.0,
+          "drift": 1.0,
+          "erratic": 1.0,
+          "garbage": 1.0,
+          "spike": 1.0,
+          "stuck": 0.7241379310344828
+        },
+        "clean_test_fpr": 0.01575787420216292,
+        "composite_fc1": 0.7813478880368127,
+        "alert_rate": 0.07285175855603326
+      },
+      "provenance": {
+        "forward": "strict-loaded window-10 checkpoint; platform forward validated against shipped window-10 validation_reconstruction.npz",
+        "torch_version": "2.13.0+cu130",
+        "computed_at": "2026-07-30T13:40:37.121438Z"
+      }
+    },
+    {
+      "model_family": "lstm",
+      "model_sha256": "0dde621c1fe4117fd57602a94c30bd764e900108ceea3675fba6295e9500cccb",
+      "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
+      "forward_validation": {
+        "recon_max_abs_diff": 0.0,
+        "score_rel_error": 0.0,
+        "passed": true
+      },
+      "threshold": {
+        "value": 0.0006605043890886009,
+        "policy": "clean_val_quantile",
+        "alpha": 0.01,
+        "comparison": "strict_gt"
+      },
+      "n_val_windows": 105327,
+      "n_test_windows": 105598,
+      "n_events": 210,
+      "n_positive_windows": 12432,
+      "metrics": {
+        "window_precision": 0.8256740196078431,
+        "window_recall": 0.43355855855855857,
+        "window_f1": 0.5685654008438819,
+        "event_hit_rate": 0.8571428571428571,
+        "event_hit_by_family": {
+          "bias": 0.896551724137931,
+          "data_loss": 0.9230769230769231,
+          "drift": 1.0,
+          "erratic": 0.9696969696969697,
+          "garbage": 0.90625,
+          "spike": 1.0,
+          "stuck": 0.27586206896551724
+        },
+        "clean_test_fpr": 0.01100399628780848,
+        "composite_fc1": 0.750121584092303,
+        "alert_rate": 0.06181935263925453
+      },
+      "provenance": {
+        "forward": "strict-loaded window-10 checkpoint; platform forward validated against self-regenerated Dandy step8 clean-val reconstruction because the shipped validation_reconstruction.npz is stale window-30",
+        "torch_version": "2.13.0+cu130",
+        "computed_at": "2026-07-30T13:40:37.121438Z"
+      }
+    },
+    {
+      "model_family": "rnn",
+      "model_sha256": "c801a284c95c16ce9031a24f774d941c314bc0758e7b20d593af64fb630f0ebd",
+      "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
+      "forward_validation": {
+        "recon_max_abs_diff": 0.0007295012474060059,
+        "score_rel_error": 0.010280641562283898,
+        "passed": true
+      },
+      "threshold": {
+        "value": 0.00032651066430844367,
+        "policy": "clean_val_quantile",
+        "alpha": 0.01,
+        "comparison": "strict_gt"
+      },
+      "n_val_windows": 105327,
+      "n_test_windows": 105598,
+      "n_events": 210,
+      "n_positive_windows": 12432,
+      "metrics": {
+        "window_precision": 0.7770475227502528,
+        "window_recall": 0.4945302445302445,
+        "window_f1": 0.6044042469524185,
+        "event_hit_rate": 0.9380952380952381,
+        "event_hit_by_family": {
+          "bias": 1.0,
+          "data_loss": 1.0,
+          "drift": 1.0,
+          "erratic": 1.0,
+          "garbage": 0.96875,
+          "spike": 1.0,
+          "stuck": 0.5862068965517241
+        },
+        "clean_test_fpr": 0.01702683762950056,
+        "composite_fc1": 0.7683915518424699,
+        "alert_rate": 0.07492566147086119
+      },
+      "provenance": {
+        "forward": "strict-loaded window-10 checkpoint; platform forward validated against shipped window-10 validation_reconstruction.npz",
+        "torch_version": "2.13.0+cu130",
+        "computed_at": "2026-07-30T13:40:37.121438Z"
+      }
+    },
+    {
+      "model_family": "transformer",
+      "model_sha256": "364b0c73be1054b05a33924615d53ee1ebcb12af4bbb7d4efc0c1a144af3e015",
+      "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
+      "forward_validation": {
+        "recon_max_abs_diff": 0.0,
+        "score_rel_error": 0.0,
+        "passed": true
+      },
+      "threshold": {
+        "value": 0.000215801308513619,
+        "policy": "clean_val_quantile",
+        "alpha": 0.01,
+        "comparison": "strict_gt"
+      },
+      "n_val_windows": 105327,
+      "n_test_windows": 105598,
+      "n_events": 210,
+      "n_positive_windows": 12432,
+      "metrics": {
+        "window_precision": 0.8898741418764302,
+        "window_recall": 0.5004826254826255,
+        "window_f1": 0.640650741350906,
+        "event_hit_rate": 0.9523809523809523,
+        "event_hit_by_family": {
+          "bias": 1.0,
+          "data_loss": 1.0,
+          "drift": 1.0,
+          "erratic": 1.0,
+          "garbage": 0.96875,
+          "spike": 1.0,
+          "stuck": 0.6896551724137931
+        },
+        "clean_test_fpr": 0.0076611299456429095,
+        "composite_fc1": 0.8236994483324391,
+        "alert_rate": 0.06621337525331919
+      },
+      "provenance": {
+        "forward": "strict-loaded window-10 checkpoint; platform forward validated against self-regenerated Dandy step8 clean-val reconstruction because the shipped validation_reconstruction.npz is stale window-30",
+        "torch_version": "2.13.0+cu130",
+        "computed_at": "2026-07-30T13:40:37.121438Z"
+      }
+    }
   ]
 }

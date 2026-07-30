@@ -1,17 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import {
-  activateModel,
   createReplayJob,
   getDevices,
-  getModels,
   getReplayJob,
 } from '../../api/preview'
-import type { SensorId } from '../../contracts/common'
-import type { ModelActivationRequest, ReplayJobRequest } from '../../contracts/preview'
+import type { ReplayJobRequest } from '../../contracts/preview'
 
 export const previewKeys = {
   devices: ['preview', 'devices'] as const,
-  models: (deviceId: SensorId) => ['preview', 'models', deviceId] as const,
   replay: (jobId: string) => ['preview', 'replay', jobId] as const,
 }
 
@@ -20,26 +16,6 @@ export function useDevicesQuery() {
     queryKey: previewKeys.devices,
     queryFn: ({ signal }) => getDevices(signal),
     staleTime: 60_000,
-  })
-}
-
-export function useModelsQuery(deviceId: SensorId) {
-  return useQuery({
-    queryKey: previewKeys.models(deviceId),
-    queryFn: ({ signal }) => getModels(deviceId, signal),
-  })
-}
-
-export function useActivateModelMutation(deviceId: SensorId) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (input: ModelActivationRequest) => activateModel(input),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: previewKeys.models(deviceId) }),
-        queryClient.invalidateQueries({ queryKey: ['system', 'status'] }),
-      ])
-    },
   })
 }
 

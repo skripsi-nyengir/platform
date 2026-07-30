@@ -3,60 +3,76 @@ import { describe, expect, it } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { renderApp } from '../test/renderApp'
 
+const modelNames = [
+  'Conv1D Autoencoder',
+  'GRU Autoencoder',
+  'LSTM Autoencoder',
+  'RNN Autoencoder',
+  'Transformer Autoencoder',
+] as const
+
+const modelFamilies = ['CONV1D', 'GRU', 'LSTM', 'RNN', 'TRANSFORMER'] as const
+
 describe('ModelEvaluationPage', () => {
-  it('renders training, offline, and Dandy evidence as separate sections', async () => {
+  it('renders five trained models in exactly two honest evidence sections', async () => {
     renderApp('/model-evaluation?__scenario=active-anomaly')
-    expect(await screen.findByRole('heading', { name: 'Model registry' })).toBeVisible()
+
+    expect(await screen.findByRole('heading', { name: 'Model Evaluation' })).toBeVisible()
+    expect(
+      screen.getByText(/metrik training yang dilaporkan dan evaluasi offline berlabel/i),
+    ).toHaveTextContent('Conv1D, GRU, LSTM, RNN, dan Transformer')
+
     const registry = await screen.findByRole('region', {
       name: 'Model terdaftar (metrik dilaporkan dari training)',
     })
-
-    expect(within(registry).getAllByRole('article')).toHaveLength(3)
-    expect(within(registry).getByRole('heading', { name: 'Transformer Autoencoder' })).toBeVisible()
-    expect(within(registry).getByRole('heading', { name: 'Conv1D Autoencoder' })).toBeVisible()
-    expect(within(registry).getByRole('heading', { name: 'LSTM Autoencoder' })).toBeVisible()
-    expect(within(registry).getByText(/d_model: 32 · n_heads: 4/)).toBeVisible()
-    expect(within(registry).getAllByText('b02f3872_ruang_produksi_v3_march07')).toHaveLength(3)
-    expect(within(registry).getAllByText('30 langkah · suhu, rh')).toHaveLength(3)
-    expect(within(registry).getByTitle('1'.repeat(64))).toHaveTextContent('111111111111…11111111')
-    expect(within(registry).getByText(/bukan hasil komputasi platform/i)).toBeVisible()
-    expect(within(registry).queryByText(/stuck: gagal/i)).not.toBeInTheDocument()
-
     const offline = await screen.findByRole('region', {
       name: 'Evaluasi offline (test-set injected berlabel)',
     })
-    expect(within(offline).getAllByRole('article')).toHaveLength(1)
-    expect(within(offline).getByRole('heading', { name: 'LSTM' })).toBeVisible()
-    expect(within(offline).getByText('Keluarga model: lstm')).toBeVisible()
-    expect(within(offline).getByText('Window precision')).toBeVisible()
-    expect(within(offline).getByText('46,15%')).toBeVisible()
-    expect(within(offline).getByText('Window recall')).toBeVisible()
-    expect(within(offline).getByText('83,81%')).toBeVisible()
-    expect(within(offline).getByText('Window F1')).toBeVisible()
-    expect(within(offline).getByText('59,53%')).toBeVisible()
-    expect(within(offline).getByText('Event hit rate')).toBeVisible()
-    expect(within(offline).getByText('92,86%')).toBeVisible()
-    expect(within(offline).getByText('Event hit · coe')).toBeVisible()
-    expect(within(offline).getByText('50,00%')).toBeVisible()
-    expect(within(offline).getByText('Clean test FPR')).toBeVisible()
-    expect(within(offline).getByText('1,38%')).toBeVisible()
-    expect(within(offline).getByText('Composite Fc1')).toBeVisible()
-    expect(within(offline).getByText('61,66%')).toBeVisible()
-    expect(within(offline).getByText('Alert rate')).toBeVisible()
-    expect(within(offline).getByText('4,63 /hari')).toBeVisible()
-    expect(within(offline).getByText('0.0004298445419408381')).toBeVisible()
-    expect(within(offline).getByText('clean_val_quantile · α=0.01 · strict_gt')).toBeVisible()
-    expect(within(offline).getByText('105.564')).toBeVisible()
-    expect(within(offline).getByText('28')).toBeVisible()
+
+    expect(screen.getAllByRole('region')).toHaveLength(2)
+    expect(within(registry).getAllByRole('article')).toHaveLength(5)
+    expect(within(offline).getAllByRole('article')).toHaveLength(5)
+
+    for (const name of modelNames) {
+      expect(within(registry).getByRole('heading', { name })).toBeVisible()
+    }
+    for (const family of modelFamilies) {
+      expect(within(offline).getByRole('heading', { name: family })).toBeVisible()
+    }
+
+    expect(within(registry).getAllByText('b02f3872_ruang_produksi_v3_march07')).toHaveLength(5)
+    expect(within(registry).getAllByText('10 langkah · suhu, rh')).toHaveLength(5)
+    expect(within(registry).getByText(/latent_channels: 16/)).toBeVisible()
+    expect(within(registry).getAllByText(/hidden_size: 32 · latent_size: 8/)).toHaveLength(3)
+    expect(within(registry).getByText(/encoder_layers: 2 · decoder_layers: 2/)).toBeVisible()
     expect(
-      within(offline).getByTitle(
+      within(registry).getByTitle(
+        '85c901e8fed463207a44151adc14772d3660384ae88daf9fcc53431e6acc39c9',
+      ),
+    ).toHaveTextContent('85c901e8fed4…6acc39c9')
+
+    const lstmHeading = within(offline).getByRole('heading', { name: 'LSTM' })
+    const lstmArticle = lstmHeading.closest('article')
+    expect(lstmArticle).not.toBeNull()
+    const lstm = within(lstmArticle as HTMLElement)
+    expect(lstm.getByText('Keluarga model: lstm')).toBeVisible()
+    expect(lstm.getByText('46,15%')).toBeVisible()
+    expect(lstm.getByText('83,81%')).toBeVisible()
+    expect(lstm.getByText('59,53%')).toBeVisible()
+    expect(lstm.getByText('92,86%')).toBeVisible()
+    expect(lstm.getByText('50,00%')).toBeVisible()
+    expect(lstm.getByText('1,38%')).toBeVisible()
+    expect(lstm.getByText('61,66%')).toBeVisible()
+    expect(lstm.getByText('4,63 /hari')).toBeVisible()
+    expect(lstm.getByText('0.0004298445419408381')).toBeVisible()
+    expect(lstm.getByText('clean_val_quantile · α=0.01 · strict_gt')).toBeVisible()
+    expect(lstm.getByText('105.564')).toBeVisible()
+    expect(lstm.getByText('28')).toBeVisible()
+    expect(
+      lstm.getByTitle(
         'f26a67d378c4b5a90e64f7dc3844d2971cb414d1bf60926fefa188b13df99212',
       ),
     ).toHaveTextContent('f26a67d378c4…3df99212')
-    expect(within(offline).getByText('b02f3872_ruang_produksi_v3_march07')).toBeVisible()
-    expect(within(offline).getByText(/bukan inferensi live platform/i)).toBeVisible()
-    expect(within(offline).queryByText(/Best val MSE/i)).not.toBeInTheDocument()
-    expect(within(offline).queryByText(/stuck: gagal/i)).not.toBeInTheDocument()
-    expect(screen.getByText(/Snapshot ini berasal dari satu run/i)).toBeVisible()
+    expect(lstm.getByText('b02f3872_ruang_produksi_v3_march07')).toBeVisible()
   })
 })

@@ -4,7 +4,7 @@ import { Rfc3339Schema } from './common'
 const FractionSchema = z.number().min(0).max(1)
 
 export const OfflineEvaluationItemSchema = z.strictObject({
-  model_family: z.string().min(1),
+  model_family: z.enum(['conv1d', 'gru', 'lstm', 'rnn', 'transformer']),
   model_sha256: z.string().regex(/^[0-9a-f]{64}$/),
   dataset_reference: z.string().min(1),
   forward_validation: z.strictObject({
@@ -40,7 +40,12 @@ export const OfflineEvaluationItemSchema = z.strictObject({
 })
 export type OfflineEvaluationItem = z.infer<typeof OfflineEvaluationItemSchema>
 
-export const OfflineEvaluationsResponseSchema = z.strictObject({
-  items: z.array(OfflineEvaluationItemSchema).min(1),
-})
+export const OfflineEvaluationsResponseSchema = z
+  .strictObject({
+    items: z.array(OfflineEvaluationItemSchema).length(5),
+  })
+  .refine((value) => new Set(value.items.map((item) => item.model_family)).size === 5, {
+    message: 'items must contain each trained model family exactly once',
+    path: ['items'],
+  })
 export type OfflineEvaluationsResponse = z.infer<typeof OfflineEvaluationsResponseSchema>

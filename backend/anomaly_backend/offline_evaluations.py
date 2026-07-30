@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from anomaly_backend.contracts import OfflineEvaluationItem, OfflineEvaluationsResponse
 
 FIXTURE_PATH = "fixtures/offline_eval/offline_evaluations.json"
-FIXTURE_SHA256 = "46315d48d1f6fb2746e89f8f1f091aeb4540921efdcc92c2b6ca2d3ec76e61f6"
+FIXTURE_SHA256 = "d530329696f947e37c63760ba026dd0df3736cafacd213b7d02a08a573fb5861"
 
 
 class OfflineEvaluationsIntegrityError(ValueError):

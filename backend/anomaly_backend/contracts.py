@@ -538,8 +538,10 @@ NonEmptyString = Annotated[str, Field(min_length=1)]
 
 
 class ModelRegistryItem(StrictModel):
-    id: Literal["transformer_step5", "conv1d_step5", "lstm_step5"]
-    family: Literal["transformer", "conv1d", "lstm"]
+    id: Literal[
+        "conv1d_step5", "gru_step5", "lstm_step5", "rnn_step5", "transformer_step5"
+    ]
+    family: Literal["conv1d", "gru", "lstm", "rnn", "transformer"]
     display_name: NonEmptyString
     architecture: dict[str, int | float] = Field(min_length=1, max_length=16)
     param_count: Annotated[int, Field(gt=0)]
@@ -547,7 +549,7 @@ class ModelRegistryItem(StrictModel):
     best_epoch: Annotated[int, Field(gt=0)]
     model_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     dataset_reference: Literal["b02f3872_ruang_produksi_v3_march07"]
-    window_size: Literal[30]
+    window_size: Literal[10]
     features: list[Literal["suhu", "rh"]] = Field(min_length=2, max_length=2)
     score_semantics: Literal["window_mean_squared_reconstruction_error"]
     report_source: Literal["reported_model_registry"]
@@ -561,12 +563,12 @@ class ModelRegistryItem(StrictModel):
 
 
 class ModelRegistryResponse(StrictModel):
-    items: list[ModelRegistryItem] = Field(min_length=3, max_length=3)
+    items: list[ModelRegistryItem] = Field(min_length=5, max_length=5)
 
 
 class OfflineEvaluationForwardValidation(StrictModel):
-    recon_max_abs_diff: float
-    score_rel_error: float
+    recon_max_abs_diff: float | None
+    score_rel_error: float | None
     passed: bool
 
 
@@ -595,7 +597,7 @@ class OfflineEvaluationProvenance(StrictModel):
 
 
 class OfflineEvaluationItem(StrictModel):
-    model_family: Literal["lstm"]
+    model_family: Literal["conv1d", "gru", "lstm", "rnn", "transformer"]
     model_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
     dataset_reference: Literal["b02f3872_ruang_produksi_v3_march07"]
     forward_validation: OfflineEvaluationForwardValidation
@@ -609,7 +611,7 @@ class OfflineEvaluationItem(StrictModel):
 
 
 class OfflineEvaluationsResponse(StrictModel):
-    items: list[OfflineEvaluationItem] = Field(min_length=1, max_length=1)
+    items: list[OfflineEvaluationItem] = Field(min_length=5, max_length=5)
 
 
 class ValidationTrackFields(StrictModel):

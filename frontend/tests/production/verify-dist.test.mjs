@@ -27,7 +27,8 @@ const requiredRelativeApiPaths = [
   '/api/inference-results',
   '/api/alerts/current',
   '/api/eda/periods',
-  '/api/model-evaluations',
+  '/api/model-registry',
+  '/api/offline-evaluations',
   '/api/system/status',
 ]
 const absoluteApiOrigin = /(?:https?:)?\/\/[a-z0-9._~%:-]+\/api(?:\/|[?#])/i
