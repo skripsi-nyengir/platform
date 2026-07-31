@@ -441,11 +441,13 @@ async def run_subscriber(
                 try:
                     _ = await service.persist_reading(item)
                 except Exception:  # noqa: BLE001 - isolate one QoS 0 reading
+                    _LOGGER.exception("live_persistence_failed")
                     report("live_persistence_failed_qos0_loss_not_recoverable")
                     continue
                 try:
                     _ = await service.process_pending()
                 except Exception:  # noqa: BLE001 - leave durable work for retry
+                    _LOGGER.exception("live_processing_deferred")
                     report("live_processing_deferred")
             finally:
                 ingress.task_done()

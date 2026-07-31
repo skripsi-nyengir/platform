@@ -27,6 +27,7 @@ from anomaly_backend.sql.system import telemetry_observation
 
 
 _EXPECTED_REVISION = "20260731_0010"
+_STALL_BACKLOG_THRESHOLD = 100
 
 router = APIRouter()
 
@@ -115,6 +116,8 @@ async def system_status(
     health_status = cast(str | None, observation["health_status"])
     health_detail = cast(str | None, observation["health_detail"])
     fresh = age_seconds is not None and age_seconds <= 600
+    durable_backlog = cast(int, observation["durable_backlog_count"])
+    scoring_stalled = fresh and durable_backlog > _STALL_BACKLOG_THRESHOLD
     reasons: list[str] = []
     if not configuration_valid:
         reasons.append("Activate a verified live model and scaler bundle.")
@@ -124,6 +127,10 @@ async def system_status(
         reasons.append("No valid telemetry reading has been persisted.")
     elif not fresh:
         reasons.append("Check broker delivery because the latest valid reading is stale.")
+    if scoring_stalled:
+        reasons.append(
+            f"Live scoring is stalled: {durable_backlog} readings are persisted but unscored."
+        )
     detail_reasons = {
         "persistence_retry": "Restore database writes; live persistence is retrying.",
         "inference_retry": "Restore the active model runtime; inference is retrying.",
@@ -133,7 +140,13 @@ async def system_status(
         reasons.append(detail_reasons[health_detail])
     if health_status == "unhealthy":
         classification = "failed"
-    elif configuration_valid and lease_active and fresh and health_status == "healthy":
+    elif (
+        configuration_valid
+        and lease_active
+        and fresh
+        and health_status == "healthy"
+        and not scoring_stalled
+    ):
         classification = "healthy"
     else:
         classification = "degraded"
