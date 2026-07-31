@@ -1,7 +1,12 @@
 import '@testing-library/jest-dom/vitest'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { screen, within } from '@testing-library/react'
+import { queryClient } from '../app/queryClient'
 import { renderApp } from '../test/renderApp'
+
+afterEach(() => {
+  queryClient.clear()
+})
 
 describe('OverviewPage', () => {
   it('renders the single public B02 sensor', async () => {
@@ -21,5 +26,7 @@ describe('OverviewPage', () => {
     expect(await screen.findByText('Live health: healthy')).toBeVisible()
     expect(await screen.findByRole('heading', { name: 'Episode context' })).toBeVisible()
     expect(screen.getByText('10 source readings before the episode')).toBeVisible()
+    expect(screen.getByText('31 May 2026, 23:51:30')).toBeVisible()
+    expect(screen.getByText('31 May 2026, 23:52:30')).toBeVisible()
   })
 })

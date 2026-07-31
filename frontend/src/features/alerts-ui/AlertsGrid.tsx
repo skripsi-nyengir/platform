@@ -1,6 +1,7 @@
 import { DataGrid, type GridColDef } from '@mui/x-data-grid'
 import type { CurrentAlert, CurrentAlertsResponse } from '../../contracts/alerts'
 import { sensorLabels } from '../../contracts/common'
+import { formatWibDateTime } from '../../lib/dateTime'
 import { tokens } from '../../theme/tokens'
 import { AlertLifecycleActions } from './AlertLifecycleActions'
 import { formatProvenance } from '../../components/data/provenance'
@@ -38,8 +39,18 @@ const columns: GridColDef<CurrentAlert>[] = [
     ...columnWidths.status,
     renderCell: ({ row }) => row.status === 'detected' ? 'Active' : row.status,
   },
-  { field: 'episode_start_ts', headerName: 'Episode start (WIB)', ...columnWidths.latest_event_ts },
-  { field: 'episode_end_ts', headerName: 'Episode end (WIB)', ...columnWidths.latest_event_ts },
+  {
+    field: 'episode_start_ts',
+    headerName: 'Episode start (WIB)',
+    ...columnWidths.latest_event_ts,
+    valueFormatter: (value) => formatWibDateTime(value as CurrentAlert['episode_start_ts']),
+  },
+  {
+    field: 'episode_end_ts',
+    headerName: 'Episode end (WIB)',
+    ...columnWidths.latest_event_ts,
+    valueFormatter: (value) => formatWibDateTime(value as CurrentAlert['episode_end_ts']),
+  },
   { field: 'anomalous_window_count', headerName: 'Windows', minWidth: 90 },
   {
     field: 'detection_basis',
@@ -116,7 +127,7 @@ export function AlertsGrid({
           overflow: 'visible',
           py: 1,
         },
-        '& .MuiDataGrid-cell[data-field="alert_id"], & .MuiDataGrid-cell[data-field="device_id"], & .MuiDataGrid-cell[data-field="latest_event_ts"]': {
+        '& .MuiDataGrid-cell[data-field="alert_id"], & .MuiDataGrid-cell[data-field="device_id"], & .MuiDataGrid-cell[data-field="episode_start_ts"], & .MuiDataGrid-cell[data-field="episode_end_ts"]': {
           fontFamily: tokens.font.data,
           fontVariantNumeric: 'tabular-nums',
         },

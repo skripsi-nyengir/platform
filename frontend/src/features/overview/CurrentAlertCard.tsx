@@ -2,6 +2,7 @@ import { Box, Card, CardActions, CardContent, Link, Stack, Typography } from '@m
 import { Link as RouterLink } from 'react-router-dom'
 import type { CurrentAlert } from '../../contracts/alerts'
 import { sensorLabels } from '../../contracts/common'
+import { formatWibDateTime } from '../../lib/dateTime'
 import { tokens } from '../../theme/tokens'
 import { ActionQueue } from './ActionQueue'
 import { ProvenanceBadge } from '../../components/data/ProvenanceBadge'
@@ -65,9 +66,9 @@ export function CurrentAlertCard({ alert }: CurrentAlertCardProps) {
               Threshold: <Box component="span" sx={technicalTextSx}>{alert.threshold}</Box>
             </Typography>
             <Typography variant="body2">
-              Episode (WIB): <Box component="span" sx={technicalTextSx}>{alert.episode_start_ts}</Box>
+              Episode (WIB): <Box component="span" sx={technicalTextSx}>{formatWibDateTime(alert.episode_start_ts)}</Box>
               {' – '}
-              <Box component="span" sx={technicalTextSx}>{alert.episode_end_ts}</Box>
+              <Box component="span" sx={technicalTextSx}>{formatWibDateTime(alert.episode_end_ts)}</Box>
             </Typography>
           </Stack>
         </Stack>

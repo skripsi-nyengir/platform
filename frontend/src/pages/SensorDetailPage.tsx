@@ -7,14 +7,13 @@ import { PanelSkeleton } from '../components/states/PanelSkeleton'
 import { PollingFailureNotice } from '../components/states/PollingFailureNotice'
 import { SensorStatus } from '../components/states/SensorStatus'
 import { publicDeviceId, SensorIdSchema, sensorLabels, type SensorId } from '../contracts/common'
-import { AlertEpisodeContext } from '../features/alerts-ui/AlertEpisodeContext'
 import {
   parseLiveUrlFilters,
   resolveLiveRange,
   updateLiveUrlFilters,
   type LiveUrlFilters,
 } from '../features/filters/urlFilters'
-import { CurrentAlertCard } from '../features/overview/CurrentAlertCard'
+import { ActiveAlertsSection } from '../features/sensors/ActiveAlertsSection'
 import { RelatedAlertHistory } from '../features/sensors/RelatedAlertHistory'
 import { SensorHistoryPanel } from '../features/sensors/SensorHistoryPanel'
 import { StatusSnapshot } from '../features/systemHealth/StatusSnapshot'
@@ -155,12 +154,9 @@ export function SensorDetailPage() {
         inference={live.inference}
         alertEvents={live.alertEvents}
       />
-      {live.currentAlerts.data?.items.map((alert) => (
-        <Stack key={alert.alert_id} spacing={2}>
-          <CurrentAlertCard alert={alert} />
-          <AlertEpisodeContext alertId={alert.alert_id} />
-        </Stack>
-      ))}
+      {live.currentAlerts.data?.items.length
+        ? <ActiveAlertsSection alerts={live.currentAlerts.data.items} />
+        : null}
       <RelatedAlertHistory
         sensorId={sensorId}
         from={displayedRange.from}
