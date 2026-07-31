@@ -113,6 +113,19 @@ def test_database_engine_is_async_core_owned() -> None:
         "eda_source_snapshots",
         "inference_results",
         "injection_events",
+        "live_alert_episode_points",
+        "live_alert_episodes",
+        "live_cursors",
+        "live_health",
+        "live_inference",
+        "live_inference_sources",
+        "live_model_activation_requests",
+        "live_model_activations",
+        "live_model_pairs",
+        "live_model_selections",
+        "live_processing_boundaries",
+        "live_telemetry",
+        "live_writer_leases",
         "model_evaluations",
         "model_activations",
         "model_families",
@@ -140,7 +153,7 @@ def test_database_health_and_revision_use_injected_connection() -> None:
                 assert await database_is_healthy(connection)
                 assert (
                     await current_migration_revision(connection)
-                    == "20260730_0005"
+                    == "20260731_0010"
                 )
         finally:
             await engine.dispose()
@@ -159,6 +172,8 @@ def test_compose_defines_expected_services_and_public_nginx() -> None:
         "seed",
         "api",
         "worker",
+        "live-model-bootstrap",
+        "live-subscriber",
         "eda-worker",
         "eda-cli",
         "import",
@@ -176,6 +191,8 @@ def test_compose_defines_expected_services_and_public_nginx() -> None:
             "seed",
             "api",
             "worker",
+            "live-model-bootstrap",
+            "live-subscriber",
             "eda-worker",
             "eda-cli",
             "eda-import",
@@ -214,6 +231,46 @@ def test_compose_enforces_the_database_seed_api_nginx_dependency_chain() -> None
     assert _environment_keys(services["worker"]) == set(DATABASE_ENV) | {
         "MODEL_ARTIFACTS_PATH",
     }
+    assert _environment_keys(services["live-model-bootstrap"]) == set(
+        DATABASE_ENV
+    ) | {
+        "MODEL_ARTIFACTS_PATH",
+        "LIVE_MODEL_BUNDLE_ID",
+    }
+    assert _environment_keys(services["live-subscriber"]) == set(DATABASE_ENV) | {
+        "MODEL_ARTIFACTS_PATH",
+        "LIVE_MODEL_BUNDLE_ID",
+        "MQTT_BROKER_HOST",
+        "MQTT_BROKER_PORT",
+        "MQTT_TOPIC",
+        "MQTT_USERNAME",
+        "MQTT_PASSWORD",
+        "MQTT_CLIENT_ID",
+        "MQTT_TLS_ENABLED",
+        "MQTT_CA_FILE",
+        "MQTT_RECONNECT_MIN_SECONDS",
+        "MQTT_RECONNECT_MAX_SECONDS",
+        "LIVE_RUNTIME_MODE",
+    }
+    for dependency, condition in (
+        ("db", "service_healthy"),
+        ("migrate", "service_completed_successfully"),
+        ("seed", "service_completed_successfully"),
+    ):
+        assert (
+            f"      {dependency}:\n        condition: {condition}"
+            in services["live-model-bootstrap"]
+        )
+    for dependency, condition in (
+        ("db", "service_healthy"),
+        ("migrate", "service_completed_successfully"),
+        ("seed", "service_completed_successfully"),
+        ("live-model-bootstrap", "service_completed_successfully"),
+    ):
+        assert (
+            f"      {dependency}:\n        condition: {condition}"
+            in services["live-subscriber"]
+        )
     assert _environment_keys(services["eda-worker"]) == set(DATABASE_ENV) | {
         "EDA_WORKER_LEASE_SECONDS",
         "EDA_WORKER_HEARTBEAT_SECONDS",
@@ -245,6 +302,21 @@ def test_compose_uses_only_checked_in_build_contexts_and_private_backend_network
     assert services["worker"].count(":ro\"") == 1
     assert "driver: nvidia" in services["worker"]
     assert "capabilities: [gpu]" in services["worker"]
+    for name in ("live-model-bootstrap", "live-subscriber"):
+        assert "    build:\n      context: ./backend\n      target: worker" in services[name]
+        assert services[name].count(":ro\"") == 1
+        assert "      - backend" in services[name]
+    assert (
+        '    command: ["python", "-m", "anomaly_backend.live_model_bootstrap"]'
+        in services["live-model-bootstrap"]
+    )
+    assert (
+        '    command: ["python", "-m", "anomaly_worker.live_subscriber"]'
+        in services["live-subscriber"]
+    )
+    assert "    restart: unless-stopped" in services["live-subscriber"]
+    assert "driver: nvidia" in services["live-subscriber"]
+    assert "capabilities: [gpu]" in services["live-subscriber"]
     assert (
         "    build:\n      context: ./backend\n      target: eda-worker"
         in services["eda-worker"]
@@ -309,9 +381,21 @@ def test_environment_example_adds_only_nginx_port_to_database_settings() -> None
         "EDA_RAW_SOURCE_PATH",
         "EDA_SOURCE_MANIFEST_PATH",
         "EDA_SOURCE_MANIFEST_SHA256",
+        "MQTT_BROKER_HOST",
+        "MQTT_BROKER_PORT",
+        "MQTT_TOPIC",
+        "MQTT_CLIENT_ID",
+        "MODEL_ARTIFACTS_DIR",
     }
     assert "./REPLACE_WITH_B02_V3_SOURCE/sensor_data_long.csv" in environment_example
     assert "<verify-from-eda-worker>" in environment_example
+    assert "MQTT_BROKER_HOST=<mqtt-broker-host>" in environment_example
+    assert "MQTT_BROKER_PORT=<mqtt-broker-port>" in environment_example
+    assert "MQTT_TOPIC=<mqtt-topic>" in environment_example
+    assert "MQTT_CLIENT_ID=<mqtt-client-id>" in environment_example
+    assert "MODEL_ARTIFACTS_DIR=<model-artifacts-directory>" in environment_example
+    assert "# MQTT_USERNAME=<mqtt-username>" in environment_example
+    assert "# MQTT_PASSWORD=<mqtt-password>" in environment_example
 
 
 def test_direct_dependencies_are_exactly_pinned() -> None:
@@ -327,6 +411,7 @@ def test_direct_dependencies_are_exactly_pinned() -> None:
         "psycopg[binary]==3.3.2",
         "alembic==1.18.5",
         "numpy==2.4.6",
+        "paho-mqtt==2.1.0",
     ]
     assert pyproject["project"]["optional-dependencies"]["test"] == [
         "pytest==9.1.0",

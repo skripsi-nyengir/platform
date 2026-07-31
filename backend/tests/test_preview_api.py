@@ -39,7 +39,7 @@ from anomaly_worker.service import (
     run_once,
 )
 
-from conftest import ClientFactory
+from tests.conftest import ClientFactory
 
 
 PUBLIC_DEVICE_ID = "b02f3872-ruang-produksi"
@@ -74,16 +74,24 @@ async def _reset_preview_fixture() -> None:
                 """
                     DELETE FROM alert_commands
                     WHERE alert_id IN (
-                        SELECT alert_id FROM alerts WHERE device_id = :device_id
+                        SELECT alert_id FROM alerts
+                        WHERE device_id = :device_id
+                          AND live_episode_id IS NULL
                     )
                 """,
                 """
                     DELETE FROM alert_events
                     WHERE alert_id IN (
-                        SELECT alert_id FROM alerts WHERE device_id = :device_id
+                        SELECT alert_id FROM alerts
+                        WHERE device_id = :device_id
+                          AND live_episode_id IS NULL
                     )
                 """,
-                "DELETE FROM alerts WHERE device_id = :device_id",
+                """
+                    DELETE FROM alerts
+                    WHERE device_id = :device_id
+                      AND live_episode_id IS NULL
+                """,
                 "DELETE FROM inference_results WHERE device_id = :device_id",
                 "DELETE FROM replay_episode_checkpoints",
                 "DELETE FROM replay_episode_staging",
@@ -97,25 +105,67 @@ async def _reset_preview_fixture() -> None:
                     WHERE corpus_id IN (
                         SELECT corpus_id FROM corpora WHERE device_id = :device_id
                     )
-                """,
-                "DELETE FROM corpora WHERE device_id = :device_id",
-                """
-                    UPDATE active_model_selections
-                    SET activation_id = 'activation-preview-lstm-ae-v1',
-                        model_version = 'preview-lstm-ae-v1'
-                    WHERE device_id = :device_id
+                      AND NOT EXISTS (
+                        SELECT 1 FROM live_model_pairs
+                        WHERE scaler_snapshot_corpus_id =
+                              preprocessing_snapshots.corpus_id
+                      )
                 """,
                 """
-                    DELETE FROM model_activations
+                    DELETE FROM corpora
                     WHERE device_id = :device_id
-                      AND activation_id <> 'activation-preview-lstm-ae-v1'
+                      AND NOT EXISTS (
+                        SELECT 1 FROM live_model_pairs
+                        WHERE scaler_snapshot_corpus_id = corpora.corpus_id
+                      )
                 """,
+                "DELETE FROM active_model_selections WHERE device_id = :device_id",
+                "DELETE FROM model_activations WHERE device_id = :device_id",
             )
             for statement in cleanup_statements:
                 await connection.execute(
                     text(statement), {"device_id": PUBLIC_DEVICE_ID}
                 )
             now = datetime.now(timezone.utc)
+            for ordinal, model_key in enumerate(PUBLIC_MODEL_KEYS, 1):
+                await connection.execute(
+                    tables.model_versions.update()
+                    .where(
+                        tables.model_versions.c.version
+                        == f"preview-{model_key}-v1"
+                    )
+                    .values(
+                        channels=["temperature_c", "relative_humidity_pct"],
+                        window_size=10,
+                        stride=1,
+                        contract_status="live_10",
+                        is_selectable=True,
+                        model_manifest_sha256=f"{ordinal:064x}",
+                        checkpoint_sha256=f"{ordinal + 10:064x}",
+                        scaler_manifest_sha256=f"{ordinal + 20:064x}",
+                        scaler_sha256=f"{ordinal + 30:064x}",
+                    )
+                )
+            await connection.execute(
+                insert(tables.model_activations).values(
+                    activation_id="activation-preview-lstm-ae-v1",
+                    command_id="seed-preview-lstm-ae-v1",
+                    payload_hash="test-preview-activation",
+                    device_id=PUBLIC_DEVICE_ID,
+                    prior_model_version=None,
+                    model_version="preview-lstm-ae-v1",
+                    changed=True,
+                    activated_at=now,
+                    actor="test",
+                )
+            )
+            await connection.execute(
+                insert(tables.active_model_selections).values(
+                    device_id=PUBLIC_DEVICE_ID,
+                    activation_id="activation-preview-lstm-ae-v1",
+                    model_version="preview-lstm-ae-v1",
+                )
+            )
             await connection.execute(
                 insert(tables.corpora).values(
                     corpus_id=CORPUS_ID,
@@ -143,14 +193,17 @@ async def _reset_preview_fixture() -> None:
             await connection.execute(
                 insert(tables.preprocessing_snapshots).values(
                     corpus_id=CORPUS_ID,
-                    channels=["suhu", "rh"],
-                    window_size=30,
+                    channels=["temperature_c", "relative_humidity_pct"],
+                    window_size=10,
                     stride=1,
                     segment_metadata={"segments": 1},
                     split_boundaries={},
                     split_counts={"train": 120},
                     scaler={
-                        "channels": ["suhu", "rh"],
+                        "channels": [
+                            "temperature_c",
+                            "relative_humidity_pct",
+                        ],
                         "minimum": [20.0, 40.0],
                         "maximum": [30.0, 70.0],
                     },
@@ -241,7 +294,7 @@ async def test_devices_returns_only_the_published_b02_device(
             "device_id": PUBLIC_DEVICE_ID,
             "display_name": "TALPHA Ruang Produksi",
             "time_zone": "Asia/Jakarta",
-            "channels": ["suhu", "rh"],
+            "channels": ["temperature_c", "relative_humidity_pct"],
             "corpus_from": "2026-02-01T00:00:00",
             "corpus_to": "2026-02-01T00:02:00",
             "import_readiness": "ready",
@@ -266,11 +319,122 @@ async def test_models_returns_seven_pending_families_and_one_selection(
     assert [family.model_key for family in models.families] == PUBLIC_MODEL_KEYS
     assert models.active_model_version == "preview-lstm-ae-v1"
     assert all(family.artifact_status == "pending" for family in models.families)
+    assert all(
+        version.channels == ("temperature_c", "relative_humidity_pct")
+        and version.window_size == 10
+        and version.stride == 1
+        for family in models.families
+        for version in family.versions
+        if version.selectable
+    )
     assert sum(
         version.version == models.active_model_version
         for family in models.families
         for version in family.versions
     ) == 1
+
+
+@pytest.mark.anyio
+async def test_legacy_thirty_row_model_is_not_selectable_or_activatable(
+    client_factory: ClientFactory,
+) -> None:
+    version = "legacy-preview-usad-30"
+    engine = create_database_engine(Settings.from_environ())
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                insert(tables.model_versions).values(
+                    version=version,
+                    model_key="usad",
+                    runtime_kind="preview_simulator",
+                    is_selectable=True,
+                    adapter_key="preview_sha256_v1",
+                    schema_version="b02f3872_preview_v1",
+                    channels=["suhu", "rh"],
+                    window_size=30,
+                    stride=1,
+                    contract_status="legacy_30",
+                    score_key="preview_ratio",
+                    score_semantics="legacy provenance fixture",
+                    threshold=1.0,
+                    threshold_policy={"comparator": ">"},
+                    temporal_semantics="context_end",
+                    source_commit=None,
+                    source_config="legacy-30-row-provenance",
+                    manifest_sha256=None,
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+        async with client_factory(_router("anomaly_backend.routes.preview")) as (
+            _,
+            client,
+        ):
+            listing = await client.get(
+                "/api/models", params={"device_id": PUBLIC_DEVICE_ID}
+            )
+            activation = await client.post(
+                "/api/model-activations",
+                json={
+                    "command_id": "reject-legacy-thirty-row-model",
+                    "device_id": PUBLIC_DEVICE_ID,
+                    "model_version": version,
+                },
+            )
+
+        models = ModelsResponse.model_validate(_payload(listing), strict=True)
+        legacy = next(
+            item
+            for family in models.families
+            for item in family.versions
+            if item.version == version
+        )
+        assert legacy.compatible is False
+        assert legacy.selectable is False
+        assert "not compatible" in _problem(activation, 422).detail
+    finally:
+        async with engine.begin() as connection:
+            await connection.execute(
+                tables.model_versions.delete().where(
+                    tables.model_versions.c.version == version
+                )
+            )
+        await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_replay_rejects_an_active_legacy_thirty_row_model(
+    client_factory: ClientFactory,
+) -> None:
+    engine = create_database_engine(Settings.from_environ())
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                tables.model_versions.update()
+                .where(tables.model_versions.c.version == "preview-lstm-ae-v1")
+                .values(window_size=30, contract_status="legacy_30")
+            )
+        async with client_factory(_router("anomaly_backend.routes.preview")) as (
+            _,
+            client,
+        ):
+            response = await client.post(
+                "/api/replay-jobs",
+                json={
+                    "command_id": "reject-active-legacy-thirty-row-model",
+                    "device_id": PUBLIC_DEVICE_ID,
+                    "from": "2026-02-01T00:00:00",
+                    "to": "2026-02-01T00:01:00",
+                },
+            )
+        assert "not compatible" in _problem(response, 409).detail
+    finally:
+        async with engine.begin() as connection:
+            await connection.execute(
+                tables.model_versions.update()
+                .where(tables.model_versions.c.version == "preview-lstm-ae-v1")
+                .values(window_size=10, contract_status="live_10")
+            )
+        await engine.dispose()
 
 
 @pytest.mark.anyio
@@ -573,6 +737,122 @@ async def test_inference_default_resolves_active_selection_not_lexical_version(
 
 
 @pytest.mark.anyio
+async def test_worker_revalidates_model_metadata_before_direct_scoring(
+    client_factory: ClientFactory,
+) -> None:
+    async with client_factory(_router("anomaly_backend.routes.preview")) as (
+        _,
+        client,
+    ):
+        submission = await client.post(
+            "/api/replay-jobs",
+            json={
+                "command_id": "worker-boundary-revalidation",
+                "device_id": PUBLIC_DEVICE_ID,
+                "from": "2026-02-01T00:00:00",
+                "to": "2026-02-01T00:02:00",
+            },
+        )
+    assert submission.status_code == 202
+
+    with _sync_connection() as connection:
+        job = claim_job(connection, "worker-boundary-revalidation")
+        assert job is not None
+        connection.execute(
+            "UPDATE model_versions SET window_size = 30, contract_status = 'legacy_30' WHERE version = %s",
+            (job["model_version"],),
+        )
+        try:
+            with pytest.raises(
+                ReplayWorkerError,
+                match="job model version is not compatible with live scoring",
+            ):
+                process_chunk(
+                    connection,
+                    "worker-boundary-revalidation",
+                    job,
+                )
+            staged = connection.execute(
+                "SELECT count(*) AS count FROM replay_result_staging WHERE job_id = %s",
+                (job["job_id"],),
+            ).fetchone()
+            assert staged is not None and staged["count"] == 0
+        finally:
+            connection.execute(
+            "UPDATE model_versions SET window_size = 10, contract_status = 'live_10' WHERE version = %s",
+                (job["model_version"],),
+            )
+
+
+@pytest.mark.anyio
+async def test_short_replay_rejects_mutated_legacy_model_before_zero_output_success(
+    client_factory: ClientFactory,
+) -> None:
+    async with client_factory(_router("anomaly_backend.routes.preview")) as (
+        _,
+        client,
+    ):
+        submission = await client.post(
+            "/api/replay-jobs",
+            json={
+                "command_id": "short-replay-worker-boundary-revalidation",
+                "device_id": PUBLIC_DEVICE_ID,
+                "from": "2026-02-01T00:00:00",
+                "to": "2026-02-01T00:00:05",
+            },
+        )
+    job_id = ReplayJobResponse.model_validate(
+        _payload(submission), strict=True
+    ).job.job_id
+    assert submission.status_code == 202
+
+    with _sync_connection() as connection:
+        queued = connection.execute(
+            "SELECT model_version FROM replay_jobs WHERE job_id = %s",
+            (job_id,),
+        ).fetchone()
+        assert queued is not None
+        connection.execute(
+            "UPDATE model_versions SET window_size = 30, contract_status = 'legacy_30' WHERE version = %s",
+            (queued["model_version"],),
+        )
+        connection.execute(
+            "UPDATE replay_jobs SET max_attempts = 1 WHERE job_id = %s",
+            (job_id,),
+        )
+        try:
+            assert run_once(
+                connection, "short-replay-worker-boundary-revalidation"
+            ) is True
+            state = connection.execute(
+                """
+                SELECT status, error_code, result_count
+                FROM replay_jobs WHERE job_id = %s
+                """,
+                (job_id,),
+            ).fetchone()
+            final_count = connection.execute(
+                """
+                SELECT count(*) AS count
+                FROM inference_results WHERE replay_job_id = %s
+                """,
+                (job_id,),
+            ).fetchone()
+        finally:
+            connection.execute(
+            "UPDATE model_versions SET window_size = 10, contract_status = 'live_10' WHERE version = %s",
+                (queued["model_version"],),
+            )
+
+    assert state == {
+        "status": "failed",
+        "error_code": "worker_validation_failed",
+        "result_count": 0,
+    }
+    assert final_count == {"count": 0}
+
+
+@pytest.mark.anyio
 async def test_worker_keeps_results_private_until_atomic_success_publication(
     client_factory: ClientFactory,
 ) -> None:
@@ -644,7 +924,7 @@ async def test_worker_keeps_results_private_until_atomic_success_publication(
         await engine.dispose()
 
     assert job["status"] == "succeeded"
-    assert final_count == job["result_count"] == 91
+    assert final_count == job["result_count"] == 111
     assert staging_count == 0
 
 
@@ -872,7 +1152,7 @@ async def test_checkpoint_restart_publishes_without_duplicate_rows(
             (job_id,),
         ).fetchone()
         assert staged_before is not None
-        assert staged_before["count"] == 91
+        assert staged_before["count"] == 111
         first.execute(
             """
             UPDATE replay_jobs
@@ -915,7 +1195,7 @@ async def test_checkpoint_restart_publishes_without_duplicate_rows(
     assert final_count is not None
     assert staging_count is not None
     assert state["status"] == "succeeded"
-    assert state["result_count"] == final_count["count"] == 91
+    assert state["result_count"] == final_count["count"] == 111
     assert staging_count["count"] == 0
 
 
@@ -1175,7 +1455,7 @@ async def test_publication_collision_rolls_back_without_marking_job_succeeded(
         ).fetchone()
 
     assert state == {"status": "running"}
-    assert staging_count is not None and staging_count["count"] == 91
+    assert staging_count is not None and staging_count["count"] == 111
     assert final_count is not None and final_count["count"] == 1
 
 

@@ -26,6 +26,11 @@ export function CurrentAlertCard({ alert }: CurrentAlertCardProps) {
   const sensorLabel = sensorLabels[alert.device_id]
   const sensorPath = `/sensors/${alert.device_id}?sensor=${alert.device_id}`
   const alertPath = `/alerts?sensor=${alert.device_id}`
+  const statusLabel = {
+    detected: 'Active anomaly',
+    acknowledged: 'Acknowledged alert',
+    resolved: 'Resolved alert',
+  }[alert.status]
 
   return (
     <Card
@@ -43,7 +48,7 @@ export function CurrentAlertCard({ alert }: CurrentAlertCardProps) {
           <Stack spacing={0.5}>
             <Typography variant="h3">Sensor {sensorLabel}</Typography>
             <Typography component="p" color="error.main" variant="h4">
-              Active anomaly
+              {statusLabel}
             </Typography>
           </Stack>
           <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>

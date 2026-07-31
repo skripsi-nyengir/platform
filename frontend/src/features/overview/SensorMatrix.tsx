@@ -19,14 +19,24 @@ import { SensorStatus } from '../../components/states/SensorStatus'
 import { ProvenanceBadge } from '../../components/data/ProvenanceBadge'
 import type { CurrentAlert } from '../../contracts/alerts'
 import { sensorIds, sensorLabels, type SensorId } from '../../contracts/common'
-import type { LatestTelemetryResponse, LatestTelemetrySensor } from '../../contracts/telemetry'
+import type {
+  LatestTelemetryResponse,
+  LatestTelemetrySensor,
+  TelemetryHistoryResponse,
+} from '../../contracts/telemetry'
 import { tokens } from '../../theme/tokens'
-import { telemetryDefaultRange } from '../filters/urlFilters'
-import { useTelemetryHistoryQuery } from '../telemetry/queries'
+import {
+  resolveLiveRange,
+  updateLiveUrlFilters,
+  type LiveUrlFilters,
+} from '../filters/urlFilters'
 import type { LatestSensorScore } from './useOverviewData'
 
 export interface SensorMatrixProps {
   telemetry?: LatestTelemetryResponse
+  history?: TelemetryHistoryResponse
+  historyError?: boolean
+  filters: LiveUrlFilters
   scores: readonly LatestSensorScore[]
   alerts: readonly CurrentAlert[]
 }
@@ -72,28 +82,30 @@ const metadataRowSx = {
 function SensorCard({
   sensorId,
   sensor,
+  history,
+  historyError,
+  filters,
   score,
   hasDetectedAlert,
 }: {
   sensorId: SensorId
   sensor?: LatestTelemetrySensor
+  history?: TelemetryHistoryResponse
+  historyError?: boolean
+  filters: LiveUrlFilters
   score?: LatestSensorScore
   hasDetectedAlert: boolean
 }) {
   const sensorLabel = sensorLabels[sensorId]
   const theme = useTheme()
-  const history = useTelemetryHistoryQuery({
-    deviceId: sensorId,
-    ...telemetryDefaultRange,
-    bucket: '1d',
-    limit: 500,
-  })
-  const historyPoints = history.data?.points ?? []
+  const historyPoints = history?.points ?? []
+  const displayedRange = history ?? resolveLiveRange(filters)
   const chartColors = getChartColors(theme)
   const sparklineData = buildOverviewSparklineData({
     theme,
     sensorId,
-    ...telemetryDefaultRange,
+    from: displayedRange.from,
+    to: displayedRange.to,
     telemetry: historyPoints,
   })
   const priority = score?.isAnomaly === true || hasDetectedAlert
@@ -168,8 +180,8 @@ function SensorCard({
           </Box>
 
           <Box sx={{ height: tokens.size.sparkline, minWidth: 0 }}>
-            {history.data === undefined ? (
-              history.isError ? (
+            {history === undefined ? (
+              historyError ? (
                 <Stack
                   role="status"
                   aria-label={`Recent history unavailable for sensor ${sensorLabel}`}
@@ -313,6 +325,12 @@ function SensorCard({
                 ) : score.score}
               </Box>
             </Box>
+            {score?.severity === undefined ? null : (
+              <Box component="div" sx={metadataRowSx}>
+                <Box component="dt" sx={definitionLabelSx}>Severity</Box>
+                <Box component="dd" sx={definitionValueSx}>{score.severity}</Box>
+              </Box>
+            )}
             {score?.threshold === undefined ? null : (
               <Box component="div" sx={metadataRowSx}>
                 <Box component="dt" sx={definitionLabelSx}>Threshold</Box>
@@ -334,7 +352,10 @@ function SensorCard({
       <CardActions sx={{ flexWrap: 'wrap', px: 2, pb: 2, pt: 0 }}>
         <Button
           component={RouterLink}
-          to={`/sensors/${sensorId}?sensor=${sensorId}`}
+          to={`/sensors/${sensorId}?${updateLiveUrlFilters(
+            new URLSearchParams(),
+            { ...filters, sensor: sensorId },
+          )}`}
           fullWidth={!hasDetectedAlert}
           variant="outlined"
         >
@@ -350,7 +371,14 @@ function SensorCard({
   )
 }
 
-export function SensorMatrix({ telemetry, scores, alerts }: SensorMatrixProps) {
+export function SensorMatrix({
+  telemetry,
+  history,
+  historyError,
+  filters,
+  scores,
+  alerts,
+}: SensorMatrixProps) {
   return (
     <section aria-labelledby="sensor-matrix-heading">
       <Stack spacing={2}>
@@ -363,6 +391,9 @@ export function SensorMatrix({ telemetry, scores, alerts }: SensorMatrixProps) {
               <SensorCard
                 sensorId={sensorId}
                 sensor={telemetry?.sensors.find((item) => item.device_id === sensorId)}
+                history={history}
+                historyError={historyError}
+                filters={filters}
                 score={scores.find((item) => item.deviceId === sensorId)}
                 hasDetectedAlert={alerts.some((alert) => alert.device_id === sensorId)}
               />

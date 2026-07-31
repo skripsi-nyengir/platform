@@ -1,21 +1,24 @@
 import { Box, Paper, Stack, Typography } from '@mui/material'
-import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { TemporalFilterBar } from '../components/filters/TemporalFilterBar'
 import { ApiErrorPanel } from '../components/states/ApiErrorPanel'
 import { EmptyState } from '../components/states/EmptyState'
 import { PanelSkeleton } from '../components/states/PanelSkeleton'
 import { PollingFailureNotice } from '../components/states/PollingFailureNotice'
 import { SensorStatus } from '../components/states/SensorStatus'
-import { SensorIdSchema, sensorLabels, type SensorId } from '../contracts/common'
+import { publicDeviceId, SensorIdSchema, sensorLabels, type SensorId } from '../contracts/common'
+import { AlertEpisodeContext } from '../features/alerts-ui/AlertEpisodeContext'
 import {
-  parseUrlFilters,
-  updateUrlFilters,
-  telemetryDefaultRange,
-  type UrlFilters,
+  parseLiveUrlFilters,
+  resolveLiveRange,
+  updateLiveUrlFilters,
+  type LiveUrlFilters,
 } from '../features/filters/urlFilters'
-import { useLatestTelemetryQuery } from '../features/telemetry/queries'
+import { CurrentAlertCard } from '../features/overview/CurrentAlertCard'
 import { RelatedAlertHistory } from '../features/sensors/RelatedAlertHistory'
 import { SensorHistoryPanel } from '../features/sensors/SensorHistoryPanel'
+import { StatusSnapshot } from '../features/systemHealth/StatusSnapshot'
+import { useLiveTelemetryData } from '../features/useLiveTelemetryData'
 import { tokens } from '../theme/tokens'
 
 const technicalTextSx = {
@@ -24,9 +27,16 @@ const technicalTextSx = {
   overflowWrap: 'anywhere',
 } as const
 
-function SensorSnapshot({ sensorId }: { sensorId: SensorId }) {
+type LiveData = ReturnType<typeof useLiveTelemetryData>
+
+function SensorSnapshot({
+  sensorId,
+  latest,
+}: {
+  sensorId: SensorId
+  latest: LiveData['latestTelemetry']
+}) {
   const sensorLabel = sensorLabels[sensorId]
-  const latest = useLatestTelemetryQuery(sensorId)
   const sensor = latest.data?.sensors.find((item) => item.device_id === sensorId)
 
   return (
@@ -93,25 +103,16 @@ function SensorSnapshot({ sensorId }: { sensorId: SensorId }) {
 export function SensorDetailPage() {
   const { sensorId: rawSensorId } = useParams()
   const [params, setParams] = useSearchParams()
-  const navigate = useNavigate()
   const parsedSensorId = SensorIdSchema.safeParse(rawSensorId)
+  const sensorId = parsedSensorId.success ? parsedSensorId.data : publicDeviceId
+  const sensorLabel = sensorLabels[sensorId]
+  const filters = parseLiveUrlFilters(params, sensorId)
+  const live = useLiveTelemetryData(sensorId, filters)
+  const displayedRange = live.telemetryHistory.data ?? resolveLiveRange(filters)
+  const updateFilters = (patch: Partial<LiveUrlFilters>) =>
+    setParams(updateLiveUrlFilters(params, patch))
 
   if (!parsedSensorId.success) return <Navigate to="/" replace />
-
-  const sensorId = parsedSensorId.data
-  const sensorLabel = sensorLabels[sensorId]
-  const filters = parseUrlFilters(params, sensorId)
-  const updateFilters = (patch: Partial<UrlFilters>) => {
-    const next = updateUrlFilters(params, patch)
-    if (patch.sensor !== undefined && patch.sensor !== sensorId) {
-      void navigate({
-        pathname: `/sensors/${patch.sensor}`,
-        search: next.toString(),
-      })
-      return
-    }
-    setParams(next)
-  }
 
   return (
     <Stack spacing={6}>
@@ -121,22 +122,51 @@ export function SensorDetailPage() {
           Selected sensor: <Box component="span" sx={technicalTextSx}>{sensorLabel}</Box>
         </Typography>
         <Typography color="text.secondary" variant="body2">
-          Corpus range (WIB): {telemetryDefaultRange.from} – {telemetryDefaultRange.to}
-        </Typography>
-        <Typography color="text.secondary" variant="body2">
-          Telemetri historis nyata · Asia/Jakarta (WIB)
+          Telemetri live · Asia/Jakarta (WIB)
         </Typography>
         <Typography color="text.secondary" variant="body2">
           Skor berbadge sesuai provenance API; histori menampilkan satu versi model.
         </Typography>
       </Stack>
       <TemporalFilterBar
-        value={{ ...filters, sensor: sensorId }}
+        value={filters}
         onChange={updateFilters}
       />
-      <SensorSnapshot sensorId={sensorId} />
-      <SensorHistoryPanel sensorId={sensorId} filters={filters} />
-      <RelatedAlertHistory sensorId={sensorId} from={filters.from} to={filters.to} />
+      <SensorSnapshot sensorId={sensorId} latest={live.latestTelemetry} />
+      {live.health.data === undefined ? (
+        live.health.isError ? (
+          <ApiErrorPanel error={live.health.error} onRetry={() => void live.health.refetch()} />
+        ) : (
+          <PanelSkeleton label="Loading live system health" />
+        )
+      ) : (
+        <StatusSnapshot
+          snapshot={live.health.data}
+          displayedAt={live.health.dataUpdatedAt === 0
+            ? live.health.data.checked_at
+            : new Date(live.health.dataUpdatedAt).toISOString()}
+          pollAgeSeconds={0}
+        />
+      )}
+      <SensorHistoryPanel
+        sensorId={sensorId}
+        filters={filters}
+        telemetry={live.telemetryHistory}
+        inference={live.inference}
+        alertEvents={live.alertEvents}
+      />
+      {live.currentAlerts.data?.items.map((alert) => (
+        <Stack key={alert.alert_id} spacing={2}>
+          <CurrentAlertCard alert={alert} />
+          <AlertEpisodeContext alertId={alert.alert_id} />
+        </Stack>
+      ))}
+      <RelatedAlertHistory
+        sensorId={sensorId}
+        from={displayedRange.from}
+        to={displayedRange.to}
+        alerts={live.alertEvents}
+      />
     </Stack>
   )
 }

@@ -1,6 +1,7 @@
 import { delay, http, HttpResponse, type HttpHandler } from 'msw'
 import type {
   AcknowledgeAlertResponse,
+  AlertDetailResponse,
   AlertEvent,
   CurrentAlert,
   CurrentAlertsResponse,
@@ -22,7 +23,11 @@ import {
   type EdaJobResponse,
   type EdaRunResponse,
 } from '../contracts/eda'
-import { InferenceQuerySchema, type InferenceResponse } from '../contracts/inference'
+import {
+  InferenceQuerySchema,
+  type InferencePoint,
+  type InferenceResponse,
+} from '../contracts/inference'
 import {
   TelemetryHistoryQuerySchema,
   type TelemetryHistoryResponse,
@@ -59,7 +64,6 @@ import {
   systemStatus,
 } from './fixtures/systemHealth'
 import {
-  dailyTelemetryHistoryBySensor,
   dataGapTelemetryHistoryBySensor,
   latestTelemetrySensors,
   offlineTelemetrySensor,
@@ -146,6 +150,36 @@ function requestCount(state: MockApiState, key: string): number {
 
 function pathParam(value: string | readonly string[] | undefined): string {
   return String(value)
+}
+
+function historicalSecondsBefore(anchor: string, seconds: number): string {
+  return new Date(Date.parse(`${anchor}Z`) - seconds * 1_000).toISOString().slice(0, 19)
+}
+
+function fitTelemetryToRange(
+  points: readonly TelemetryPoint[],
+  to: string,
+): TelemetryPoint[] {
+  const selected = points.slice(-12)
+  return selected.map((point, index) => ({
+    ...point,
+    ts: historicalSecondsBefore(to, (selected.length - index) * 30),
+  }))
+}
+
+function fitInferenceToRange(
+  points: readonly InferencePoint[],
+  to: string,
+): InferencePoint[] {
+  return points.map((point, index) => {
+    const windowEnd = historicalSecondsBefore(to, (points.length - index) * 30)
+    return {
+      ...point,
+      window_start_ts: historicalSecondsBefore(windowEnd, 30),
+      window_end_ts: windowEnd,
+      score_ts: windowEnd,
+    }
+  })
 }
 
 const scenarioDevice = {
@@ -430,26 +464,32 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
          ? simulationTelemetryPoints
          : state.scenario === 'empty' && deviceId === scenarioDevice.empty
            ? []
-           : state.scenario === 'data-gap'
-             ? dataGapTelemetryHistoryBySensor[deviceId]
-             : bucket === '1d'
-               ? dailyTelemetryHistoryBySensor[deviceId]
-               : telemetryHistoryBySensor[deviceId]
-       const bounded = source
-         .filter(
+            : state.scenario === 'data-gap'
+              ? dataGapTelemetryHistoryBySensor[deviceId]
+              : telemetryHistoryBySensor[deviceId]
+       let bounded = source
+          .filter(
+           (point) =>
+             compareHistoricalDateTimes(point.ts, from) >= 0 &&
+             compareHistoricalDateTimes(point.ts, to) < 0,
+          )
+         .map((point) => ({ ...point }))
+       if (bounded.length === 0 && source.length > 0 && deviceId === publicDeviceId) {
+         bounded = fitTelemetryToRange(source, to).filter(
            (point) =>
              compareHistoricalDateTimes(point.ts, from) >= 0 &&
              compareHistoricalDateTimes(point.ts, to) < 0,
          )
-        .map((point) => ({ ...point }))
+       }
       const points = bounded.slice(offset, offset + limit)
       const body = {
         request_id: 'req_telemetry_history',
         device_id: deviceId,
         time_zone: 'Asia/Jakarta',
         from,
-        to,
-        bucket,
+         to,
+         bucket,
+         bucket_seconds: bucket === 'raw' ? null : 60,
         points,
         next_cursor: nextCursor('telemetry', offset, points.length, bounded.length),
         returned_count: points.length,
@@ -486,18 +526,29 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
              : normalInferenceBySensor[deviceId]
        const modelFiltered = deviceId === simDeviceId ||
          parsed.data.modelVersion === undefined || parsed.data.modelVersion === modelVersion ? source : []
-       const bounded = modelFiltered
-         .filter(
+        let bounded = modelFiltered
+          .filter(
            (point) =>
              compareHistoricalDateTimes(point.window_start_ts, from) >= 0 &&
              compareHistoricalDateTimes(point.window_end_ts, to) <= 0,
-         )
-         .map((point) => ({ ...point }))
+          )
+          .map((point) => ({ ...point }))
+        if (bounded.length === 0 && modelFiltered.length > 0 && deviceId === publicDeviceId) {
+          bounded = fitInferenceToRange(modelFiltered, to).filter(
+            (point) =>
+              compareHistoricalDateTimes(point.window_start_ts, from) >= 0 &&
+              compareHistoricalDateTimes(point.window_end_ts, to) <= 0,
+          )
+        }
       const points = bounded.slice(offset, offset + limit)
       const body = {
         request_id: 'req_inference_results',
-        device_id: deviceId,
-        time_zone: 'Asia/Jakarta',
+         device_id: deviceId,
+         from,
+         to,
+         bucket: parsed.data.bucket,
+         bucket_seconds: parsed.data.bucket === 'raw' ? null : 60,
+         time_zone: 'Asia/Jakarta',
         model_version: modelVersion,
         points,
         next_cursor: nextCursor('inference', offset, points.length, bounded.length),
@@ -517,7 +568,7 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
         cursor: queryValue(url, 'cursor'),
       })
       if (!parsed.success) return invalidQuery(request)
-      const { alertId, deviceId, limit } = parsed.data
+      const { alertId, deviceId, from, to, limit } = parsed.data
       const offset = cursorOffset(url, 'alert-events')
       const filtered = state.events
         .filter((event) => alertId === undefined || event.alert_id === alertId)
@@ -529,9 +580,11 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
         )
       const events = filtered.slice(offset, offset + limit).map((event) => ({ ...event }))
       return HttpResponse.json({
-        request_id: 'req_alert_events',
-        time_zone: 'Asia/Jakarta',
-        events,
+         request_id: 'req_alert_events',
+         time_zone: 'Asia/Jakarta',
+         from: from ?? null,
+         to: to ?? new Date().toISOString(),
+         events,
         next_cursor: nextCursor('alert-events', offset, events.length, filtered.length),
         returned_count: events.length,
       })
@@ -563,6 +616,33 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
         page_size: pageSize,
         total: filtered.length,
       } satisfies CurrentAlertsResponse
+      return HttpResponse.json(body)
+    }),
+
+    http.get('/api/alerts/:alertId', ({ request, params }) => {
+      const alert = currentAlert(state)
+      if (alert === undefined || alert.alert_id !== pathParam(params.alertId)) {
+        return problem(404, 'req_alert_not_found', 'Alert not found', 'Alert was not found', request.url)
+      }
+      const sourceReading = fitTelemetryToRange(
+        telemetryHistoryBySensor[alert.device_id],
+        alert.episode_end_ts,
+      ).at(-1)
+      const inference = activeAnomalyInferenceBySensor[alert.device_id].at(-1)
+      if (sourceReading === undefined || inference === undefined) {
+        return problem(404, 'req_alert_context_not_found', 'Alert context not found', 'Alert context was not found', request.url)
+      }
+      const body = {
+        request_id: 'req_alert_detail',
+        time_zone: 'Asia/Jakarta',
+        alert,
+        context_before: Array.from({ length: 10 }, () => ({ ...sourceReading })),
+        episode_points: [{
+          inference: { ...inference },
+          source_readings: Array.from({ length: 10 }, () => ({ ...sourceReading })),
+        }],
+        recovery_points: [],
+      } satisfies AlertDetailResponse
       return HttpResponse.json(body)
     }),
 

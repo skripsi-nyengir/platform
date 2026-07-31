@@ -3,6 +3,7 @@ import {
   BucketSchema,
   CorpusDeviceIdSchema,
   HistoricalDateTimeSchema,
+  SeveritySchema,
   compareHistoricalDateTimes,
 } from './common'
 
@@ -16,12 +17,15 @@ export const InferencePointSchema = z
     score: z.number(),
     threshold: z.number(),
     is_anomaly: z.boolean(),
+    severity: SeveritySchema.nullable(),
+    latest_score: z.number().nullable(),
+    sample_count: z.number().int().positive(),
     model_version: z.string(),
     score_provenance: ScoreProvenanceSchema,
-    recon_temperature_c: z.number().nullable().optional(),
-    recon_relative_humidity_pct: z.number().nullable().optional(),
-    band_half_temperature_c: z.number().nonnegative().nullable().optional(),
-    band_half_relative_humidity_pct: z.number().nonnegative().nullable().optional(),
+    recon_temperature_c: z.number().nullable(),
+    recon_relative_humidity_pct: z.number().nullable(),
+    band_half_temperature_c: z.number().nonnegative().nullable(),
+    band_half_relative_humidity_pct: z.number().nonnegative().nullable(),
   })
   .refine(
     (value) => compareHistoricalDateTimes(value.window_start_ts, value.window_end_ts) < 0,
@@ -69,15 +73,27 @@ export const InferenceResponseSchema = z
   .strictObject({
     request_id: z.string(),
     device_id: CorpusDeviceIdSchema,
+    from: HistoricalDateTimeSchema,
+    to: HistoricalDateTimeSchema,
+    bucket: BucketSchema,
+    bucket_seconds: z.number().int().min(60).nullable(),
     time_zone: z.literal('Asia/Jakarta'),
     model_version: z.string(),
     points: z.array(InferencePointSchema).max(5_000),
     next_cursor: z.string().nullable(),
     returned_count: z.number().int().nonnegative(),
   })
-  .refine((value) => value.returned_count === value.points.length, {
-    message: 'returned_count must equal points length',
-    path: ['returned_count'],
+  .superRefine((value, context) => {
+    if (compareHistoricalDateTimes(value.from, value.to) >= 0) {
+      context.addIssue({ code: 'custom', message: 'from must be earlier than to', path: ['from'] })
+    }
+    if (value.returned_count !== value.points.length) {
+      context.addIssue({
+        code: 'custom',
+        message: 'returned_count must equal points length',
+        path: ['returned_count'],
+      })
+    }
   })
   .refine(
     (value) => value.points.every((point) => point.model_version === value.model_version),

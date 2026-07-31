@@ -1,4 +1,6 @@
 import { Box, Paper, Stack, Typography } from '@mui/material'
+import type { UseQueryResult } from '@tanstack/react-query'
+import type { ApiError } from '../../api/errors'
 import { ApiErrorPanel } from '../../components/states/ApiErrorPanel'
 import { EmptyState } from '../../components/states/EmptyState'
 import { PanelSkeleton } from '../../components/states/PanelSkeleton'
@@ -9,12 +11,13 @@ import {
 } from '../../contracts/common'
 import { ProvenanceBadge } from '../../components/data/ProvenanceBadge'
 import { tokens } from '../../theme/tokens'
-import { useAlertEventsQuery } from '../alerts/queries'
+import type { AlertEventsResponse } from '../../contracts/alerts'
 
 export interface RelatedAlertHistoryProps {
   sensorId: SensorId
   from: string
   to: string
+  alerts: UseQueryResult<AlertEventsResponse, ApiError>
 }
 
 const eventLabels: Record<AlertStatus, string> = {
@@ -29,12 +32,8 @@ const technicalTextSx = {
   overflowWrap: 'anywhere',
 } as const
 
-export function RelatedAlertHistory({ sensorId, from, to }: RelatedAlertHistoryProps) {
+export function RelatedAlertHistory({ sensorId, from, to, alerts }: RelatedAlertHistoryProps) {
   const sensorLabel = sensorLabels[sensorId]
-  const alerts = useAlertEventsQuery({
-    deviceId: sensorId,
-    limit: 200,
-  })
 
   return (
     <Paper component="section" aria-label="Related alert history" variant="outlined" sx={{ p: 2 }}>
@@ -42,8 +41,7 @@ export function RelatedAlertHistory({ sensorId, from, to }: RelatedAlertHistoryP
         <Stack spacing={0.5}>
           <Typography variant="h2">Related alert history</Typography>
           <Typography variant="body2" color="text.secondary">
-            Lifecycle terkait untuk {sensorLabel}; rentang episode terpilih {from}–{to} tidak
-            menyembunyikan event operasional yang terjadi kemudian.
+            Lifecycle terkait untuk {sensorLabel} dalam rentang live {from}–{to}.
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Episode time WIB; lifecycle time UTC.

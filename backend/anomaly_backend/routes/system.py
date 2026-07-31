@@ -1,4 +1,5 @@
-from typing import Annotated
+from datetime import datetime
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
@@ -14,6 +15,7 @@ from anomaly_backend.contracts import (
     SystemTelemetryStatus,
     current_operational_instant,
     format_historical_datetime,
+    format_operational_instant,
 )
 from anomaly_backend.db import (
     current_migration_revision,
@@ -24,7 +26,7 @@ from anomaly_backend.problems import DependencyFailure, new_request_id
 from anomaly_backend.sql.system import telemetry_observation
 
 
-_EXPECTED_REVISION = "20260726_0003"
+_EXPECTED_REVISION = "20260731_0010"
 
 router = APIRouter()
 
@@ -73,9 +75,7 @@ async def system_status(
     checked_at = current_operational_instant()
     database_healthy = await database_is_healthy(connection)
     revision = await current_migration_revision(connection)
-    latest_ts, fresh_count, stale_count, offline_count = (
-        await telemetry_observation(connection)
-    )
+    observation = await telemetry_observation(connection)
     database_ready = database_healthy and revision == _EXPECTED_REVISION
     published_count = int(
         await connection.scalar(
@@ -98,12 +98,7 @@ async def system_status(
     worker_heartbeat = await connection.scalar(
         select(func.max(tables.worker_heartbeats.c.heartbeat_at))
     )
-    active_version = await connection.scalar(
-        select(tables.active_model_selections.c.model_version).where(
-            tables.active_model_selections.c.device_id
-            == "b02f3872-ruang-produksi"
-        )
-    )
+    active_version = observation["active_model_version"]
     ready_artifacts = int(
         await connection.scalar(
             select(func.count()).select_from(tables.model_versions).where(
@@ -113,12 +108,50 @@ async def system_status(
         )
         or 0
     )
+    latest_ts = cast(datetime | None, observation["latest_ts"])
+    age_seconds = cast(float | None, observation["age_seconds"])
+    configuration_valid = cast(bool, observation["configuration_valid"])
+    lease_active = cast(bool, observation["lease_active"])
+    health_status = cast(str | None, observation["health_status"])
+    health_detail = cast(str | None, observation["health_detail"])
+    fresh = age_seconds is not None and age_seconds <= 600
+    reasons: list[str] = []
+    if not configuration_valid:
+        reasons.append("Activate a verified live model and scaler bundle.")
+    if not lease_active:
+        reasons.append("Start the live subscriber or restore its database lease.")
+    if age_seconds is None:
+        reasons.append("No valid telemetry reading has been persisted.")
+    elif not fresh:
+        reasons.append("Check broker delivery because the latest valid reading is stale.")
+    detail_reasons = {
+        "persistence_retry": "Restore database writes; live persistence is retrying.",
+        "inference_retry": "Restore the active model runtime; inference is retrying.",
+        "watchdog_retry": "Restore the live watchdog dependency; it is retrying.",
+    }
+    if health_detail in detail_reasons:
+        reasons.append(detail_reasons[health_detail])
+    if health_status == "unhealthy":
+        classification = "failed"
+    elif configuration_valid and lease_active and fresh and health_status == "healthy":
+        classification = "healthy"
+    else:
+        classification = "degraded"
+    connection_state = (
+        "subscribed"
+        if lease_active and health_status == "healthy"
+        else "connected"
+        if lease_active
+        else "disconnected"
+    )
+    subscriber_ready = classification == "healthy"
     return SystemStatusResponse(
         request_id=new_request_id(),
         checked_at=checked_at,
         overall_observation=(
-            "API/DB siap; telemetri, worker preview, pilihan model, dan "
-            "artifact dilaporkan sebagai status terpisah."
+            "Live telemetry is healthy."
+            if not reasons
+            else " ".join(reasons)
         ),
         services=[
             SystemServiceStatus(
@@ -137,6 +170,19 @@ async def system_status(
                     f"Database connectivity and revision {_EXPECTED_REVISION} observed"
                     if database_ready
                     else "Database connectivity or current revision was not observed"
+                ),
+            ),
+            SystemServiceStatus(
+                name="live-subscriber",
+                liveness="alive" if lease_active else "not_alive",
+                readiness="ready" if subscriber_ready else "not_ready",
+                checked_at=checked_at,
+                detail=(
+                    "Live subscriber lease, telemetry, and model are ready"
+                    if subscriber_ready
+                    else reasons[0]
+                    if reasons
+                    else "Live subscriber is not ready"
                 ),
             ),
             SystemServiceStatus(
@@ -184,20 +230,82 @@ async def system_status(
             ),
         ],
         telemetry=SystemTelemetryStatus(
-            latest_ts=(
-                format_historical_datetime(latest_ts)
-                if latest_ts is not None
+            classification=classification,
+            reasons=reasons,
+            configuration_valid=configuration_valid,
+            lease_active=lease_active,
+            fencing_token=cast(int | None, observation["fencing_token"]),
+            database_heartbeat=(
+                format_operational_instant(value)
+                if (value := cast(datetime | None, observation["database_heartbeat"]))
                 else None
             ),
-            age_seconds=0.0 if latest_ts is not None else None,
-            fresh_sensor_count=fresh_count,
-            stale_sensor_count=stale_count,
-            offline_sensor_count=offline_count,
+            connection_state=connection_state,
+            connack_received=connection_state in ("connected", "subscribed"),
+            suback_received=connection_state == "subscribed",
+            latest_ts=format_historical_datetime(latest_ts) if latest_ts else None,
+            last_valid_reading_ts=(
+                format_historical_datetime(latest_ts) if latest_ts else None
+            ),
+            last_valid_reading_at=(
+                format_operational_instant(value)
+                if (value := cast(datetime | None, observation["last_valid_at"]))
+                else None
+            ),
+            age_seconds=age_seconds,
+            last_gap_at=(
+                format_operational_instant(value)
+                if (value := cast(datetime | None, observation["last_gap_at"]))
+                else None
+            ),
+            invalid_message_count=None,
+            retained_message_count=None,
+            last_persistence_failure_at=(
+                format_operational_instant(value)
+                if (
+                    value := cast(
+                        datetime | None,
+                        observation["last_persistence_failure_at"],
+                    )
+                )
+                else None
+            ),
+            ingress_queue_depth=None,
+            dropped_newest_count=None,
+            pending_boundary_count=cast(
+                int, observation["pending_boundary_count"]
+            ),
+            durable_backlog_count=cast(int, observation["durable_backlog_count"]),
+            cursor_ts=(
+                format_historical_datetime(value)
+                if (value := cast(datetime | None, observation["cursor_ts"]))
+                else None
+            ),
+            cursor_id=cast(str | None, observation["cursor_id"]),
+            recovery_ready=configuration_valid and lease_active,
+            active_model_version=cast(
+                str | None, observation["active_model_version"]
+            ),
+            active_scaler_corpus_id=cast(
+                str | None, observation["active_scaler_corpus_id"]
+            ),
+            artifact_hashes=cast(dict[str, str], observation["artifact_hashes"]),
+            retry_state=(
+                "retrying"
+                if health_detail is not None and health_detail.endswith("_retry")
+                else "idle"
+                if health_status is not None
+                else "unknown"
+            ),
+            fresh_sensor_count=1 if fresh else 0,
+            stale_sensor_count=1 if age_seconds is not None and not fresh else 0,
+            offline_sensor_count=1 if age_seconds is None else 0,
         ),
         diagnostics={
             "preview_score_provenance": "simulated_preview",
             "published_corpus_count": published_count,
             "selected_model_version": active_version,
             "ready_artifact_family_count": ready_artifacts,
+            "live_health_status": health_status,
         },
     )

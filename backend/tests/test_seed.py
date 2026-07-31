@@ -65,7 +65,7 @@ def test_normalized_pilot_is_derived_from_pinned_sources() -> None:
     )
 
 
-def test_seed_persists_seven_preview_versions_pilot_rows_and_one_selection() -> None:
+def test_seed_keeps_preview_versions_as_unselectable_history() -> None:
     async def verify() -> None:
         engine = create_database_engine(Settings.from_environ())
         try:
@@ -84,6 +84,11 @@ def test_seed_persists_seven_preview_versions_pilot_rows_and_one_selection() -> 
                             tables.model_versions.c.version,
                             tables.model_versions.c.runtime_kind,
                             tables.model_versions.c.is_selectable,
+                            tables.model_versions.c.contract_status,
+                            tables.model_versions.c.model_manifest_sha256,
+                            tables.model_versions.c.checkpoint_sha256,
+                            tables.model_versions.c.scaler_manifest_sha256,
+                            tables.model_versions.c.scaler_sha256,
                             tables.model_versions.c.threshold,
                             tables.model_versions.c.threshold_policy,
                         )
@@ -114,7 +119,7 @@ def test_seed_persists_seven_preview_versions_pilot_rows_and_one_selection() -> 
                             == PUBLIC_DEVICE_ID
                         )
                     )
-                ).mappings().one()
+                ).mappings().one_or_none()
         finally:
             await engine.dispose()
 
@@ -123,7 +128,18 @@ def test_seed_persists_seven_preview_versions_pilot_rows_and_one_selection() -> 
             f"preview-{key}-v1" for key in PUBLIC_MODEL_KEYS
         }
         assert all(row["runtime_kind"] == "preview_simulator" for row in versions)
-        assert all(row["is_selectable"] is True for row in versions)
+        assert all(row["is_selectable"] is False for row in versions)
+        assert all(row["contract_status"] == "legacy_30" for row in versions)
+        assert all(
+            row[hash_column] is None
+            for row in versions
+            for hash_column in (
+                "model_manifest_sha256",
+                "checkpoint_sha256",
+                "scaler_manifest_sha256",
+                "scaler_sha256",
+            )
+        )
         assert all(row["threshold"] == 1.0 for row in versions)
         assert all(
             row["threshold_policy"]["comparator"] == ">" for row in versions
@@ -137,7 +153,7 @@ def test_seed_persists_seven_preview_versions_pilot_rows_and_one_selection() -> 
             and row["source_sha256"] in {STEP8_SHA256, STEP10_SHA256}
             for row in pilots
         )
-        assert selection["model_version"] == "preview-lstm-ae-v1"
+        assert selection is None
 
     asyncio.run(verify())
 

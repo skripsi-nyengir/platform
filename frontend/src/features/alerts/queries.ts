@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { getAlertEvents, getCurrentAlerts } from '../../api/alerts'
+import { getAlertDetail, getAlertEvents, getCurrentAlerts } from '../../api/alerts'
 import {
   AlertEventsQuerySchema,
   CurrentAlertsQuerySchema,
   type AlertEventsQuery,
   type CurrentAlertsQuery,
 } from '../../contracts/alerts'
+import { liveQueryOptions } from '../useLiveTelemetryData'
 
 export function useCurrentAlertsQuery(input: CurrentAlertsQuery = {}) {
   const query = CurrentAlertsQuerySchema.parse(input)
@@ -19,7 +20,7 @@ export function useCurrentAlertsQuery(input: CurrentAlertsQuery = {}) {
       query.pageSize,
     ],
     queryFn: ({ signal }) => getCurrentAlerts(query, signal),
-    refetchInterval: 10_000,
+    ...liveQueryOptions,
   })
 }
 
@@ -37,5 +38,15 @@ export function useAlertEventsQuery(input: AlertEventsQuery = {}) {
       query.cursor ?? null,
     ],
     queryFn: ({ signal }) => getAlertEvents(query, signal),
+    ...liveQueryOptions,
+  })
+}
+
+export function useAlertDetailQuery(alertId?: string) {
+  return useQuery({
+    queryKey: ['live', 'alert-detail', alertId ?? null],
+    queryFn: ({ signal }) => getAlertDetail(alertId ?? '', signal),
+    enabled: alertId !== undefined,
+    ...liveQueryOptions,
   })
 }

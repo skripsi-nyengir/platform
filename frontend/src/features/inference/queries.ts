@@ -4,6 +4,7 @@ import {
   InferenceResultsQuerySchema,
   type InferenceResultsQuery,
 } from '../../contracts/inference'
+import { liveQueryOptions } from '../useLiveTelemetryData'
 
 export function useInferenceResultsQuery(input: InferenceResultsQuery) {
   const query = InferenceResultsQuerySchema.parse(input)
@@ -20,5 +21,6 @@ export function useInferenceResultsQuery(input: InferenceResultsQuery) {
       query.modelVersion ?? null,
     ],
     queryFn: ({ signal }) => getInferenceResults(query, signal),
+    ...liveQueryOptions,
   })
 }

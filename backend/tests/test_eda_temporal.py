@@ -15,7 +15,6 @@ from anomaly_eda.config import DEFAULT_CONFIG, DEVICE_ID
 from anomaly_eda.input_adapter import RawInputAdapter, RawSourceMetadata
 from anomaly_eda.pair_product import VIEW_RAW, VIEW_SCREENED
 from anomaly_eda.temporal import (
-    build_temporal_sections,
     compute_temporal,
     daily_median_aggregates,
     hourly_median_aggregates,

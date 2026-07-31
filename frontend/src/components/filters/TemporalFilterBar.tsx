@@ -1,13 +1,26 @@
 import { FormControl, InputLabel, Select, Stack, TextField } from '@mui/material'
 import { useId } from 'react'
-import { BucketSchema, SensorIdSchema, sensorIds, sensorLabels } from '../../contracts/common'
-import type { UrlFilters } from '../../features/filters/urlFilters'
+import { SensorIdSchema, sensorIds, sensorLabels } from '../../contracts/common'
+import {
+  liveRanges,
+  resolveLiveRange,
+  type LiveRange,
+  type LiveUrlFilters,
+} from '../../features/filters/urlFilters'
 import { tokens } from '../../theme/tokens'
 
 export interface TemporalFilterBarProps {
-  value: Pick<UrlFilters, 'sensor' | 'from' | 'to' | 'bucket'>
-  onChange: (patch: Partial<UrlFilters>) => void
+  value: LiveUrlFilters
+  onChange: (patch: Partial<LiveUrlFilters>) => void
   allowAllSensors?: boolean
+}
+
+const liveRangeLabels: Record<LiveRange, string> = {
+  '1h': 'Last 1 hour',
+  '6h': 'Last 6 hours',
+  '12h': 'Last 12 hours',
+  '24h': 'Last 24 hours',
+  custom: 'Custom',
 }
 
 export function TemporalFilterBar({
@@ -17,8 +30,8 @@ export function TemporalFilterBar({
 }: TemporalFilterBarProps) {
   const sensorId = useId()
   const sensorLabelId = useId()
-  const bucketId = useId()
-  const bucketLabelId = useId()
+  const rangeId = useId()
+  const rangeLabelId = useId()
 
   return (
     <Stack
@@ -77,42 +90,52 @@ export function TemporalFilterBar({
           ))}
         </Select>
       </FormControl>
-      <TextField
-        size="small"
-        label="From"
-        type="text"
-        value={value.from}
-        onChange={(event) => onChange({ from: event.target.value })}
-      />
-      <TextField
-        size="small"
-        label="To"
-        type="text"
-        value={value.to}
-        onChange={(event) => onChange({ to: event.target.value })}
-      />
       <FormControl size="small">
-        <InputLabel id={bucketLabelId} htmlFor={bucketId}>
-          Bucket
+        <InputLabel id={rangeLabelId} htmlFor={rangeId}>
+          Range
         </InputLabel>
-        <Select
+        <Select<string>
           native
-          id={bucketId}
-          labelId={bucketLabelId}
-          label="Bucket"
-          value={value.bucket}
+          id={rangeId}
+          labelId={rangeLabelId}
+          label="Range"
+          value={value.range}
           onChange={(event) => {
-            const bucket = BucketSchema.safeParse(event.target.value)
-            if (bucket.success) onChange({ bucket: bucket.data })
+            const range = liveRanges.find((candidate) => candidate === event.target.value)
+            if (range === undefined) return
+            if (range === 'custom') {
+              const resolved = resolveLiveRange(value)
+              onChange({ range, from: resolved.from, to: resolved.to })
+              return
+            }
+            onChange({ range, from: undefined, to: undefined })
           }}
         >
-          {BucketSchema.options.map((bucket) => (
-            <option key={bucket} value={bucket}>
-              {bucket}
+          {liveRanges.map((range) => (
+            <option key={range} value={range}>
+              {liveRangeLabels[range]}
             </option>
           ))}
         </Select>
       </FormControl>
+      {value.range === 'custom' ? (
+        <>
+          <TextField
+            size="small"
+            label="From"
+            type="text"
+            value={value.from ?? ''}
+            onChange={(event) => onChange({ from: event.target.value })}
+          />
+          <TextField
+            size="small"
+            label="To"
+            type="text"
+            value={value.to ?? ''}
+            onChange={(event) => onChange({ to: event.target.value })}
+          />
+        </>
+      ) : null}
     </Stack>
   )
 }

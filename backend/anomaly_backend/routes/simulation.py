@@ -82,9 +82,9 @@ async def simulation_metrics(
         threshold=cast(float, source["threshold"]),
         window_size=cast(int, source["window_size"]),
         frame_count=cast(int, source["frame_count"]),
-        window_rows=cast(list, source["window_rows"]),
-        event_rows=cast(list, source["event_rows"]),
-        segment_rows=cast(list, source["segment_rows"]),
+        window_rows=cast(list[tuple[int, int, float]], source["window_rows"]),
+        event_rows=cast(list[tuple[int, int]], source["event_rows"]),
+        segment_rows=cast(list[tuple[int, int]], source["segment_rows"]),
         cooldown_samples=cooldown_samples,
     )
     buckets: list[OperationalBucketModel] = []

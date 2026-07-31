@@ -2,7 +2,9 @@ import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { LineChart } from '@mui/x-charts/LineChart'
 import type { GridColDef, GridValidRowModel } from '@mui/x-data-grid'
+import type { UseQueryResult } from '@tanstack/react-query'
 import { useState } from 'react'
+import type { ApiError } from '../../api/errors'
 import { getChartColors } from '../../components/charts/muiChartTheme'
 import {
   buildTemporalChartData,
@@ -19,15 +21,18 @@ import {
   sensorLabels,
   type SensorId,
 } from '../../contracts/common'
-import type { UrlFilters } from '../filters/urlFilters'
-import { useAlertEventsQuery } from '../alerts/queries'
-import { useInferenceResultsQuery } from '../inference/queries'
-import { useTelemetryHistoryQuery } from '../telemetry/queries'
+import type { AlertEventsResponse } from '../../contracts/alerts'
+import type { InferenceResultsResponse } from '../../contracts/inference'
+import type { TelemetryHistoryResponse } from '../../contracts/telemetry'
+import { resolveLiveRange, type LiveUrlFilters } from '../filters/urlFilters'
 import { tokens } from '../../theme/tokens'
 
 export interface SensorHistoryPanelProps {
   sensorId: SensorId
-  filters: UrlFilters
+  filters: LiveUrlFilters
+  telemetry: UseQueryResult<TelemetryHistoryResponse, ApiError>
+  inference: UseQueryResult<InferenceResultsResponse, ApiError>
+  alertEvents: UseQueryResult<AlertEventsResponse, ApiError>
 }
 
 interface HistoryTableRow extends GridValidRowModel {
@@ -67,30 +72,17 @@ const technicalTextSx = {
 
 const chartHeight = tokens.size.control * 7
 
-export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProps) {
+export function SensorHistoryPanel({
+  sensorId,
+  filters,
+  telemetry,
+  inference,
+  alertEvents,
+}: SensorHistoryPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const theme = useTheme()
   const sensorLabel = sensorLabels[sensorId]
-  const limit = filters.bucket === 'raw' ? 5_000 : 2_000
-  const telemetry = useTelemetryHistoryQuery({
-    deviceId: sensorId,
-    from: filters.from,
-    to: filters.to,
-    bucket: filters.bucket,
-    limit,
-  })
-  const inference = useInferenceResultsQuery({
-    deviceId: sensorId,
-    from: filters.from,
-    to: filters.to,
-    bucket: filters.bucket,
-    limit,
-    modelVersion: filters.modelVersion,
-  })
-  const alertEvents = useAlertEventsQuery({
-    deviceId: sensorId,
-    limit: 200,
-  })
+  const displayedRange = telemetry.data ?? inference.data ?? resolveLiveRange(filters)
   const telemetryPoints = telemetry.data?.points ?? []
   const inferencePoints = inference.data?.points ?? []
   const rows: readonly HistoryTableRow[] = [
@@ -107,7 +99,7 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
       id: `inference:${point.window_start_ts}:${point.window_end_ts}`,
       record_type: 'Inference' as const,
       timestamp: point.score_ts,
-      score: point.score,
+      score: point.latest_score ?? point.score,
       threshold: point.threshold,
       is_anomaly: point.is_anomaly ? 'Yes' as const : 'No' as const,
       model_version: point.model_version,
@@ -117,8 +109,8 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
   const chartInput = {
     theme,
     sensorId,
-    from: filters.from,
-    to: filters.to,
+    from: displayedRange.from,
+    to: displayedRange.to,
     telemetry: telemetryPoints,
     inference: inferencePoints,
     alerts: alertEvents.data?.events ?? [],
@@ -151,6 +143,16 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
         <Typography variant="body2" color="text.secondary">
           Score timestamp dan provenance dipertahankan pada tabel hasil · Asia/Jakarta (WIB)
         </Typography>
+        {inferencePoints.at(-1) === undefined ? null : (
+          <Stack direction="row" spacing={3} useFlexGap sx={{ flexWrap: 'wrap' }}>
+            <Typography variant="body2" sx={technicalTextSx}>
+              Latest score: {inferencePoints.at(-1)?.latest_score ?? inferencePoints.at(-1)?.score}
+            </Typography>
+            <Typography variant="body2" sx={technicalTextSx}>
+              Severity: {inferencePoints.at(-1)?.severity ?? 'unclassified'}
+            </Typography>
+          </Stack>
+        )}
         <Box
           sx={{
             display: 'grid',
@@ -254,8 +256,8 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
                            data: chartData.temperature.map((point) => point.x),
                            label: 'Date',
                            scaleType: 'time',
-                            min: historicalDateTimeToDate(filters.from),
-                            max: historicalDateTimeToDate(filters.to),
+                             min: historicalDateTimeToDate(displayedRange.from),
+                             max: historicalDateTimeToDate(displayedRange.to),
                          },
                       ]}
                       yAxis={[{ id: 'temperature-y-axis', label: 'Temperature (°C)' }]}
@@ -300,8 +302,8 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
                            data: chartData.humidity.map((point) => point.x),
                            label: 'Date',
                            scaleType: 'time',
-                            min: historicalDateTimeToDate(filters.from),
-                            max: historicalDateTimeToDate(filters.to),
+                             min: historicalDateTimeToDate(displayedRange.from),
+                             max: historicalDateTimeToDate(displayedRange.to),
                          },
                       ]}
                       yAxis={[{ id: 'humidity-y-axis', label: 'Relative humidity (%)' }]}
@@ -350,8 +352,8 @@ export function SensorHistoryPanel({ sensorId, filters }: SensorHistoryPanelProp
                            data: chartData.scores.map((point) => point.x),
                            label: 'Date',
                            scaleType: 'time',
-                            min: historicalDateTimeToDate(filters.from),
-                            max: historicalDateTimeToDate(filters.to),
+                             min: historicalDateTimeToDate(displayedRange.from),
+                             max: historicalDateTimeToDate(displayedRange.to),
                          },
                       ]}
                       yAxis={[{ id: 'score-y-axis', label: 'Score' }]}

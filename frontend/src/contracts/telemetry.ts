@@ -33,6 +33,10 @@ export const TelemetryPointSchema = z.strictObject({
   ts: HistoricalDateTimeSchema,
   temperature_c: z.number().nullable(),
   relative_humidity_pct: z.number().nullable(),
+  temperature_c_min: z.number().nullable(),
+  temperature_c_max: z.number().nullable(),
+  relative_humidity_pct_min: z.number().nullable(),
+  relative_humidity_pct_max: z.number().nullable(),
   sample_count: z.number().int().nonnegative(),
   gap_before: z.boolean(),
 })
@@ -69,6 +73,7 @@ export const TelemetryHistoryResponseSchema = z
     from: HistoricalDateTimeSchema,
     to: HistoricalDateTimeSchema,
     bucket: BucketSchema,
+    bucket_seconds: z.number().int().min(60).nullable(),
     points: z.array(TelemetryPointSchema).max(5_000),
     next_cursor: z.string().nullable(),
     returned_count: z.number().int().nonnegative(),

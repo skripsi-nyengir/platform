@@ -13,12 +13,14 @@ import psycopg
 from psycopg.rows import dict_row
 
 from anomaly_backend.config import Settings
+from anomaly_backend.replay_contract import acquire_shared_replay_contract_lock
 from anomaly_worker.scorer import (
     CHANNELS,
     PreviewSimulatorScorer,
     ScoreBatch,
     Scorer,
     TemporalSemantics,
+    WINDOW_SIZE,
 )
 
 
@@ -48,9 +50,7 @@ def _worker_id() -> str:
     return configured or f"{socket.gethostname()}-{os.getpid()}"
 
 
-def _heartbeat(
-    connection: psycopg.Connection[dict[str, Any]], worker_id: str
-) -> None:
+def _heartbeat(connection: psycopg.Connection[dict[str, Any]], worker_id: str) -> None:
     now = _utc_now()
     connection.execute(
         """
@@ -69,6 +69,7 @@ def _lock_owned_job(
     worker_id: str,
     attempt_count: int,
 ) -> dict[str, Any]:
+    acquire_shared_replay_contract_lock(connection)
     owned = connection.execute(
         """
         SELECT *
@@ -91,6 +92,7 @@ def claim_job(
     connection: psycopg.Connection[dict[str, Any]], worker_id: str
 ) -> dict[str, Any] | None:
     with connection.transaction():
+        acquire_shared_replay_contract_lock(connection)
         _heartbeat(connection, worker_id)
         now = _utc_now()
         expired_terminal = connection.execute(
@@ -288,10 +290,7 @@ def _segment_starts(
         """,
         (corpus_id, identifiers),
     ).fetchall()
-    return {
-        int(row["segment_id"]): int(row["first_index"])
-        for row in rows
-    }
+    return {int(row["segment_id"]): int(row["first_index"]) for row in rows}
 
 
 def _score_batch(
@@ -317,7 +316,9 @@ def _score_batch(
         raise ReplayWorkerError("job model snapshot no longer exists")
     temporal = TemporalSemantics(str(version["temporal_semantics"]))
     window_size = int(version["window_size"])
-    required_preceding = window_size if temporal is TemporalSemantics.NEXT_TARGET else window_size - 1
+    required_preceding = (
+        window_size if temporal is TemporalSemantics.NEXT_TARGET else window_size - 1
+    )
     contexts = _context_rows(connection, job, targets, window_size)
     segment_starts = _segment_starts(
         connection,
@@ -347,14 +348,14 @@ def _score_batch(
             if temporal is TemporalSemantics.NEXT_TARGET
             else target_index
         )
-        window = [
-            contexts.get(index)
-            for index in range(start_index, end_index + 1)
-        ]
+        window = [contexts.get(index) for index in range(start_index, end_index + 1)]
         if (
             len(window) != window_size
             or any(row is None for row in window)
-            or any(int(cast(dict[str, Any], row)["segment_id"]) != segment_id for row in window)
+            or any(
+                int(cast(dict[str, Any], row)["segment_id"]) != segment_id
+                for row in window
+            )
         ):
             continue
         typed_window = [cast(dict[str, Any], row) for row in window]
@@ -378,9 +379,7 @@ def _score_batch(
         context_start_indices.append(start_index)
         context_end_indices.append(end_index)
         segment_ids.append(segment_id)
-        ordinal = (
-            end_index - segment_starts[segment_id] - (window_size - 1)
-        )
+        ordinal = end_index - segment_starts[segment_id] - (window_size - 1)
         if ordinal < 0:
             continue
         ordinals.append(ordinal)
@@ -527,9 +526,7 @@ def _accumulate_episodes(
                 "peak_score": row["score"],
                 "latest_score": row["score"],
                 "anomalous_window_count": 1,
-                "last_eligible_window_ordinal": row[
-                    "eligible_window_ordinal"
-                ],
+                "last_eligible_window_ordinal": row["eligible_window_ordinal"],
             }
             continue
         open_episode["episode_end_ts"] = row["score_ts"].isoformat()
@@ -539,9 +536,7 @@ def _accumulate_episodes(
         )
         open_episode["latest_score"] = row["score"]
         open_episode["anomalous_window_count"] += 1
-        open_episode["last_eligible_window_ordinal"] = row[
-            "eligible_window_ordinal"
-        ]
+        open_episode["last_eligible_window_ordinal"] = row["eligible_window_ordinal"]
 
 
 def process_chunk(
@@ -549,6 +544,39 @@ def process_chunk(
     worker_id: str,
     job: dict[str, Any],
 ) -> bool:
+    temporal_row = connection.execute(
+        """
+        SELECT
+            temporal_semantics, runtime_kind, manifest_sha256,
+            is_selectable, schema_version, channels, window_size, stride,
+            contract_status
+        FROM model_versions
+        WHERE version = %s
+        """,
+        (job["model_version"],),
+    ).fetchone()
+    if temporal_row is None:
+        raise ReplayWorkerError("job model temporal semantics is missing")
+    runtime_kind = str(temporal_row["runtime_kind"])
+    provenance = str(job["score_provenance"])
+    compatible_runtime = (
+        runtime_kind == "preview_simulator" and provenance == "simulated_preview"
+    ) or (
+        runtime_kind == "artifact"
+        and provenance == "artifact_backed"
+        and bool(temporal_row["manifest_sha256"])
+    )
+    if (
+        not temporal_row["is_selectable"]
+        or temporal_row["schema_version"] != "b02f3872_preview_v1"
+        or tuple(temporal_row["channels"] or ()) != CHANNELS
+        or int(temporal_row["window_size"]) != WINDOW_SIZE
+        or int(temporal_row["stride"]) != 1
+        or temporal_row["contract_status"] != "live_10"
+        or not compatible_runtime
+    ):
+        raise ReplayWorkerError("job model version is not compatible with live scoring")
+
     targets = _target_rows(connection, job)
     if not targets:
         with connection.transaction():
@@ -559,9 +587,7 @@ def process_chunk(
                 int(job["attempt_count"]),
             )
             state = _load_checkpoint(connection, str(job["job_id"]))
-            _close_episode(
-                connection, str(job["job_id"]), state, "replay_end"
-            )
+            _close_episode(connection, str(job["job_id"]), state, "replay_end")
             connection.execute(
                 """
                 INSERT INTO replay_episode_checkpoints (job_id, state, updated_at)
@@ -596,12 +622,9 @@ def process_chunk(
             state = _load_checkpoint(connection, str(job["job_id"]))
             open_episode = state.get("open_episode")
             if isinstance(open_episode, dict) and any(
-                target["segment_id"] != open_episode["segment_id"]
-                for target in targets
+                target["segment_id"] != open_episode["segment_id"] for target in targets
             ):
-                _close_episode(
-                    connection, str(job["job_id"]), state, "gap"
-                )
+                _close_episode(connection, str(job["job_id"]), state, "gap")
                 connection.execute(
                     """
                     INSERT INTO replay_episode_checkpoints (
@@ -637,41 +660,37 @@ def process_chunk(
         job["next_corpus_index"] = last_target_index + 1
         return False
 
-    temporal_row = connection.execute(
-        """
-        SELECT temporal_semantics, runtime_kind, manifest_sha256
-        FROM model_versions
-        WHERE version = %s
-        """,
-        (job["model_version"],),
-    ).fetchone()
-    if temporal_row is None:
-        raise ReplayWorkerError("job model temporal semantics is missing")
+    if (
+        batch.schema_version != temporal_row["schema_version"]
+        or batch.channels != CHANNELS
+        or batch.window_size != WINDOW_SIZE
+    ):
+        raise ReplayWorkerError("job model version is not compatible with live scoring")
     temporal = TemporalSemantics(str(temporal_row["temporal_semantics"]))
-    runtime_kind = temporal_row["runtime_kind"]
-    provenance = job["score_provenance"]
     if runtime_kind == "preview_simulator" and provenance == "simulated_preview":
         scorer: Scorer = PreviewSimulatorScorer(
             archive_sha256=str(job["archive_sha256"]),
             temporal_semantics=temporal,
         )
     elif runtime_kind == "artifact" and provenance == "artifact_backed":
-        from anomaly_worker.artifact_scorer import ArtifactScorer
+        from anomaly_worker.artifact_scorer import ArtifactDescriptor, ArtifactScorer
 
-        scorer = ArtifactScorer(
-            model_version=str(job["model_version"]),
-            manifest_sha256=str(temporal_row["manifest_sha256"]),
-            temporal_semantics=temporal,
+        descriptor = ArtifactDescriptor.from_environ(
+            expected_hashes={
+                "model_manifest_sha256": str(temporal_row["manifest_sha256"])
+            }
         )
+        if descriptor.model_version != str(job["model_version"]):
+            raise ReplayWorkerError("selected artifact does not match replay model")
+        if descriptor.temporal_semantics is not temporal:
+            raise ReplayWorkerError("selected artifact temporal semantics do not match")
+        scorer = ArtifactScorer(descriptor)
     else:
-        raise ReplayWorkerError(
-            "job scorer adapter and provenance are not supported"
-        )
+        raise ReplayWorkerError("job scorer adapter and provenance are not supported")
     results = scorer.score(batch)
     staged_rows = []
     band_half = tuple(
-        (maximum[channel] - minimum[channel]) * (threshold ** 0.5)
-        for channel in range(2)
+        (maximum[channel] - minimum[channel]) * (threshold**0.5) for channel in range(2)
     )
     for metadata, point in zip(eligible, results.points, strict=True):
         recon = point.reconstruction
@@ -705,9 +724,7 @@ def process_chunk(
                 "reading_count": batch.window_size,
                 "stride": 1,
                 "segment_id": metadata["target"]["segment_id"],
-                "eligible_window_ordinal": metadata[
-                    "eligible_window_ordinal"
-                ],
+                "eligible_window_ordinal": metadata["eligible_window_ordinal"],
                 "recon_temperature_c": recon_temperature_c,
                 "recon_relative_humidity_pct": recon_relative_humidity_pct,
                 "band_half_temperature_c": band_half_temperature_c,
@@ -913,9 +930,9 @@ def publish_job(
                 ),
             )
         final_count_row = connection.execute(
-                "SELECT count(*) AS count FROM replay_result_staging WHERE job_id = %s",
-                (job["job_id"],),
-            ).fetchone()
+            "SELECT count(*) AS count FROM replay_result_staging WHERE job_id = %s",
+            (job["job_id"],),
+        ).fetchone()
         if final_count_row is None:
             raise ReplayWorkerError("final result count could not be read")
         final_result_count = int(final_count_row["count"])
@@ -1019,9 +1036,7 @@ def fail_or_release_job(
     _ = error
 
 
-def run_once(
-    connection: psycopg.Connection[dict[str, Any]], worker_id: str
-) -> bool:
+def run_once(connection: psycopg.Connection[dict[str, Any]], worker_id: str) -> bool:
     job = claim_job(connection, worker_id)
     if job is None:
         return False
@@ -1045,9 +1060,7 @@ def run_forever() -> None:
         row_factory=dict_row,  # pyright: ignore[reportArgumentType]
         autocommit=True,
     )
-    connection = cast(
-        psycopg.Connection[dict[str, Any]], raw_connection
-    )
+    connection = cast(psycopg.Connection[dict[str, Any]], raw_connection)
     with connection:
         while True:
             worked = run_once(connection, worker_id)

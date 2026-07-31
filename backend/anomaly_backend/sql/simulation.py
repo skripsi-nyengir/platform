@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import cast
 
 from sqlalchemy import text
@@ -31,9 +32,17 @@ _SET_SIM_ACTIVE = text(
     SET activation_id = ma.activation_id,
         model_version = ma.model_version
     FROM model_activations AS ma
+    JOIN model_versions AS mv ON mv.version = ma.model_version
     WHERE sel.device_id = CAST(:device_id AS text)
       AND ma.device_id = CAST(:device_id AS text)
       AND ma.model_version = CAST(:model_version AS text)
+      AND mv.runtime_kind = 'artifact'
+      AND mv.is_selectable
+      AND mv.schema_version = 'b02f3872_preview_v1'
+      AND mv.channels = '["temperature_c", "relative_humidity_pct"]'::jsonb
+      AND mv.window_size = 10
+      AND mv.stride = 1
+      AND mv.manifest_sha256 IS NOT NULL
     RETURNING sel.model_version
     """
 )
@@ -153,7 +162,7 @@ async def sim_event_start_timestamps(
     *,
     device_id: CorpusDeviceId,
     indices: list[int],
-) -> dict[int, object]:
+) -> dict[int, datetime]:
     if not indices:
         return {}
     rows = (
@@ -161,4 +170,4 @@ async def sim_event_start_timestamps(
             _SIM_EVENT_TIMESTAMPS, {"device_id": device_id, "indices": indices}
         )
     ).all()
-    return {int(r[0]): r[1] for r in rows}
+    return {int(r[0]): cast(datetime, r[1]) for r in rows}

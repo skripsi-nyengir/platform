@@ -12,6 +12,7 @@ from anomaly_worker.scorer import (
     ScorePoint,
     ScorerProtocolError,
     TemporalSemantics,
+    WINDOW_SIZE,
     validate_batch,
     validate_result,
 )
@@ -20,18 +21,28 @@ from anomaly_worker.scorer import (
 ARCHIVE_SHA = "6c5a7ee8c248931bcc490cc114a3af55add8af82f976f58015ff7225dccce01a"
 
 
-def batch(size: int = 2, *, forecast: bool = False) -> ScoreBatch:
+def batch(
+    size: int = 2,
+    *,
+    forecast: bool = False,
+    window_size: int = WINDOW_SIZE,
+) -> ScoreBatch:
     base = datetime(2026, 5, 1)
     contexts = tuple(
-        tuple(base + timedelta(seconds=30 * (window + position)) for position in range(30))
+        tuple(
+            base + timedelta(seconds=30 * (window + position))
+            for position in range(window_size)
+        )
         for window in range(size)
     )
     raw = tuple(
-        tuple((25.0 + window, 60.0 + position / 100) for position in range(30))
+        tuple((25.0 + window, 60.0 + position / 100) for position in range(window_size))
         for window in range(size)
     )
     model = tuple(
-        tuple((0.2 + window / 10, 0.4 + position / 100) for position in range(30))
+        tuple(
+            (0.2 + window / 10, 0.4 + position / 100) for position in range(window_size)
+        )
         for window in range(size)
     )
     targets = tuple(
@@ -46,24 +57,31 @@ def batch(size: int = 2, *, forecast: bool = False) -> ScoreBatch:
         model_values=model,
         context_ts=contexts,
         context_start_indices=tuple(range(size)),
-        context_end_indices=tuple(index + 29 for index in range(size)),
+        context_end_indices=tuple(index + window_size - 1 for index in range(size)),
         segment_ids=(0,) * size,
         eligible_window_ordinals=tuple(range(size)),
         target_ts=targets,
         target_raw_values=((26.0, 61.0),) * size if forecast else None,
         target_model_values=((0.3, 0.5),) * size if forecast else None,
+        window_size=window_size,
     )
 
 
 def test_preview_scorer_satisfies_immutable_context_end_contract() -> None:
+    assert WINDOW_SIZE == 10
     request = batch()
     with pytest.raises(FrozenInstanceError):
-        request.model_version = "changed"  # type: ignore[misc]
+        setattr(request, "model_version", "changed")
     scorer = PreviewSimulatorScorer(ARCHIVE_SHA)
     result = scorer.score(request)
     assert len(result.points) == request.size
     assert tuple(point.score_ts for point in result.points) == request.target_ts
     assert all(math.isfinite(point.score) for point in result.points)
+
+
+def test_preview_scorer_rejects_valid_shaped_legacy_window() -> None:
+    with pytest.raises(ScorerProtocolError, match="window_size must equal 10"):
+        PreviewSimulatorScorer(ARCHIVE_SHA).score(batch(size=1, window_size=30))
 
 
 def test_next_target_contract_requires_future_target_values() -> None:
@@ -93,9 +111,7 @@ def test_next_target_contract_requires_future_target_values() -> None:
         (
             lambda value: replace(
                 value,
-                model_values=(
-                    ((float("nan"), 1.0),) + value.model_values[0][1:],
-                )
+                model_values=(((float("nan"), 1.0),) + value.model_values[0][1:],)
                 + value.model_values[1:],
             ),
             "finite",
@@ -103,15 +119,17 @@ def test_next_target_contract_requires_future_target_values() -> None:
         (
             lambda value: replace(
                 value,
-                model_values=(
-                    ((1e100, 1.0),) + value.model_values[0][1:],
-                )
+                model_values=(((1e100, 1.0),) + value.model_values[0][1:],)
                 + value.model_values[1:],
             ),
             "float32",
         ),
         (
-            lambda value: replace(value, target_ts=(value.target_ts[0] + timedelta(seconds=1),) + value.target_ts[1:]),
+            lambda value: replace(
+                value,
+                target_ts=(value.target_ts[0] + timedelta(seconds=1),)
+                + value.target_ts[1:],
+            ),
             "context-end",
         ),
         (

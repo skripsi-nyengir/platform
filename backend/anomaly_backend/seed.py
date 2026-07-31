@@ -7,7 +7,7 @@ import math
 import re
 from typing import cast
 
-from sqlalchemy import Table, func, literal, select, text
+from sqlalchemy import Table, delete, func, literal, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -33,8 +33,6 @@ _LOCK_ID = 7_216_202_604
 _TIMESTAMP_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
 _SENTINEL_ALERT_ID = "alert_talpha_1_active"
 _PUBLIC_DEVICE_ID = "b02f3872-ruang-produksi"
-_DEFAULT_ACTIVATION_ID = "activation-preview-lstm-ae-v1"
-_DEFAULT_ACTIVATION_COMMAND_ID = "seed-preview-lstm-ae-v1"
 _PREVIEW_CREATED_AT = datetime(2026, 7, 24, tzinfo=timezone.utc)
 _EMPTY_FIELDS: frozenset[str] = frozenset()
 _SOURCE_INDICES = {
@@ -606,6 +604,7 @@ def _all_database_rows(fixture: JSONDict) -> dict[str, list[dict[str, object]]]:
             replay_job_id=None,
             segment_id=0,
             closure_reason="legacy_m1_fixture",
+            live_episode_id=None,
         )
 
     event_rows = _database_rows(
@@ -831,19 +830,6 @@ async def _verify_seeded_rows(
                 )
 
 
-def _preview_activation_payload_hash() -> str:
-    payload = json.dumps(
-        {
-            "command_id": _DEFAULT_ACTIVATION_COMMAND_ID,
-            "device_id": _PUBLIC_DEVICE_ID,
-            "model_version": "preview-lstm-ae-v1",
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
-
-
 async def _seed_preview_catalog(connection: AsyncConnection) -> None:
     snapshot = load_tracked_normalized_snapshot()
     normalized_models = snapshot.get("models")
@@ -856,6 +842,26 @@ async def _seed_preview_catalog(connection: AsyncConnection) -> None:
     }
     if set(pilot_by_key) != {model[0] for model in _PREVIEW_MODELS}:
         raise SeedIntegrityError("pilot snapshot model keys do not match registry")
+
+    preview_versions = [version for _, _, version, _ in _PREVIEW_MODELS]
+    fabricated_versions = [f"{version}-live-10" for version in preview_versions]
+    await connection.execute(
+        delete(tables.active_model_selections).where(
+            tables.active_model_selections.c.model_version.in_(
+                preview_versions + fabricated_versions
+            )
+        )
+    )
+    await connection.execute(
+        delete(tables.model_activations).where(
+            tables.model_activations.c.model_version.in_(fabricated_versions)
+        )
+    )
+    await connection.execute(
+        delete(tables.model_versions).where(
+            tables.model_versions.c.version.in_(fabricated_versions)
+        )
+    )
 
     await connection.execute(
         insert(tables.model_families)
@@ -871,47 +877,51 @@ async def _seed_preview_catalog(connection: AsyncConnection) -> None:
         )
         .on_conflict_do_nothing(index_elements=[tables.model_families.c.model_key])
     )
+    version_payloads = [
+        {
+            "version": version,
+            "model_key": model_key,
+            "runtime_kind": "preview_simulator",
+            "is_selectable": False,
+            "adapter_key": "preview_sha256_v1",
+            "schema_version": "b02f3872_preview_v1",
+            "channels": ["suhu", "rh"],
+            "window_size": 30,
+            "stride": 1,
+            "contract_status": "legacy_30",
+            "score_key": "preview_ratio",
+            "score_semantics": (
+                "deterministic simulated preview ratio; not a Dandy model score"
+            ),
+            "threshold": 1.0,
+            "threshold_policy": {
+                "comparator": ">",
+                "source": "preview_contract",
+            },
+            "temporal_semantics": temporal_semantics,
+            "source_commit": None,
+            "source_config": "b02f3872_ruang_produksi_v2",
+            "manifest_sha256": None,
+            "model_manifest_sha256": None,
+            "checkpoint_sha256": None,
+            "scaler_manifest_sha256": None,
+            "scaler_sha256": None,
+            "created_at": _PREVIEW_CREATED_AT,
+        }
+        for model_key, _, version, temporal_semantics in _PREVIEW_MODELS
+    ]
+    version_insert = insert(tables.model_versions).values(version_payloads)
     await connection.execute(
-        insert(tables.model_versions)
-        .values(
-            [
-                {
-                    "version": version,
-                    "model_key": model_key,
-                    "runtime_kind": "preview_simulator",
-                    "is_selectable": True,
-                    "adapter_key": "preview_sha256_v1",
-                    "schema_version": "b02f3872_preview_v1",
-                    "channels": ["suhu", "rh"],
-                    "window_size": 30,
-                    "stride": 1,
-                    "score_key": "preview_ratio",
-                    "score_semantics": (
-                        "deterministic simulated preview ratio; "
-                        "not a Dandy model score"
-                    ),
-                    "threshold": 1.0,
-                    "threshold_policy": {
-                        "comparator": ">",
-                        "source": "preview_contract",
-                    },
-                    "temporal_semantics": temporal_semantics,
-                    "source_commit": None,
-                    "source_config": "b02f3872_ruang_produksi_v2",
-                    "manifest_sha256": None,
-                    "created_at": _PREVIEW_CREATED_AT,
-                }
-                for (
-                    model_key,
-                    _,
-                    version,
-                    temporal_semantics,
-                ) in _PREVIEW_MODELS
-            ]
+        version_insert.on_conflict_do_update(
+            index_elements=[tables.model_versions.c.version],
+            set_={
+                column: getattr(version_insert.excluded, column)
+                for column in version_payloads[0]
+                if column not in {"version", "created_at"}
+            },
+            where=tables.model_versions.c.contract_status == "live_10",
         )
-        .on_conflict_do_nothing(index_elements=[tables.model_versions.c.version])
     )
-
     evaluation_rows: list[dict[str, object]] = []
     for model_key, display_name, _, _ in _PREVIEW_MODELS:
         pilot = pilot_by_key[model_key]
@@ -976,36 +986,6 @@ async def _seed_preview_catalog(connection: AsyncConnection) -> None:
         .on_conflict_do_nothing(index_elements=[tables.model_evaluations.c.version])
     )
 
-    activation_payload_hash = _preview_activation_payload_hash()
-    await connection.execute(
-        insert(tables.model_activations)
-        .values(
-            activation_id=_DEFAULT_ACTIVATION_ID,
-            command_id=_DEFAULT_ACTIVATION_COMMAND_ID,
-            payload_hash=activation_payload_hash,
-            device_id=_PUBLIC_DEVICE_ID,
-            prior_model_version=None,
-            model_version="preview-lstm-ae-v1",
-            changed=True,
-            activated_at=_PREVIEW_CREATED_AT,
-            actor="preview-session",
-        )
-        .on_conflict_do_nothing(
-            index_elements=[tables.model_activations.c.command_id]
-        )
-    )
-    await connection.execute(
-        insert(tables.active_model_selections)
-        .values(
-            device_id=_PUBLIC_DEVICE_ID,
-            activation_id=_DEFAULT_ACTIVATION_ID,
-            model_version="preview-lstm-ae-v1",
-        )
-        .on_conflict_do_nothing(
-            index_elements=[tables.active_model_selections.c.device_id]
-        )
-    )
-
     public_family_count = int(
         await connection.scalar(
             select(func.count())
@@ -1025,7 +1005,9 @@ async def _seed_preview_catalog(connection: AsyncConnection) -> None:
             )
             .where(
                 tables.model_families.c.is_public,
-                tables.model_versions.c.is_selectable,
+                tables.model_versions.c.version.in_(preview_versions),
+                tables.model_versions.c.contract_status == "legacy_30",
+                ~tables.model_versions.c.is_selectable,
             )
         )
         or 0
@@ -1056,11 +1038,11 @@ async def _seed_preview_catalog(connection: AsyncConnection) -> None:
         public_family_count != 7
         or public_version_count != 7
         or public_pilot_count != 7
-        or active_selection_count != 1
+        or active_selection_count != 0
     ):
         raise SeedIntegrityError(
-            "preview registry must have seven families/versions/pilot rows "
-            "and one active selection"
+            "preview registry must have seven families, legacy versions, "
+            "pilot rows, and no active selection"
         )
 
 

@@ -12,8 +12,8 @@ from typing import Protocol
 from .simulator import preview_score
 
 
-WINDOW_SIZE = 30
-CHANNELS = ("suhu", "rh")
+WINDOW_SIZE = 10
+CHANNELS = ("temperature_c", "relative_humidity_pct")
 
 
 class ScorerProtocolError(ValueError):
@@ -98,9 +98,7 @@ def _validate_values(
         raise ScorerProtocolError(f"{field} batch dimension must equal N")
     for window in values:
         if not isinstance(window, tuple) or len(window) != window_size:
-            raise ScorerProtocolError(
-                f"{field} must have shape [N,{window_size},2]"
-            )
+            raise ScorerProtocolError(f"{field} must have shape [N,{window_size},2]")
         for pair in window:
             _validate_finite_pair(pair, field)
 
@@ -118,13 +116,21 @@ def validate_batch(
     if not batch.schema_version:
         raise ScorerProtocolError("schema_version is required")
     if batch.channels != CHANNELS:
-        raise ScorerProtocolError("channel order must be ('suhu', 'rh')")
+        raise ScorerProtocolError(
+            "channel order must be ('temperature_c', 'relative_humidity_pct')"
+        )
 
     size = batch.size
     if size == 0:
         raise ScorerProtocolError("batch must contain at least one window")
-    if isinstance(batch.window_size, bool) or not isinstance(batch.window_size, int) or batch.window_size < 1:
+    if (
+        isinstance(batch.window_size, bool)
+        or not isinstance(batch.window_size, int)
+        or batch.window_size < 1
+    ):
         raise ScorerProtocolError("window_size must be a positive integer")
+    if batch.window_size != WINDOW_SIZE:
+        raise ScorerProtocolError(f"window_size must equal {WINDOW_SIZE}")
     _validate_values(batch.raw_values, size, batch.window_size, "raw_values")
     _validate_values(batch.model_values, size, batch.window_size, "model_values")
 
@@ -197,14 +203,20 @@ def validate_batch(
             or segment_id < 0
             or ordinal < 0
         ):
-            raise ScorerProtocolError("segment IDs and window ordinals must be unsigned")
+            raise ScorerProtocolError(
+                "segment IDs and window ordinals must be unsigned"
+            )
 
         if temporal_semantics is TemporalSemantics.CONTEXT_END:
             if target != timestamps[-1]:
-                raise ScorerProtocolError("context-end target must equal final context time")
+                raise ScorerProtocolError(
+                    "context-end target must equal final context time"
+                )
         elif temporal_semantics is TemporalSemantics.NEXT_TARGET:
             if target <= timestamps[-1]:
-                raise ScorerProtocolError("next-target time must follow final context time")
+                raise ScorerProtocolError(
+                    "next-target time must follow final context time"
+                )
         else:
             raise ScorerProtocolError("unsupported temporal semantics")
 

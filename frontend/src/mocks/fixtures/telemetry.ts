@@ -4,7 +4,7 @@ import type {
   TelemetryPoint,
 } from '../../contracts/telemetry'
 
-export const fixtureGeneratedAt = '2026-05-31T23:59:59'
+export const fixtureGeneratedAt = '2026-07-31T07:59:59'
 
 export const latestTelemetrySensors = Object.freeze([
   {
@@ -45,6 +45,10 @@ function telemetryPoint(
     ts,
     temperature_c,
     relative_humidity_pct,
+    temperature_c_min: temperature_c,
+    temperature_c_max: temperature_c,
+    relative_humidity_pct_min: relative_humidity_pct,
+    relative_humidity_pct_max: relative_humidity_pct,
     sample_count: 1,
     gap_before,
   })

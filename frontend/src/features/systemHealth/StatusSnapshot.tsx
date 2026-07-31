@@ -24,8 +24,16 @@ export function StatusSnapshot({ snapshot, displayedAt, pollAgeSeconds }: Status
     >
       <Stack spacing={2}>
         <Typography id="status-snapshot-heading" variant="h2">
-          Latest known system snapshot
+          Live telemetry health
         </Typography>
+        <Typography variant="body2" sx={technicalTextSx}>
+          Live health: {snapshot.telemetry.classification}
+        </Typography>
+        {snapshot.telemetry.reasons.map((reason) => (
+          <Typography color="warning.main" key={reason} variant="body2">
+            {reason}
+          </Typography>
+        ))}
         <Box
           role="group"
           aria-label="Freshness snapshot"
@@ -70,10 +78,10 @@ export function StatusSnapshot({ snapshot, displayedAt, pollAgeSeconds }: Status
             sx={{ alignItems: 'flex-start', minWidth: 0 }}
           >
             <Typography id="telemetry-freshness-heading" variant="h3">
-              Historical corpus time
+              Live telemetry freshness
             </Typography>
             <Typography variant="body2">
-              Historical corpus latest timestamp:{' '}
+              Latest telemetry timestamp:{' '}
               {snapshot.telemetry.latest_ts === null ? (
                 'Unavailable'
               ) : (
@@ -84,7 +92,7 @@ export function StatusSnapshot({ snapshot, displayedAt, pollAgeSeconds }: Status
               Asia/Jakarta (WIB)
             </Typography>
             <Typography variant="body2">
-              Corpus telemetry age:{' '}
+              Live telemetry age:{' '}
               {snapshot.telemetry.age_seconds === null ? (
                 'Unknown'
               ) : (
@@ -102,7 +110,7 @@ export function StatusSnapshot({ snapshot, displayedAt, pollAgeSeconds }: Status
               <Box component="span" sx={technicalTextSx}>{snapshot.telemetry.offline_sensor_count}</Box>
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Waktu korpus historis tidak menetapkan readiness layanan saat ini.
+              Freshness and health are observed by the server, not the browser clock.
             </Typography>
           </Stack>
         </Box>

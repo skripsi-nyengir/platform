@@ -19,6 +19,23 @@ export interface UrlFilters {
   modelVersion?: string
 }
 
+export const liveRanges = ['1h', '6h', '12h', '24h', 'custom'] as const
+export type LiveRange = typeof liveRanges[number]
+
+export interface LiveUrlFilters {
+  sensor?: SensorId
+  range: LiveRange
+  from?: string
+  to?: string
+  modelVersion?: string
+}
+
+export interface ResolvedLiveRange {
+  from: string
+  to: string
+  bucket: 'raw' | 'one_minute' | 'adaptive'
+}
+
 export const historicalDefaultRange = Object.freeze({
   from: '2025-06-23T00:00:00',
   to: '2026-07-24T09:02:05',
@@ -31,7 +48,95 @@ export const telemetryDefaultRange = Object.freeze({
 
 const defaults: Pick<UrlFilters, 'from' | 'to' | 'bucket'> = {
   ...telemetryDefaultRange,
-  bucket: '1d',
+  bucket: 'adaptive',
+}
+
+const liveRangeHours = {
+  '1h': 1,
+  '6h': 6,
+  '12h': 12,
+  '24h': 24,
+} as const
+
+function isLiveRange(value: string | null): value is LiveRange {
+  return liveRanges.some((range) => range === value)
+}
+
+function isValidCustomRange(from: string, to: string): boolean {
+  const duration = Date.parse(`${to}+07:00`) - Date.parse(`${from}+07:00`)
+  return duration >= 60 * 60 * 1_000 && duration <= 24 * 60 * 60 * 1_000
+}
+
+function toWibHistoricalDateTime(value: Date): string {
+  return new Date(value.getTime() + 7 * 60 * 60 * 1_000).toISOString().slice(0, 19)
+}
+
+export function parseLiveUrlFilters(
+  params: URLSearchParams,
+  routeSensorId?: string,
+): LiveUrlFilters {
+  const routeSensor = SensorIdSchema.safeParse(routeSensorId)
+  const querySensor = SensorIdSchema.safeParse(params.get('sensor'))
+  const requestedRange = params.get('range')
+  const range = isLiveRange(requestedRange) ? requestedRange : '1h'
+  const parsedFrom = HistoricalDateTimeSchema.safeParse(params.get('from'))
+  const parsedTo = HistoricalDateTimeSchema.safeParse(params.get('to'))
+  const customIsValid = range === 'custom' && parsedFrom.success && parsedTo.success &&
+    isValidCustomRange(parsedFrom.data, parsedTo.data)
+  const result: LiveUrlFilters = customIsValid
+    ? { range, from: parsedFrom.data, to: parsedTo.data }
+    : { range: range === 'custom' ? '1h' : range }
+  const sensor = routeSensor.success
+    ? routeSensor.data
+    : querySensor.success
+      ? querySensor.data
+      : undefined
+  if (sensor !== undefined) result.sensor = sensor
+  const modelVersion = params.get('model_version')?.trim()
+  if (modelVersion) result.modelVersion = modelVersion
+  return result
+}
+
+export function updateLiveUrlFilters(
+  current: URLSearchParams,
+  patch: Partial<LiveUrlFilters>,
+): URLSearchParams {
+  const next = new URLSearchParams(current)
+  next.delete('bucket')
+  if (patch.range !== undefined) {
+    next.set('range', patch.range)
+    if (patch.range !== 'custom') {
+      next.delete('from')
+      next.delete('to')
+    }
+  }
+  for (const [property, parameter] of [
+    ['from', 'from'],
+    ['to', 'to'],
+    ['sensor', 'sensor'],
+    ['modelVersion', 'model_version'],
+  ] as const) {
+    if (!Object.hasOwn(patch, property)) continue
+    const value = patch[property]
+    if (value === '' || value === undefined) next.delete(parameter)
+    else next.set(parameter, value)
+  }
+  return next
+}
+
+export function resolveLiveRange(filters: LiveUrlFilters, now = new Date()): ResolvedLiveRange {
+  if (filters.range === 'custom') {
+    if (filters.from === undefined || filters.to === undefined) {
+      throw new Error('custom live range requires from and to')
+    }
+    return { from: filters.from, to: filters.to, bucket: 'adaptive' }
+  }
+  const durationMs = liveRangeHours[filters.range] * 60 * 60 * 1_000
+  return {
+    from: toWibHistoricalDateTime(new Date(now.getTime() - durationMs)),
+    to: toWibHistoricalDateTime(now),
+    bucket: filters.range === '1h' ? 'raw' : 'one_minute',
+  }
 }
 
 export type EdaRunMode = 'precompute' | 'custom'
