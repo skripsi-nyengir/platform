@@ -8,12 +8,22 @@ import {
 } from '@mui/material'
 import {
   DataGrid,
+  useGridApiRef,
   type GridColDef,
   type GridRowId,
   type GridValidRowModel,
 } from '@mui/x-data-grid'
 import { useId } from 'react'
 import { tokens } from '../../theme/tokens'
+
+function csvFileName(title: string): string {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+  return `${slug || 'data'}-${stamp}`
+}
 
 export interface BoundedDataDialogProps<
   Row extends GridValidRowModel & { id: GridRowId },
@@ -38,6 +48,7 @@ export function BoundedDataDialog<
 }: BoundedDataDialogProps<Row>) {
   const titleId = useId()
   const countId = useId()
+  const apiRef = useGridApiRef()
 
   return (
     <Dialog
@@ -54,6 +65,7 @@ export function BoundedDataDialog<
           {returnedCount} bounded records returned
         </Typography>
         <DataGrid<Row>
+          apiRef={apiRef}
           rows={rows}
           columns={columns}
           isCellEditable={() => false}
@@ -83,6 +95,18 @@ export function BoundedDataDialog<
         />
       </DialogContent>
       <DialogActions>
+        <Button
+          variant="outlined"
+          disabled={rows.length === 0}
+          onClick={() =>
+            apiRef.current?.exportDataAsCsv({
+              fileName: csvFileName(title),
+              utf8WithBom: true,
+            })
+          }
+        >
+          Export CSV
+        </Button>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>

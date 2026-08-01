@@ -24,7 +24,13 @@ const columns: readonly GridColDef<TestRow>[] = Object.freeze([
   { field: 'label', headerName: 'Record' },
 ])
 
-function DialogHarness({ onClose = () => undefined }: { onClose?: () => void }) {
+function DialogHarness({
+  onClose = () => undefined,
+  data = rows,
+}: {
+  onClose?: () => void
+  data?: readonly TestRow[]
+}) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -33,8 +39,8 @@ function DialogHarness({ onClose = () => undefined }: { onClose?: () => void }) 
       <BoundedDataDialog
         open={open}
         title="Bounded telemetry data"
-        rows={rows}
-        returnedCount={101}
+        rows={data}
+        returnedCount={data.length}
         columns={columns}
         onClose={() => {
           onClose()
@@ -95,6 +101,31 @@ describe('BoundedDataDialog', () => {
     expect(nextPage).toBeVisible()
     await user.click(nextPage)
     expect(await screen.findByRole('gridcell', { name: 'Record 101' })).toBeVisible()
+  })
+
+  it('exports the displayed rows as a downloadable CSV', async () => {
+    const user = userEvent.setup()
+    const createObjectURL = vi.fn(() => 'blob:csv')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+    render(<DialogHarness />)
+    await user.click(screen.getByRole('button', { name: 'Lihat data' }))
+
+    await user.click(screen.getByRole('button', { name: 'Export CSV' }))
+
+    expect(createObjectURL).toHaveBeenCalledOnce()
+    const blob = createObjectURL.mock.calls[0]?.[0] as unknown as Blob
+    expect(blob).toBeInstanceOf(Blob)
+    expect(blob.type).toContain('text/csv')
+    vi.unstubAllGlobals()
+  })
+
+  it('disables CSV export when there is nothing to export', async () => {
+    const user = userEvent.setup()
+    render(<DialogHarness data={[]} />)
+    await user.click(screen.getByRole('button', { name: 'Lihat data' }))
+
+    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeDisabled()
   })
 
   it('closes from the Close button and restores focus to the caller trigger', async () => {
