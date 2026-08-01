@@ -15,6 +15,7 @@ export async function getPostInferenceBins(
     device_id: queryInput.deviceId,
     from: queryInput.from,
     to: queryInput.to,
+    source: queryInput.source,
     limit: String(queryInput.limit),
   })
   if (queryInput.cursor !== undefined) query.set('cursor', queryInput.cursor)

@@ -500,6 +500,9 @@ class InferenceResponse(StrictModel):
 InferenceResultsResponse = InferenceResponse
 
 
+PostInferenceBinSource = Literal["replay", "live"]
+
+
 class PostInferenceBin(StrictModel):
     segment_id: int
     bin_ordinal: int
@@ -530,6 +533,7 @@ class PostInferenceBinsQuery(StrictModel):
     device_id: CorpusDeviceId
     from_ts: HistoricalDateTime = Field(alias="from")
     to_ts: HistoricalDateTime = Field(alias="to")
+    source: PostInferenceBinSource = "replay"
     limit: Annotated[int, Field(ge=1, le=5_000)] = 500
     cursor: str | None = Field(default=None, exclude_if=_is_none)
     model_version: str | None = Field(default=None, exclude_if=_is_none)
@@ -547,6 +551,7 @@ class PostInferenceBinsResponse(StrictModel):
     from_ts: HistoricalDateTime = Field(alias="from")
     to_ts: HistoricalDateTime = Field(alias="to")
     time_zone: Literal["Asia/Jakarta"]
+    source: PostInferenceBinSource
     model_version: str
     bins: list[PostInferenceBin] = Field(max_length=5_000)
     next_cursor: str | None

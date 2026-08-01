@@ -9,6 +9,7 @@ from anomaly_backend.contracts import (
     CorpusDeviceId,
     HistoricalDateTime,
     PostInferenceBin,
+    PostInferenceBinSource,
     PostInferenceBinsQuery,
     PostInferenceBinsResponse,
     format_historical_datetime,
@@ -17,7 +18,10 @@ from anomaly_backend.contracts import (
 )
 from anomaly_backend.db import get_connection
 from anomaly_backend.problems import InvalidQuery, new_request_id
-from anomaly_backend.sql import post_inference_bin_rows
+from anomaly_backend.sql import (
+    live_post_inference_bin_rows,
+    post_inference_bin_rows,
+)
 
 router = APIRouter()
 
@@ -42,11 +46,13 @@ async def post_inference_bins(
     limit: Annotated[int, Query(ge=1, le=5_000)] = 500,
     cursor: Annotated[str | None, Query()] = None,
     model_version: Annotated[str | None, Query()] = None,
+    source: Annotated[PostInferenceBinSource, Query()] = "replay",
 ) -> PostInferenceBinsResponse:
     query_fields: dict[str, object] = {
         "device_id": device_id,
         "from": from_ts,
         "to": to_ts,
+        "source": source,
         "limit": limit,
     }
     if cursor is not None:
@@ -57,6 +63,7 @@ async def post_inference_bins(
     filters: dict[str, object] = {
         "device_id": query.device_id,
         "from": query.from_ts,
+        "source": query.source,
         "model_version": query.model_version,
     }
     try:
@@ -75,7 +82,12 @@ async def post_inference_bins(
             "Query parameters failed validation",
             {"cursor": ["Invalid cursor"]},
         ) from error
-    canonical_version, rows = await post_inference_bin_rows(
+    fetch_rows = (
+        live_post_inference_bin_rows
+        if query.source == "live"
+        else post_inference_bin_rows
+    )
+    canonical_version, rows = await fetch_rows(
         connection,
         device_id=query.device_id,
         from_ts=datetime.fromisoformat(query.from_ts),
@@ -111,6 +123,7 @@ async def post_inference_bins(
             "from": query.from_ts,
             "to": query.to_ts,
             "time_zone": "Asia/Jakarta",
+            "source": query.source,
             "model_version": canonical_version,
             "bins": bins,
             "next_cursor": (

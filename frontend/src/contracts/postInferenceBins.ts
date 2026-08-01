@@ -31,11 +31,15 @@ export const PostInferenceBinSchema = z
   )
 export type PostInferenceBin = z.infer<typeof PostInferenceBinSchema>
 
+export const PostInferenceBinSourceSchema = z.enum(['replay', 'live'])
+export type PostInferenceBinSource = z.infer<typeof PostInferenceBinSourceSchema>
+
 export const PostInferenceBinsQuerySchema = z
   .strictObject({
     deviceId: CorpusDeviceIdSchema,
     from: HistoricalDateTimeSchema,
     to: HistoricalDateTimeSchema,
+    source: PostInferenceBinSourceSchema.default('replay'),
     limit: z.number().int().min(1).max(5_000).default(500),
     cursor: z.string().optional(),
     modelVersion: z.string().optional(),
@@ -54,6 +58,7 @@ export const PostInferenceBinsResponseSchema = z
     from: HistoricalDateTimeSchema,
     to: HistoricalDateTimeSchema,
     time_zone: z.literal('Asia/Jakarta'),
+    source: PostInferenceBinSourceSchema,
     model_version: z.string(),
     bins: z.array(PostInferenceBinSchema).max(5_000),
     next_cursor: z.string().nullable(),
