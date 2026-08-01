@@ -8,11 +8,14 @@ import { sensorLabels, type SensorId } from '../../contracts/common'
 import type { InferencePoint } from '../../contracts/inference'
 import type { TelemetryPoint } from '../../contracts/telemetry'
 import { tokens } from '../../theme/tokens'
+import { AlertBinOverlay } from './AlertBinOverlay'
+import type { AlertBinInterval } from './alertBinShapes'
 
 export interface ReconstructionChartProps {
   sensorId: SensorId
   telemetry: readonly TelemetryPoint[]
   inference: readonly InferencePoint[]
+  binIntervals?: readonly AlertBinInterval[]
   windowCount?: number
 }
 
@@ -22,6 +25,7 @@ export function ReconstructionChart({
   sensorId,
   telemetry,
   inference,
+  binIntervals = [],
   windowCount = 10,
 }: ReconstructionChartProps) {
   const theme = useTheme()
@@ -47,7 +51,7 @@ export function ReconstructionChart({
     <Paper component="article" variant="outlined" sx={{ minWidth: 0, p: 2 }}>
       <Stack spacing={1} sx={{ minWidth: 0 }}>
         <Typography variant="h3">
-          Reconstruction · last {windowCount} windows (~1 min)
+          Reconstruction · last {windowCount} windows
         </Typography>
         <Typography variant="body2" color="text.secondary">
           Data asli vs reconstruction; selisih (error) diarsir pink · Asia/Jakarta (WIB)
@@ -137,7 +141,13 @@ export function ReconstructionChart({
                   yAxisId: 'reconstruction-y-axis',
                 },
               ]}
-            />
+            >
+              <AlertBinOverlay
+                intervals={binIntervals}
+                xAxisId="reconstruction-x-axis"
+                color={colors.reconstructionError}
+              />
+            </LineChart>
           </Box>
         )}
       </Stack>

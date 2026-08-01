@@ -7,6 +7,7 @@ const livePaths = [
   '/api/telemetry/latest',
   '/api/telemetry/history',
   '/api/inference-results',
+  '/api/post-inference-bins',
   '/api/alerts/current',
   '/api/alert-events',
   '/api/system/status',
@@ -34,7 +35,7 @@ describe('live page API parity', () => {
     const search = 'range=custom&from=2026-07-31T02:00:00&to=2026-07-31T08:00:00'
     const overview = renderApp(`/?${search}`)
     expect(await screen.findByRole('combobox', { name: 'Range' })).toHaveValue('custom')
-    await waitFor(() => expect(liveInputs(fetchSpy.mock.calls)).toHaveLength(6))
+    await waitFor(() => expect(liveInputs(fetchSpy.mock.calls)).toHaveLength(7))
     const overviewInputs = liveInputs(fetchSpy.mock.calls)
 
     overview.unmount()
@@ -44,7 +45,7 @@ describe('live page API parity', () => {
 
     renderApp(`/sensors/b02f3872-ruang-produksi?${search}`)
     expect(await screen.findByRole('combobox', { name: 'Range' })).toHaveValue('custom')
-    await waitFor(() => expect(liveInputs(fetchSpy.mock.calls)).toHaveLength(6))
+    await waitFor(() => expect(liveInputs(fetchSpy.mock.calls)).toHaveLength(7))
 
     expect(liveInputs(fetchSpy.mock.calls)).toEqual(overviewInputs)
   })

@@ -801,6 +801,103 @@ replay_episode_checkpoints = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
 
+post_inference_bin_staging = Table(
+    "post_inference_bin_staging",
+    metadata,
+    Column("job_id", Text, ForeignKey("replay_jobs.job_id"), primary_key=True),
+    Column("segment_id", Integer, primary_key=True),
+    Column("bin_ordinal", Integer, primary_key=True),
+    Column("start_score_ts", DateTime(timezone=False), nullable=False),
+    Column("end_score_ts", DateTime(timezone=False), nullable=False),
+    Column("scored_timestamp_count", Integer, nullable=False),
+    Column("is_alert", Boolean, nullable=False),
+    Column("candidate_alert_count", Integer, nullable=False),
+    Column("first_alert_ts", DateTime(timezone=False), nullable=True),
+    Column("last_alert_ts", DateTime(timezone=False), nullable=True),
+    Column("peak_score", Float, nullable=False),
+    Column("latest_score", Float, nullable=False),
+    Column("threshold", Float, nullable=False),
+    CheckConstraint(
+        "scored_timestamp_count = 51",
+        name="ck_post_inference_bin_staging_count",
+    ),
+    CheckConstraint(
+        "candidate_alert_count >= 0 AND candidate_alert_count <= scored_timestamp_count",
+        name="ck_post_inference_bin_staging_candidate",
+    ),
+    CheckConstraint(
+        "is_alert = (candidate_alert_count > 0)",
+        name="ck_post_inference_bin_staging_alert",
+    ),
+    CheckConstraint(
+        "start_score_ts <= end_score_ts",
+        name="ck_post_inference_bin_staging_order",
+    ),
+)
+
+post_inference_bins = Table(
+    "post_inference_bins",
+    metadata,
+    Column("device_id", Text, ForeignKey("devices.device_id"), primary_key=True),
+    Column(
+        "model_version",
+        Text,
+        ForeignKey("model_versions.version"),
+        primary_key=True,
+    ),
+    Column("score_provenance", Text, primary_key=True),
+    Column(
+        "replay_job_id",
+        Text,
+        ForeignKey("replay_jobs.job_id"),
+        primary_key=True,
+    ),
+    Column("segment_id", Integer, primary_key=True),
+    Column("bin_ordinal", Integer, primary_key=True),
+    Column("start_score_ts", DateTime(timezone=False), nullable=False),
+    Column("end_score_ts", DateTime(timezone=False), nullable=False),
+    Column("scored_timestamp_count", Integer, nullable=False),
+    Column("is_alert", Boolean, nullable=False),
+    Column("candidate_alert_count", Integer, nullable=False),
+    Column("first_alert_ts", DateTime(timezone=False), nullable=True),
+    Column("last_alert_ts", DateTime(timezone=False), nullable=True),
+    Column("peak_score", Float, nullable=False),
+    Column("latest_score", Float, nullable=False),
+    Column("threshold", Float, nullable=False),
+    Column("schema_version", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "scored_timestamp_count = 51",
+        name="ck_post_inference_bins_count",
+    ),
+    CheckConstraint(
+        "candidate_alert_count >= 0 AND candidate_alert_count <= scored_timestamp_count",
+        name="ck_post_inference_bins_candidate",
+    ),
+    CheckConstraint(
+        "is_alert = (candidate_alert_count > 0)",
+        name="ck_post_inference_bins_alert",
+    ),
+    CheckConstraint(
+        "start_score_ts <= end_score_ts",
+        name="ck_post_inference_bins_order",
+    ),
+)
+Index(
+    "ix_post_inference_bins_device_model_start",
+    post_inference_bins.c.device_id,
+    post_inference_bins.c.model_version,
+    post_inference_bins.c.start_score_ts,
+)
+
+post_inference_bin_checkpoints = Table(
+    "post_inference_bin_checkpoints",
+    metadata,
+    Column("job_id", Text, ForeignKey("replay_jobs.job_id"), primary_key=True),
+    Column("state", JSONB, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
 worker_heartbeats = Table(
     "worker_heartbeats",
     metadata,

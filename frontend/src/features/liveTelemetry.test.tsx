@@ -23,7 +23,7 @@ describe('live telemetry queries', () => {
       await vi.waitFor(() => expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(6))
       const liveQueries = harness.queryClient.getQueryCache().getAll()
         .filter((query) => query.queryKey[0] === 'live')
-      expect(liveQueries).toHaveLength(6)
+      expect(liveQueries).toHaveLength(7)
       expect(liveQueries.map((query) => query.queryKey)).toContainEqual([
         'live',
         'telemetry-history',
