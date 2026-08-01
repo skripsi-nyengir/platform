@@ -7,7 +7,7 @@ import { PanelSkeleton } from '../components/states/PanelSkeleton'
 import { PollingFailureNotice } from '../components/states/PollingFailureNotice'
 import { publicDeviceId, sensorIds, sensorLabels } from '../contracts/common'
 import { AlertEpisodeContext } from '../features/alerts-ui/AlertEpisodeContext'
-import { CurrentAlertCard } from '../features/overview/CurrentAlertCard'
+import { AttentionQueueGrid } from '../features/alerts-ui/AttentionQueueGrid'
 import { SensorMatrix } from '../features/overview/SensorMatrix'
 import {
   latestSensorScore,
@@ -170,6 +170,30 @@ export function OverviewPage() {
         </Grid>
       </section>
 
+      <Stack spacing={2}>
+        {latestTelemetry.data === undefined ? (
+          latestTelemetry.isError ? (
+            <ApiErrorPanel error={latestTelemetry.error} onRetry={() => void latestTelemetry.refetch()} />
+          ) : (
+            <PanelSkeleton label="Loading latest telemetry" />
+          )
+        ) : latestTelemetry.isRefetchError ? (
+          <PollingFailureNotice
+            resource="Latest telemetry"
+            lastUpdated={latestTelemetry.data.generated_at}
+            onRetry={() => void latestTelemetry.refetch()}
+          />
+        ) : null}
+        <SensorMatrix
+          telemetry={latestTelemetry.data}
+          history={live.telemetryHistory.data}
+          historyError={live.telemetryHistory.isError}
+          filters={filters}
+          scores={latestScores}
+          alerts={activeAlerts}
+        />
+      </Stack>
+
       <section aria-labelledby="attention-queue-heading">
         <Stack spacing={2}>
           <Typography id="attention-queue-heading" variant="h2">
@@ -197,12 +221,8 @@ export function OverviewPage() {
                 />
               ) : (
                 <Stack spacing={2}>
-                  {activeAlerts.map((alert) => (
-                    <Stack key={alert.alert_id} spacing={2}>
-                      <CurrentAlertCard alert={alert} />
-                      <AlertEpisodeContext alertId={alert.alert_id} />
-                    </Stack>
-                  ))}
+                  <AttentionQueueGrid alerts={activeAlerts} />
+                  <AlertEpisodeContext alertId={activeAlerts[0]!.alert_id} compact />
                 </Stack>
               )}
             </>
@@ -210,29 +230,6 @@ export function OverviewPage() {
         </Stack>
       </section>
 
-      <Stack spacing={2}>
-        {latestTelemetry.data === undefined ? (
-          latestTelemetry.isError ? (
-            <ApiErrorPanel error={latestTelemetry.error} onRetry={() => void latestTelemetry.refetch()} />
-          ) : (
-            <PanelSkeleton label="Loading latest telemetry" />
-          )
-        ) : latestTelemetry.isRefetchError ? (
-          <PollingFailureNotice
-            resource="Latest telemetry"
-            lastUpdated={latestTelemetry.data.generated_at}
-            onRetry={() => void latestTelemetry.refetch()}
-          />
-        ) : null}
-        <SensorMatrix
-          telemetry={latestTelemetry.data}
-          history={live.telemetryHistory.data}
-          historyError={live.telemetryHistory.isError}
-          filters={filters}
-          scores={latestScores}
-          alerts={activeAlerts}
-        />
-      </Stack>
     </Stack>
   )
 }

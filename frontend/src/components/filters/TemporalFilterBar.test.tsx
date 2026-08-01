@@ -25,6 +25,8 @@ describe('TemporalFilterBar', () => {
       'Last 1 minute',
       'Last 5 minutes',
       'Last 10 minutes',
+      'Last 15 minutes',
+      'Last 30 minutes',
       'Last 1 hour',
       'Last 6 hours',
       'Last 12 hours',
