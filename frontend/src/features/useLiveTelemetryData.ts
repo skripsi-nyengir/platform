@@ -73,6 +73,7 @@ export function useLiveTelemetryData(sensorId: SensorId, filters: LiveUrlFilters
         deviceId: sensorId,
         from: range.from,
         to: range.to,
+        source: 'live',
         limit: 5_000,
         modelVersion: filters.modelVersion,
       }, signal)

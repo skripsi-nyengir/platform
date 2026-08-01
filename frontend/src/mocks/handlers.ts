@@ -568,19 +568,20 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
         deviceId: queryValue(url, 'device_id'),
         from: queryValue(url, 'from'),
         to: queryValue(url, 'to'),
+        source: queryValue(url, 'source'),
         limit: queryNumber(url, 'limit'),
         cursor: queryValue(url, 'cursor'),
         modelVersion: queryValue(url, 'model_version'),
       })
       if (!parsed.success) return invalidQuery(request)
-      const { deviceId, from, to, limit } = parsed.data
+      const { deviceId, from, to, limit, source } = parsed.data
       const offset = cursorOffset(url, 'post-inference-bins')
-      const source =
+      const available =
         deviceId === simDeviceId ||
         (state.scenario === 'empty' && deviceId === scenarioDevice.empty)
           ? []
           : normalPostInferenceBinsBySensor[deviceId]
-      const bounded = source.filter(
+      const bounded = available.filter(
         (item) =>
           compareHistoricalDateTimes(item.start_score_ts, from) >= 0 &&
           compareHistoricalDateTimes(item.start_score_ts, to) < 0,
@@ -596,6 +597,7 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
         from,
         to,
         time_zone: 'Asia/Jakarta',
+        source,
         model_version: modelVersion,
         bins,
         next_cursor: nextCursor('post-inference-bins', offset, bins.length, bounded.length),
