@@ -16,6 +16,7 @@ from anomaly_backend.sql.live import (
     BoundaryReason,
     EpisodeCloseReason,
     LiveLeaseLost,
+    LiveWindowDesyncError,
     TelemetryKey,
     acquire_writer_lease,
     apply_live_activation,
@@ -907,6 +908,10 @@ class LiveService:
                     recon_temperature_c=recon_temperature_c,
                     recon_relative_humidity_pct=recon_relative_humidity_pct,
                 )
+        except LiveWindowDesyncError:
+            self._window_state = WindowEngineState()
+            self._health_detail_code = "window_desync_reset"
+            raise
         except Exception:
             self._health_detail_code = "persistence_retry"
             raise

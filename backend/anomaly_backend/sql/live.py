@@ -37,6 +37,10 @@ class LiveLeaseLost(RuntimeError):
     pass
 
 
+class LiveWindowDesyncError(ValueError):
+    pass
+
+
 async def _database_now(connection: AsyncConnection) -> datetime:
     return cast(datetime, await connection.scalar(select(func.clock_timestamp())))
 
@@ -1420,7 +1424,9 @@ async def publish_live_inference(
         )
         window.reverse()
         if window != list(source_keys):
-            raise ValueError("live inference requires a contiguous ten-row window")
+            raise LiveWindowDesyncError(
+                "live inference requires a contiguous ten-row window"
+            )
         pair = (
             (
                 await connection.execute(
