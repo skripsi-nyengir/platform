@@ -1,19 +1,30 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import math
 import re
 from datetime import datetime, timezone
 from typing import Annotated, ClassVar, Literal, cast
 from urllib.parse import urlsplit
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 SensorId = Literal["b02f3872-ruang-produksi"]
 CorpusDeviceId = Literal["b02f3872-ruang-produksi", "b02f3872-simulasi-injeksi"]
-Bucket = Literal["raw", "1m", "5m", "15m", "1h", "1d"]
+Bucket = Literal["raw", "one_minute", "adaptive"]
 Freshness = Literal["fresh", "stale", "unknown"]
 Availability = Literal["online", "offline", "unknown"]
 AlertStatus = Literal["detected", "acknowledged", "resolved"]
+Severity = Literal["info", "warning", "critical"]
 ScoreProvenance = Literal["simulated_preview", "artifact_backed"]
 DetectionBasis = Literal["simulated_preview", "artifact_backed"]
 InjectionFamily = Literal[
@@ -111,6 +122,88 @@ def parse_cursor(cursor: str, expected_scope: str) -> int:
     return int(offset)
 
 
+def make_keyset_cursor(
+    scope: CursorScope,
+    *,
+    timestamp: str,
+    row_id: str,
+    snapshot_to: str,
+    filters: dict[str, object],
+) -> str:
+    payload = json.dumps(
+        {
+            "v": 1,
+            "scope": scope,
+            "timestamp": timestamp,
+            "row_id": row_id,
+            "snapshot_to": snapshot_to,
+            "filters": filters,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode()
+    checksum = hashlib.sha256(payload).hexdigest()[:16].encode()
+    return base64.urlsafe_b64encode(checksum + b"." + payload).decode().rstrip("=")
+
+
+def parse_keyset_cursor(
+    cursor: str,
+    expected_scope: CursorScope,
+    *,
+    snapshot_to: str,
+    filters: dict[str, object],
+) -> tuple[str, str]:
+    if not cursor or len(cursor) > 4_096:
+        raise ValueError("invalid cursor")
+    try:
+        padding = "=" * (-len(cursor) % 4)
+        decoded = base64.urlsafe_b64decode(cursor + padding)
+        checksum, separator, payload = decoded.partition(b".")
+        document = json.loads(payload)
+    except (ValueError, TypeError, json.JSONDecodeError):
+        raise ValueError("invalid cursor") from None
+    if (
+        separator != b"."
+        or checksum != hashlib.sha256(payload).hexdigest()[:16].encode()
+        or not isinstance(document, dict)
+        or document.get("v") != 1
+        or document.get("scope") != expected_scope
+        or document.get("snapshot_to") != snapshot_to
+        or document.get("filters") != filters
+        or not isinstance(document.get("timestamp"), str)
+        or not isinstance(document.get("row_id"), str)
+        or not document["row_id"]
+    ):
+        raise ValueError("invalid cursor")
+    return document["timestamp"], document["row_id"]
+
+
+def effective_bucket_seconds(
+    bucket: Bucket,
+    from_ts: HistoricalDateTime,
+    to_ts: HistoricalDateTime,
+) -> int | None:
+    duration_seconds = int(
+        (
+            datetime.fromisoformat(to_ts) - datetime.fromisoformat(from_ts)
+        ).total_seconds()
+    )
+    if duration_seconds <= 0:
+        raise ValueError("from must be earlier than to")
+    if bucket == "raw":
+        if duration_seconds > 3_600:
+            raise ValueError("raw history is limited to one hour")
+        return None
+    if bucket == "one_minute":
+        if duration_seconds not in (6 * 3_600, 12 * 3_600, 24 * 3_600):
+            raise ValueError("one_minute is limited to 6, 12, or 24 hour presets")
+        return 60
+    if not 3_600 <= duration_seconds <= 24 * 3_600:
+        raise ValueError("adaptive history must span between 1 and 24 hours")
+    return max(60, 60 * math.ceil(duration_seconds / (600 * 60)))
+
+
 def _validate_url(value: str) -> str:
     if not urlsplit(value).scheme:
         raise ValueError("value must be an absolute URL")
@@ -185,6 +278,10 @@ class TelemetryPoint(StrictModel):
     ts: HistoricalDateTime
     temperature_c: float | None
     relative_humidity_pct: float | None
+    temperature_c_min: float | None = None
+    temperature_c_max: float | None = None
+    relative_humidity_pct_min: float | None = None
+    relative_humidity_pct_max: float | None = None
     sample_count: Annotated[int, Field(ge=0)]
     gap_before: bool
 
@@ -294,8 +391,7 @@ class TelemetryHistoryQuery(StrictModel):
 
     @model_validator(mode="after")
     def validate_range(self) -> TelemetryHistoryQuery:
-        if compare_historical_datetimes(self.from_ts, self.to_ts) >= 0:
-            raise ValueError("from must be earlier than to")
+        _ = effective_bucket_seconds(self.bucket, self.from_ts, self.to_ts)
         if self.bucket != "raw" and self.limit > 2_000:
             raise ValueError("bucketed limit must be at most 2000")
         return self
@@ -307,6 +403,7 @@ class TelemetryHistoryResponse(StrictModel):
     from_ts: HistoricalDateTime = Field(alias="from")
     to_ts: HistoricalDateTime = Field(alias="to")
     bucket: Bucket
+    bucket_seconds: Annotated[int, Field(ge=60)] | None
     time_zone: Literal["Asia/Jakarta"]
     points: list[TelemetryPoint] = Field(max_length=5_000)
     next_cursor: str | None
@@ -314,8 +411,11 @@ class TelemetryHistoryResponse(StrictModel):
 
     @model_validator(mode="after")
     def validate_response(self) -> TelemetryHistoryResponse:
-        if compare_historical_datetimes(self.from_ts, self.to_ts) >= 0:
-            raise ValueError("from must be earlier than to")
+        expected_seconds = effective_bucket_seconds(
+            self.bucket, self.from_ts, self.to_ts
+        )
+        if self.bucket_seconds != expected_seconds:
+            raise ValueError("bucket_seconds must match the effective bucket")
         if self.bucket != "raw" and len(self.points) > 2_000:
             raise ValueError("bucketed responses contain at most 2000 points")
         if self.returned_count != len(self.points):
@@ -332,6 +432,9 @@ class InferencePoint(StrictModel):
     is_anomaly: bool
     model_version: str
     score_provenance: ScoreProvenance
+    severity: Severity | None = None
+    latest_score: float | None = None
+    sample_count: Annotated[int, Field(ge=1)] = 1
     recon_temperature_c: float | None = None
     recon_relative_humidity_pct: float | None = None
     band_half_temperature_c: float | None = None
@@ -361,8 +464,7 @@ class InferenceQuery(StrictModel):
 
     @model_validator(mode="after")
     def validate_range(self) -> InferenceQuery:
-        if compare_historical_datetimes(self.from_ts, self.to_ts) >= 0:
-            raise ValueError("from must be earlier than to")
+        _ = effective_bucket_seconds(self.bucket, self.from_ts, self.to_ts)
         if self.bucket != "raw" and self.limit > 2_000:
             raise ValueError("bucketed limit must be at most 2000")
         return self
@@ -374,6 +476,10 @@ InferenceResultsQuery = InferenceQuery
 class InferenceResponse(StrictModel):
     request_id: str
     device_id: CorpusDeviceId
+    from_ts: HistoricalDateTime = Field(alias="from")
+    to_ts: HistoricalDateTime = Field(alias="to")
+    bucket: Bucket
+    bucket_seconds: Annotated[int, Field(ge=60)] | None
     time_zone: Literal["Asia/Jakarta"]
     model_version: str
     points: list[InferencePoint] = Field(max_length=5_000)
@@ -382,6 +488,10 @@ class InferenceResponse(StrictModel):
 
     @model_validator(mode="after")
     def validate_count(self) -> InferenceResponse:
+        if self.bucket_seconds != effective_bucket_seconds(
+            self.bucket, self.from_ts, self.to_ts
+        ):
+            raise ValueError("bucket_seconds must match the effective bucket")
         if self.returned_count != len(self.points):
             raise ValueError("returned_count must equal points length")
         return self
@@ -432,6 +542,8 @@ class AlertEventsQuery(StrictModel):
 class AlertEventsResponse(StrictModel):
     request_id: str
     time_zone: Literal["Asia/Jakarta"]
+    from_ts: OperationalInstant | None = Field(alias="from")
+    to_ts: OperationalInstant = Field(alias="to")
     events: list[AlertEvent] = Field(max_length=200)
     next_cursor: str | None
     returned_count: Annotated[int, Field(ge=0)]
@@ -463,7 +575,7 @@ class CurrentAlert(StrictModel):
     peak_score: float
     latest_score: float
     anomalous_window_count: Annotated[int, Field(gt=0)]
-    replay_job_id: str
+    replay_job_id: str | None
     threshold: float
     model_version: str
     detection_basis: DetectionBasis
@@ -502,6 +614,20 @@ class CurrentAlertsResponse(StrictModel):
         if self.total < len(self.items) or len(self.items) > self.page_size:
             raise ValueError("invalid current-alert page counts")
         return self
+
+
+class AlertContextPoint(StrictModel):
+    inference: InferencePoint
+    source_readings: list[TelemetryPoint] = Field(min_length=10, max_length=10)
+
+
+class AlertDetailResponse(StrictModel):
+    request_id: str
+    time_zone: Literal["Asia/Jakarta"]
+    alert: CurrentAlert
+    context_before: list[TelemetryPoint] = Field(max_length=10)
+    episode_points: list[AlertContextPoint]
+    recovery_points: list[AlertContextPoint] = Field(max_length=3)
 
 
 class _AlertMutationResponseFields(StrictModel):
@@ -736,8 +862,34 @@ class SystemServiceStatus(StrictModel):
 
 
 class SystemTelemetryStatus(StrictModel):
+    classification: Literal["healthy", "degraded", "failed"]
+    reasons: list[str] = Field(max_length=20)
+    configuration_valid: bool
+    lease_active: bool
+    fencing_token: Annotated[int, Field(gt=0)] | None
+    database_heartbeat: OperationalInstant | None
+    connection_state: Literal["connected", "subscribed", "disconnected", "unknown"]
+    connack_received: bool | None
+    suback_received: bool | None
     latest_ts: HistoricalDateTime | None
+    last_valid_reading_ts: HistoricalDateTime | None
+    last_valid_reading_at: OperationalInstant | None
     age_seconds: Annotated[float, Field(ge=0)] | None
+    last_gap_at: OperationalInstant | None
+    invalid_message_count: Annotated[int, Field(ge=0)] | None
+    retained_message_count: Annotated[int, Field(ge=0)] | None
+    last_persistence_failure_at: OperationalInstant | None
+    ingress_queue_depth: Annotated[int, Field(ge=0)] | None
+    dropped_newest_count: Annotated[int, Field(ge=0)] | None
+    pending_boundary_count: Annotated[int, Field(ge=0)]
+    durable_backlog_count: Annotated[int, Field(ge=0)]
+    cursor_ts: HistoricalDateTime | None
+    cursor_id: str | None
+    recovery_ready: bool
+    active_model_version: str | None
+    active_scaler_corpus_id: str | None
+    artifact_hashes: dict[str, str]
+    retry_state: Literal["idle", "retrying", "unknown"]
     fresh_sensor_count: Annotated[int, Field(ge=0, le=1)]
     stale_sensor_count: Annotated[int, Field(ge=0, le=1)]
     offline_sensor_count: Annotated[int, Field(ge=0, le=1)]
@@ -791,7 +943,9 @@ class DeviceItem(StrictModel):
     device_id: SensorId
     display_name: Literal["TALPHA Ruang Produksi"]
     time_zone: Literal["Asia/Jakarta"]
-    channels: tuple[Literal["suhu"], Literal["rh"]]
+    channels: tuple[
+        Literal["temperature_c"], Literal["relative_humidity_pct"]
+    ]
     corpus_from: HistoricalDateTime | None
     corpus_to: HistoricalDateTime | None
     import_readiness: Literal["pending", "importing", "ready", "failed"]
@@ -807,8 +961,16 @@ class PublicModelVersion(StrictModel):
     runtime_kind: Literal["preview_simulator", "artifact"]
     selectable: bool
     compatible: bool
+    channels: tuple[str, ...]
+    window_size: Annotated[int, Field(gt=0)]
+    stride: Annotated[int, Field(gt=0)]
     artifact_status: Literal["pending", "ready"]
     score_provenance: ScoreProvenance
+
+    @field_validator("channels", mode="before")
+    @classmethod
+    def restore_json_channels(cls, value: object) -> object:
+        return tuple(value) if isinstance(value, list) else value
 
 
 class PublicModelFamily(StrictModel):

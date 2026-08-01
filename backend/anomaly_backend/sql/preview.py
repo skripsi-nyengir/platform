@@ -13,11 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from anomaly_backend import tables
 from anomaly_backend.problems import Conflict, InvalidQuery, NotFound
+from anomaly_backend.replay_contract import acquire_shared_replay_contract_lock
 
 
 PUBLIC_DEVICE_ID = "b02f3872-ruang-produksi"
 PUBLIC_TIME_ZONE = "Asia/Jakarta"
-PUBLIC_CHANNELS = ("suhu", "rh")
+PUBLIC_CHANNELS = ("temperature_c", "relative_humidity_pct")
 PREVIEW_ACTOR = "preview-session"
 
 
@@ -142,6 +143,7 @@ async def activate_model(
         }
     )
     async with connection.begin():
+        await acquire_shared_replay_contract_lock(connection)
         selection = (
             await connection.execute(
                 select(tables.active_model_selections)
@@ -187,6 +189,7 @@ async def activate_model(
                     tables.model_versions.c.channels,
                     tables.model_versions.c.window_size,
                     tables.model_versions.c.stride,
+                    tables.model_versions.c.contract_status,
                     tables.model_families.c.is_public,
                 )
                 .join(
@@ -205,8 +208,9 @@ async def activate_model(
             or candidate["runtime_kind"] != "preview_simulator"
             or candidate["schema_version"] != "b02f3872_preview_v1"
             or tuple(candidate["channels"]) != PUBLIC_CHANNELS
-            or candidate["window_size"] != 30
+            or candidate["window_size"] != 10
             or candidate["stride"] != 1
+            or candidate["contract_status"] != "live_10"
         ):
             raise InvalidQuery(
                 "The model version is not compatible with this device"
@@ -276,6 +280,7 @@ async def submit_replay_job(
         }
     )
     async with connection.begin():
+        await acquire_shared_replay_contract_lock(connection)
         selection = (
             await connection.execute(
                 select(tables.active_model_selections)
@@ -348,6 +353,17 @@ async def submit_replay_job(
                 )
             )
         ).mappings().one()
+        if (
+            not version["is_selectable"]
+            or version["schema_version"] != "b02f3872_preview_v1"
+            or tuple(version["channels"]) != PUBLIC_CHANNELS
+            or version["window_size"] != 10
+            or version["stride"] != 1
+            or version["contract_status"] != "live_10"
+        ):
+            raise Conflict(
+                "The selected model is not compatible with live replay"
+            )
         runtime_kind = cast(str, version["runtime_kind"])
         if runtime_kind == "preview_simulator":
             provenance = "simulated_preview"

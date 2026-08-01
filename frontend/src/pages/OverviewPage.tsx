@@ -1,17 +1,23 @@
 import { Alert, Card, CardContent, Grid, Stack, Typography } from '@mui/material'
+import { useSearchParams } from 'react-router-dom'
+import { TemporalFilterBar } from '../components/filters/TemporalFilterBar'
 import { ApiErrorPanel } from '../components/states/ApiErrorPanel'
 import { EmptyState } from '../components/states/EmptyState'
 import { PanelSkeleton } from '../components/states/PanelSkeleton'
 import { PollingFailureNotice } from '../components/states/PollingFailureNotice'
-import { sensorIds, sensorLabels } from '../contracts/common'
+import { publicDeviceId, sensorIds, sensorLabels } from '../contracts/common'
+import { AlertEpisodeContext } from '../features/alerts-ui/AlertEpisodeContext'
 import { CurrentAlertCard } from '../features/overview/CurrentAlertCard'
 import { SensorMatrix } from '../features/overview/SensorMatrix'
 import {
-  useOverviewData,
+  latestSensorScore,
   type LatestSensorScore,
 } from '../features/overview/useOverviewData'
 import { tokens } from '../theme/tokens'
 import { useDevicesQuery } from '../features/preview/queries'
+import { parseLiveUrlFilters, updateLiveUrlFilters } from '../features/filters/urlFilters'
+import { useLiveTelemetryData } from '../features/useLiveTelemetryData'
+import { StatusSnapshot } from '../features/systemHealth/StatusSnapshot'
 
 const technicalTextSx = {
   fontFamily: tokens.font.data,
@@ -77,8 +83,12 @@ function SummaryCard({
 }
 
 export function OverviewPage() {
+  const [params, setParams] = useSearchParams()
   const devices = useDevicesQuery()
-  const { latestTelemetry, currentAlerts, latestScores } = useOverviewData()
+  const filters = parseLiveUrlFilters(params, publicDeviceId)
+  const live = useLiveTelemetryData(publicDeviceId, filters)
+  const { latestTelemetry, currentAlerts, health } = live
+  const latestScores = [latestSensorScore(publicDeviceId, live.inference.data)]
   const activeAlerts = currentAlerts.data?.items ?? []
   const telemetrySensors = latestTelemetry.data?.sensors
   const telemetryComplete = telemetrySensors !== undefined &&
@@ -97,11 +107,16 @@ export function OverviewPage() {
     <Stack spacing={5}>
       <Stack spacing={0.5}>
         <Typography variant="h1">Overview</Typography>
-        <Typography color="text.secondary">Telemetri historis nyata · Asia/Jakarta (WIB)</Typography>
+        <Typography color="text.secondary">Telemetri live · Asia/Jakarta (WIB)</Typography>
         <Typography color="text.secondary">
           Provenance skor dan alert ditampilkan pada setiap hasil.
         </Typography>
       </Stack>
+
+      <TemporalFilterBar
+        value={filters}
+        onChange={(patch) => setParams(updateLiveUrlFilters(params, patch))}
+      />
 
       {devices.data?.items[0]?.import_readiness === 'ready' ? null : (
         <Alert severity={devices.isError ? 'error' : 'info'}>
@@ -109,6 +124,22 @@ export function OverviewPage() {
             ? 'Status import telemetri tidak dapat dibaca.'
             : 'Corpus telemetri belum siap. Preview tidak menggunakan fallback fixture.'}
         </Alert>
+      )}
+
+      {health.data === undefined ? (
+        health.isError ? (
+          <ApiErrorPanel error={health.error} onRetry={() => void health.refetch()} />
+        ) : (
+          <PanelSkeleton label="Loading live system health" />
+        )
+      ) : (
+        <StatusSnapshot
+          snapshot={health.data}
+          displayedAt={health.dataUpdatedAt === 0
+            ? health.data.checked_at
+            : new Date(health.dataUpdatedAt).toISOString()}
+          pollAgeSeconds={0}
+        />
       )}
 
       <section aria-label="Operational summary">
@@ -167,7 +198,10 @@ export function OverviewPage() {
               ) : (
                 <Stack spacing={2}>
                   {activeAlerts.map((alert) => (
-                    <CurrentAlertCard alert={alert} key={alert.alert_id} />
+                    <Stack key={alert.alert_id} spacing={2}>
+                      <CurrentAlertCard alert={alert} />
+                      <AlertEpisodeContext alertId={alert.alert_id} />
+                    </Stack>
                   ))}
                 </Stack>
               )}
@@ -192,6 +226,9 @@ export function OverviewPage() {
         ) : null}
         <SensorMatrix
           telemetry={latestTelemetry.data}
+          history={live.telemetryHistory.data}
+          historyError={live.telemetryHistory.isError}
+          filters={filters}
           scores={latestScores}
           alerts={activeAlerts}
         />

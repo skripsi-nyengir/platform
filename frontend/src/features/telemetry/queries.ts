@@ -5,13 +5,14 @@ import {
   TelemetryHistoryQuerySchema,
   type TelemetryHistoryQuery,
 } from '../../contracts/telemetry'
+import { liveQueryOptions } from '../useLiveTelemetryData'
 
 export function useLatestTelemetryQuery(deviceId?: SensorId) {
   const normalizedDeviceId = SensorIdSchema.optional().parse(deviceId)
   return useQuery({
     queryKey: ['telemetry', 'latest', normalizedDeviceId ?? null],
     queryFn: ({ signal }) => getLatestTelemetry(normalizedDeviceId, signal),
-    refetchInterval: 10_000,
+    ...liveQueryOptions,
   })
 }
 
@@ -29,5 +30,6 @@ export function useTelemetryHistoryQuery(input: TelemetryHistoryQuery) {
       query.cursor ?? null,
     ],
     queryFn: ({ signal }) => getTelemetryHistory(query, signal),
+    ...liveQueryOptions,
   })
 }

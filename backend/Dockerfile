@@ -34,12 +34,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN pip install --disable-pip-version-check --no-cache-dir \
+# ponytail: torch installs first so adding a light dep never invalidates the CUDA layer.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --disable-pip-version-check \
+    "torch==2.13.0" --index-url https://download.pytorch.org/whl/cu130
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --disable-pip-version-check \
+    "fastapi==0.139.2" \
     "psycopg[binary]==3.3.2" \
     "sqlalchemy==2.0.51" \
-    "numpy==2.4.6"
-RUN pip install --disable-pip-version-check --no-cache-dir \
-    "torch==2.13.0" --index-url https://download.pytorch.org/whl/cu130
+    "numpy==2.4.6" \
+    "paho-mqtt==2.1.0"
 COPY anomaly_backend ./anomaly_backend
 COPY anomaly_worker ./anomaly_worker
 CMD ["python", "-m", "anomaly_worker.service"]

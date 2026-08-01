@@ -18,8 +18,11 @@ export const publicDeviceId = sensorIds[0]
 export const simDeviceId = 'b02f3872-simulasi-injeksi' as const satisfies CorpusDeviceId
 export const publicTimeZone = 'Asia/Jakarta' as const
 
-export const BucketSchema = z.enum(['raw', '1m', '5m', '15m', '1h', '1d'])
+export const BucketSchema = z.enum(['raw', 'one_minute', 'adaptive'])
 export type Bucket = z.infer<typeof BucketSchema>
+
+export const SeveritySchema = z.enum(['info', 'warning', 'critical'])
+export type Severity = z.infer<typeof SeveritySchema>
 
 export const FreshnessSchema = z.enum(['fresh', 'stale', 'unknown'])
 export type Freshness = z.infer<typeof FreshnessSchema>

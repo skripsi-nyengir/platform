@@ -3,7 +3,6 @@ from __future__ import annotations
 import csv
 from datetime import datetime, timezone
 import hashlib
-import io
 import json
 import math
 import os
@@ -22,7 +21,7 @@ from anomaly_backend.config import Settings
 PUBLIC_DEVICE_ID = "b02f3872-ruang-produksi"
 SOURCE_DEVICE_UUID = "b02f3872-39a2-4b6f-a4ec-045a287fde4b"
 TIME_ZONE = "Asia/Jakarta"
-CHANNELS = ("suhu", "rh")
+CHANNELS = ("temperature_c", "relative_humidity_pct")
 MEMBER_NAME = "b02f3872.csv"
 EXPECTED_ARCHIVE_SHA256 = (
     "6c5a7ee8c248931bcc490cc114a3af55add8af82f976f58015ff7225dccce01a"
@@ -31,7 +30,7 @@ EXPECTED_MEMBER_SHA256 = (
     "849c694616f6e2b463d0ff46731b73a9ee865c03ab0dbc375eb634218c40c9c0"
 )
 EXPECTED_PUBLISHED_METADATA_SHA256 = (
-    "341a26fb3463e149f66003bf951f211c0fb03f9c4de0242eeda7111c313e6c1e"
+    "51c324eaccf12449777e872c30eb52e3be91f33265dc441c4f3d04390b6e4a76"
 )
 CONTRACT_VERSION = "b02f3872_ruang_produksi_v2"
 CROP_START = datetime(2026, 2, 1)
@@ -575,7 +574,7 @@ def import_corpus(
                     consistency is not None
                     and consistency["pointer_corpus_id"] == corpus_id
                     and tuple(consistency["channels"] or ()) == CHANNELS
-                    and consistency["window_size"] == 30
+                    and consistency["window_size"] == 10
                     and consistency["stride"] == 1
                     and int(consistency["telemetry_count"])
                     == int(existing["accepted_count"])
@@ -759,9 +758,10 @@ def import_corpus(
                 """
                 INSERT INTO preprocessing_snapshots (
                     corpus_id, channels, window_size, stride,
-                    segment_metadata, split_boundaries, split_counts, scaler
+                    contract_status, segment_metadata, split_boundaries,
+                    split_counts, scaler
                 ) VALUES (
-                    %s, %s::jsonb, 30, 1, %s::jsonb, %s::jsonb,
+                    %s, %s::jsonb, 10, 1, 'live_10', %s::jsonb, %s::jsonb,
                     %s::jsonb, %s::jsonb
                 )
                 """,

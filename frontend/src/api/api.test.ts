@@ -46,6 +46,8 @@ describe('B02 API adapters', () => {
     const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({
       request_id: 'req-events',
       time_zone: 'Asia/Jakarta',
+      from: null,
+      to: '2026-07-31T08:00:00Z',
       events: [],
       next_cursor: null,
       returned_count: 0,

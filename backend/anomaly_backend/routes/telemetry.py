@@ -15,10 +15,11 @@ from anomaly_backend.contracts import (
     TelemetryHistoryQuery,
     TelemetryHistoryResponse,
     TelemetryPoint,
+    effective_bucket_seconds,
     format_historical_datetime,
     current_operational_instant,
-    make_cursor,
-    parse_cursor,
+    make_keyset_cursor,
+    parse_keyset_cursor,
 )
 from anomaly_backend.db import get_connection
 from anomaly_backend.problems import InvalidQuery, new_request_id
@@ -58,9 +59,11 @@ async def latest_telemetry(
     sensors: list[LatestTelemetrySensor] = []
     for row in rows:
         timestamp = _datetime(row, "ts")
-        age_seconds = max(0.0, (reference - timestamp).total_seconds()) if reference else 0.0
-        # The persisted maximum is a deterministic fixture observation reference.
-        # The 600-second boundary is the documented gap policy, not a live cadence claim.
+        age_seconds = (
+            max(0.0, (reference - timestamp).total_seconds())
+            if reference is not None
+            else 0.0
+        )
         sensors.append(
             LatestTelemetrySensor(
                 device_id=cast(SensorId, row["device_id"]),
@@ -90,11 +93,13 @@ async def telemetry_history(
     limit: Annotated[int, Query(ge=1, le=5_000)] = 500,
     cursor: Annotated[str | None, Query()] = None,
 ) -> TelemetryHistoryResponse:
-    if from_ts >= to_ts:
+    try:
+        bucket_seconds = effective_bucket_seconds(bucket, from_ts, to_ts)
+    except ValueError as error:
         raise InvalidQuery(
             "Query parameters failed validation",
-            {"from": ["from must be earlier than to"]},
-        )
+            {"from": [str(error)]},
+        ) from error
     if bucket != "raw" and limit > 2_000:
         raise InvalidQuery(
             "Query parameters failed validation",
@@ -110,8 +115,23 @@ async def telemetry_history(
     if cursor is not None:
         query_fields["cursor"] = cursor
     query = TelemetryHistoryQuery.model_validate(query_fields, strict=True)
+    filters: dict[str, object] = {
+        "device_id": query.device_id,
+        "from": query.from_ts,
+        "bucket": query.bucket,
+        "bucket_seconds": bucket_seconds,
+    }
     try:
-        offset = parse_cursor(query.cursor, "telemetry") if query.cursor else 0
+        after = (
+            parse_keyset_cursor(
+                query.cursor,
+                "telemetry",
+                snapshot_to=query.to_ts,
+                filters=filters,
+            )
+            if query.cursor
+            else None
+        )
     except ValueError as error:
         raise InvalidQuery(
             "Query parameters failed validation",
@@ -123,8 +143,10 @@ async def telemetry_history(
         from_ts=datetime.fromisoformat(query.from_ts),
         to_ts=datetime.fromisoformat(query.to_ts),
         bucket=query.bucket,
+        bucket_seconds=bucket_seconds,
         limit=query.limit,
-        offset=offset,
+        after_ts=datetime.fromisoformat(after[0]) if after else None,
+        after_id=after[1] if after else None,
     )
     has_more = len(rows) > query.limit
     points = [
@@ -132,6 +154,14 @@ async def telemetry_history(
             ts=format_historical_datetime(_datetime(row, "ts")),
             temperature_c=cast(float | None, row["temperature_c"]),
             relative_humidity_pct=cast(float | None, row["relative_humidity_pct"]),
+            temperature_c_min=cast(float | None, row["temperature_c_min"]),
+            temperature_c_max=cast(float | None, row["temperature_c_max"]),
+            relative_humidity_pct_min=cast(
+                float | None, row["relative_humidity_pct_min"]
+            ),
+            relative_humidity_pct_max=cast(
+                float | None, row["relative_humidity_pct_max"]
+            ),
             sample_count=cast(int, row["sample_count"]),
             gap_before=cast(bool, row["gap_before"]),
         )
@@ -144,10 +174,21 @@ async def telemetry_history(
             "from": query.from_ts,
             "to": query.to_ts,
             "bucket": query.bucket,
+            "bucket_seconds": bucket_seconds,
             "time_zone": "Asia/Jakarta",
             "points": points,
             "next_cursor": (
-                make_cursor("telemetry", offset + query.limit) if has_more else None
+                make_keyset_cursor(
+                    "telemetry",
+                    timestamp=format_historical_datetime(
+                        _datetime(rows[query.limit - 1], "cursor_ts")
+                    ),
+                    row_id=cast(str, rows[query.limit - 1]["row_id"]),
+                    snapshot_to=query.to_ts,
+                    filters=filters,
+                )
+                if has_more
+                else None
             ),
             "returned_count": len(points),
         },

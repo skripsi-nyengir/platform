@@ -21,7 +21,7 @@ SOURCE_DEVICE_UUID = "b02f3872-39a2-4b6f-a4ec-045a287fde4b"
 TIME_ZONE = "Asia/Jakarta"
 SIM_CORPUS_ID = "sim_b02_march07_v5_test_injected"
 CONTRACT_VERSION = "b02f3872_march07_v5_injected"
-CHANNELS = ["suhu", "rh"]
+CHANNELS = ["temperature_c", "relative_humidity_pct"]
 SCALER_MINIMUM = [24.36616, 18.1394]
 SCALER_MAXIMUM = [30.32931, 68.02039]
 EXPECTED_ROW_COUNT = 105_767
@@ -234,14 +234,15 @@ def _upsert_snapshot(
     connection.execute(
         """
         INSERT INTO preprocessing_snapshots (
-            corpus_id, channels, window_size, stride, segment_metadata,
-            split_boundaries, split_counts, scaler
-        ) VALUES (%s, %s::jsonb, 30, 1, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb)
+            corpus_id, channels, window_size, stride, contract_status,
+            segment_metadata, split_boundaries, split_counts, scaler
+        ) VALUES (%s, %s::jsonb, 10, 1, 'live_10', %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb)
         ON CONFLICT (corpus_id) DO UPDATE SET
             channels = EXCLUDED.channels,
             window_size = EXCLUDED.window_size,
             stride = EXCLUDED.stride,
             segment_metadata = EXCLUDED.segment_metadata,
+            contract_status = EXCLUDED.contract_status,
             split_boundaries = EXCLUDED.split_boundaries,
             split_counts = EXCLUDED.split_counts,
             scaler = EXCLUDED.scaler

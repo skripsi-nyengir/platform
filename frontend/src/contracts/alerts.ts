@@ -5,6 +5,8 @@ import {
   OperationalInstantSchema,
   SensorIdSchema,
 } from './common'
+import { InferencePointSchema } from './inference'
+import { TelemetryPointSchema } from './telemetry'
 
 export const DetectionBasisSchema = z.enum(['simulated_preview', 'artifact_backed'])
 
@@ -46,6 +48,8 @@ export const AlertEventsResponseSchema = z
   .strictObject({
     request_id: z.string(),
     time_zone: z.literal('Asia/Jakarta'),
+    from: OperationalInstantSchema.nullable(),
+    to: OperationalInstantSchema,
     events: z.array(AlertEventSchema).max(200),
     next_cursor: z.string().nullable(),
     returned_count: z.number().int().nonnegative(),
@@ -70,7 +74,7 @@ export const CurrentAlertSchema = z
     peak_score: z.number(),
     latest_score: z.number(),
     anomalous_window_count: z.number().int().positive(),
-    replay_job_id: z.string(),
+    replay_job_id: z.string().nullable(),
     threshold: z.number(),
     model_version: z.string(),
     detection_basis: DetectionBasisSchema,
@@ -135,6 +139,22 @@ export const CurrentAlertsResponseSchema = z
     }
   })
 export type CurrentAlertsResponse = z.infer<typeof CurrentAlertsResponseSchema>
+
+export const AlertContextPointSchema = z.strictObject({
+  inference: InferencePointSchema,
+  source_readings: z.array(TelemetryPointSchema).length(10),
+})
+export type AlertContextPoint = z.infer<typeof AlertContextPointSchema>
+
+export const AlertDetailResponseSchema = z.strictObject({
+  request_id: z.string(),
+  time_zone: z.literal('Asia/Jakarta'),
+  alert: CurrentAlertSchema,
+  context_before: z.array(TelemetryPointSchema).max(10),
+  episode_points: z.array(AlertContextPointSchema),
+  recovery_points: z.array(AlertContextPointSchema).max(3),
+})
+export type AlertDetailResponse = z.infer<typeof AlertDetailResponseSchema>
 
 export const AcknowledgeAlertResponseSchema = z
   .strictObject({

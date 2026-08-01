@@ -18,8 +18,12 @@ export function useAlertLifecycleMutation() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['alerts', 'current'] }),
         queryClient.invalidateQueries({ queryKey: ['alerts', 'events'] }),
+        queryClient.invalidateQueries({ queryKey: ['live'] }),
       ])
     },
-    onError: () => queryClient.invalidateQueries({ queryKey: ['alerts', 'current'] }),
+    onError: () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['alerts', 'current'] }),
+      queryClient.invalidateQueries({ queryKey: ['live', 'current-alerts'] }),
+    ]),
   })
 }

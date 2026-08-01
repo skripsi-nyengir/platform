@@ -7,5 +7,7 @@ describe('AlertsPage', () => {
     renderApp('/alerts?__scenario=active-anomaly')
     expect(await screen.findByRole('heading', { name: 'Current alerts' })).toBeVisible()
     expect(screen.getByText(/lifecycle adalah UTC/)).toBeVisible()
+    expect(await screen.findByText('31 May 2026, 23:51:30')).toBeVisible()
+    expect(screen.getByText('31 May 2026, 23:52:30')).toBeVisible()
   })
 })

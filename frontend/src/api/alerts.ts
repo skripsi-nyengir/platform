@@ -5,12 +5,14 @@ import {
 } from '../contracts/common'
 import {
   AcknowledgeAlertResponseSchema,
+  AlertDetailResponseSchema,
   AlertEventsQuerySchema,
   AlertEventsResponseSchema,
   CurrentAlertsQuerySchema,
   CurrentAlertsResponseSchema,
   ResolveAlertResponseSchema,
   type AcknowledgeAlertResponse,
+  type AlertDetailResponse,
   type AlertEventsQuery,
   type AlertEventsResponse,
   type CurrentAlertsQuery,
@@ -20,6 +22,18 @@ import {
 import { requestJson } from './http'
 
 const AlertIdSchema = z.string().min(1)
+
+export async function getAlertDetail(
+  alertId: string,
+  signal?: AbortSignal,
+): Promise<AlertDetailResponse> {
+  const id = AlertIdSchema.parse(alertId)
+  return requestJson(
+    `/api/alerts/${encodeURIComponent(id)}`,
+    AlertDetailResponseSchema,
+    { signal },
+  )
+}
 
 export async function getAlertEvents(
   input: AlertEventsQuery = {},

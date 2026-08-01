@@ -165,7 +165,7 @@ def test_schema_is_current_and_raw_readings_are_timescale_float64() -> None:
         revision = connection.execute(
             "SELECT version_num FROM alembic_version"
         ).fetchone()
-        assert revision == ("20260730_0005",)
+        assert revision == ("20260731_0010",)
         assert EDA_TABLES <= _public_tables(connection)
 
         dimension = connection.execute(
@@ -486,33 +486,19 @@ def test_staged_raw_rows_can_be_removed_before_failed_import_audit() -> None:
         ).fetchone() == ("failed",)
 
 
-def test_downgrade_removes_only_eda_objects_and_upgrade_restores_them() -> None:
+def test_downgrade_is_blocked_without_mutating_eda_objects() -> None:
     with _connect() as connection:
         before = _public_tables(connection)
         assert EDA_TABLES <= before
 
-    try:
+    with pytest.raises(subprocess.CalledProcessError):
         _run_alembic("downgrade", "20260724_0002")
-        with _connect() as connection:
-            revision = connection.execute(
-                "SELECT version_num FROM alembic_version"
-            ).fetchone()
-            assert revision == ("20260724_0002",)
-            assert _public_tables(connection) == before - EDA_TABLES - {"injection_events"}
-            assert connection.execute(
-                "SELECT to_regprocedure('public.eda_reject_immutable_change()')"
-            ).fetchone() == (None,)
-            assert connection.execute(
-                "SELECT to_regprocedure('public.eda_guard_raw_reading_delete()')"
-            ).fetchone() == (None,)
-    finally:
-        _run_alembic("upgrade", "head")
 
     with _connect() as connection:
         assert connection.execute(
             "SELECT version_num FROM alembic_version"
-        ).fetchone() == ("20260730_0005",)
-        assert EDA_TABLES <= _public_tables(connection)
+        ).fetchone() == ("20260731_0010",)
+        assert _public_tables(connection) == before
         assert connection.execute(
             """
             SELECT column_name

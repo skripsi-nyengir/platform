@@ -167,7 +167,7 @@ async def models(
         compatible = (
             row["schema_version"] == "b02f3872_preview_v1"
             and tuple(row["channels"]) == PUBLIC_CHANNELS
-            and row["window_size"] == 30
+            and row["window_size"] == 10
             and row["stride"] == 1
         )
         versions = cast(list[PublicModelVersion], family["versions"])
@@ -179,8 +179,12 @@ async def models(
                     "selectable": (
                         row["is_selectable"]
                         and runtime_kind == "preview_simulator"
+                        and compatible
                     ),
                     "compatible": compatible,
+                    "channels": tuple(row["channels"]),
+                    "window_size": row["window_size"],
+                    "stride": row["stride"],
                     "artifact_status": (
                     "ready" if row["artifact_ready"] else "pending"
                 ),

@@ -2,6 +2,7 @@ import { Box, Card, CardActions, CardContent, Link, Stack, Typography } from '@m
 import { Link as RouterLink } from 'react-router-dom'
 import type { CurrentAlert } from '../../contracts/alerts'
 import { sensorLabels } from '../../contracts/common'
+import { formatWibDateTime } from '../../lib/dateTime'
 import { tokens } from '../../theme/tokens'
 import { ActionQueue } from './ActionQueue'
 import { ProvenanceBadge } from '../../components/data/ProvenanceBadge'
@@ -26,6 +27,11 @@ export function CurrentAlertCard({ alert }: CurrentAlertCardProps) {
   const sensorLabel = sensorLabels[alert.device_id]
   const sensorPath = `/sensors/${alert.device_id}?sensor=${alert.device_id}`
   const alertPath = `/alerts?sensor=${alert.device_id}`
+  const statusLabel = {
+    detected: 'Active anomaly',
+    acknowledged: 'Acknowledged alert',
+    resolved: 'Resolved alert',
+  }[alert.status]
 
   return (
     <Card
@@ -43,7 +49,7 @@ export function CurrentAlertCard({ alert }: CurrentAlertCardProps) {
           <Stack spacing={0.5}>
             <Typography variant="h3">Sensor {sensorLabel}</Typography>
             <Typography component="p" color="error.main" variant="h4">
-              Active anomaly
+              {statusLabel}
             </Typography>
           </Stack>
           <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
@@ -60,9 +66,9 @@ export function CurrentAlertCard({ alert }: CurrentAlertCardProps) {
               Threshold: <Box component="span" sx={technicalTextSx}>{alert.threshold}</Box>
             </Typography>
             <Typography variant="body2">
-              Episode (WIB): <Box component="span" sx={technicalTextSx}>{alert.episode_start_ts}</Box>
+              Episode (WIB): <Box component="span" sx={technicalTextSx}>{formatWibDateTime(alert.episode_start_ts)}</Box>
               {' – '}
-              <Box component="span" sx={technicalTextSx}>{alert.episode_end_ts}</Box>
+              <Box component="span" sx={technicalTextSx}>{formatWibDateTime(alert.episode_end_ts)}</Box>
             </Typography>
           </Stack>
         </Stack>

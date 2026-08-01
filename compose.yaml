@@ -97,6 +97,84 @@ services:
     networks:
       - backend
 
+  live-model-bootstrap:
+    build:
+      context: ./backend
+      target: worker
+    command: ["python", "-m", "anomaly_backend.live_model_bootstrap"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MODEL_ARTIFACTS_PATH: /models
+      LIVE_MODEL_BUNDLE_ID: ${LIVE_MODEL_BUNDLE_ID:-REPLACE_WITH_LIVE_MODEL_BUNDLE_ID}
+    volumes:
+      - "${MODEL_ARTIFACTS_DIR:-./REPLACE_WITH_MODEL_ARTIFACTS}:/models:ro"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      seed:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - backend
+
+  live-subscriber:
+    build:
+      context: ./backend
+      target: worker
+    command: ["python", "-m", "anomaly_worker.live_subscriber"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MODEL_ARTIFACTS_PATH: /models
+      LIVE_MODEL_BUNDLE_ID: ${LIVE_MODEL_BUNDLE_ID:-REPLACE_WITH_LIVE_MODEL_BUNDLE_ID}
+      MQTT_BROKER_HOST: ${MQTT_BROKER_HOST}
+      MQTT_BROKER_PORT: ${MQTT_BROKER_PORT}
+      MQTT_TOPIC: ${MQTT_TOPIC}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID}
+      MQTT_TLS_ENABLED: ${MQTT_TLS_ENABLED:-false}
+      MQTT_RECONNECT_MIN_SECONDS: "1"
+      MQTT_RECONNECT_MAX_SECONDS: "30"
+      LIVE_RUNTIME_MODE: ${LIVE_RUNTIME_MODE:-test}
+    volumes:
+      - "${MODEL_ARTIFACTS_DIR:-./REPLACE_WITH_MODEL_ARTIFACTS}:/models:ro"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      seed:
+        condition: service_completed_successfully
+      live-model-bootstrap:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    networks:
+      - backend
+      - public
+
   eda-worker:
     build:
       context: ./backend

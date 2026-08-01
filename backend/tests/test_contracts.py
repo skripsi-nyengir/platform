@@ -2,7 +2,9 @@ from collections.abc import Callable
 from math import inf, nan
 
 from pydantic import TypeAdapter, ValidationError
+from sqlalchemy import CheckConstraint
 
+from anomaly_backend import tables
 from anomaly_backend.contracts import (
     AlertCommandRequest,
     CurrentAlert,
@@ -16,9 +18,24 @@ from anomaly_backend.contracts import (
     make_cursor,
     parse_cursor,
 )
+from anomaly_worker.scorer import CHANNELS, WINDOW_SIZE
 
 
 PUBLIC_DEVICE_ID = "b02f3872-ruang-produksi"
+
+
+def test_live_runtime_contract_is_canonical_with_ten_rows_and_unit_stride() -> None:
+    constraint = next(
+        item
+        for item in tables.preprocessing_snapshots.constraints
+        if isinstance(item, CheckConstraint)
+        and item.name == "ck_preprocessing_contract_status"
+    )
+
+    assert CHANNELS == ("temperature_c", "relative_humidity_pct")
+    assert WINDOW_SIZE == 10
+    assert "contract_status = 'live_10'" in str(constraint.sqltext)
+    assert "window_size = 10 AND stride = 1" in str(constraint.sqltext)
 
 
 def assert_validation_error(call: Callable[[], object]) -> None:

@@ -8,6 +8,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     ForeignKeyConstraint,
+    Identity,
     Index,
     Integer,
     MetaData,
@@ -23,7 +24,6 @@ from sqlalchemy.dialects.postgresql import (
     TSRANGE,
     UUID,
 )
-
 
 metadata = MetaData()
 
@@ -179,13 +179,18 @@ preprocessing_snapshots = Table(
     Column("channels", JSONB, nullable=False),
     Column("window_size", Integer, nullable=False),
     Column("stride", Integer, nullable=False),
+    Column("contract_status", Text, nullable=False, server_default="live_10"),
     Column("segment_metadata", JSONB, nullable=False),
     Column("split_boundaries", JSONB, nullable=False),
     Column("split_counts", JSONB, nullable=False),
     Column("scaler", JSONB, nullable=False),
     CheckConstraint(
-        "window_size = 30 AND stride = 1",
-        name="ck_preprocessing_window_stride",
+        "(contract_status = 'live_10' "
+        "AND channels = '[\"temperature_c\", \"relative_humidity_pct\"]'::jsonb "
+        "AND window_size = 10 AND stride = 1) OR "
+        "(contract_status = 'legacy_30' "
+        "AND window_size = 30 AND stride = 1)",
+        name="ck_preprocessing_contract_status",
     ),
 )
 
@@ -556,6 +561,7 @@ model_versions = Table(
     Column("channels", JSONB, nullable=False),
     Column("window_size", Integer, nullable=False),
     Column("stride", Integer, nullable=False),
+    Column("contract_status", Text, nullable=False, server_default="live_10"),
     Column("score_key", Text, nullable=False),
     Column("score_semantics", Text, nullable=False),
     Column("threshold", Float, nullable=False),
@@ -564,6 +570,10 @@ model_versions = Table(
     Column("source_commit", Text),
     Column("source_config", Text),
     Column("manifest_sha256", Text),
+    Column("model_manifest_sha256", Text),
+    Column("checkpoint_sha256", Text),
+    Column("scaler_manifest_sha256", Text),
+    Column("scaler_sha256", Text),
     Column("created_at", DateTime(timezone=True), nullable=False),
     CheckConstraint(
         "runtime_kind IN ('legacy_fixture', 'preview_simulator', 'artifact')",
@@ -576,6 +586,26 @@ model_versions = Table(
     CheckConstraint(
         "window_size > 0 AND stride > 0",
         name="ck_model_versions_window_stride",
+    ),
+    CheckConstraint(
+        "(contract_status = 'live_10' "
+        "AND channels = '[\"temperature_c\", \"relative_humidity_pct\"]'::jsonb "
+        "AND window_size = 10 AND stride = 1) OR "
+        "(contract_status = 'legacy_30' "
+        "AND window_size IN (10, 30) AND stride = 1)",
+        name="ck_model_versions_contract_status",
+    ),
+    CheckConstraint(
+        "contract_status = 'legacy_30' OR ("
+        + _SHA256_CHECK.format(column="model_manifest_sha256")
+        + " AND "
+        + _SHA256_CHECK.format(column="checkpoint_sha256")
+        + " AND "
+        + _SHA256_CHECK.format(column="scaler_manifest_sha256")
+        + " AND "
+        + _SHA256_CHECK.format(column="scaler_sha256")
+        + ")",
+        name="ck_model_versions_live_hashes",
     ),
     CheckConstraint(
         _FINITE_THRESHOLD_CHECK,
@@ -860,6 +890,7 @@ alerts = Table(
     Column("replay_job_id", Text, ForeignKey("replay_jobs.job_id")),
     Column("segment_id", Integer, nullable=False),
     Column("closure_reason", Text, nullable=False),
+    Column("live_episode_id", UUID(as_uuid=True)),
     CheckConstraint(_FINITE_SCORE_CHECK, name="ck_alerts_score_finite"),
     CheckConstraint(_FINITE_THRESHOLD_CHECK, name="ck_alerts_threshold_finite"),
     CheckConstraint(
@@ -880,10 +911,19 @@ alerts = Table(
         ") OR ("
         "detection_basis IN ('simulated_preview', 'artifact_backed') "
         "AND detected_at IS NULL AND created_at IS NOT NULL "
-        "AND replay_job_id IS NOT NULL "
+        "AND ((live_episode_id IS NULL AND replay_job_id IS NOT NULL) "
+        "OR (detection_basis = 'artifact_backed' "
+        "AND live_episode_id IS NOT NULL AND replay_job_id IS NULL)) "
         "AND closure_reason IN ('normal', 'gap', 'replay_end')"
         ")",
         name="ck_alerts_lineage_time_domain",
+    ),
+    ForeignKeyConstraint(
+        ["alert_id", "live_episode_id"],
+        ["live_alert_episodes.alert_id", "live_alert_episodes.live_episode_id"],
+        name="fk_alerts_live_episode",
+        deferrable=True,
+        initially="DEFERRED",
     ),
 )
 Index("ix_alerts_current_order", alerts.c.detected_at.desc(), alerts.c.alert_id)
@@ -968,6 +1008,542 @@ alert_commands = Table(
     ),
 )
 Index("ix_alert_commands_alert_id", alert_commands.c.alert_id)
+
+live_model_pairs = Table(
+    "live_model_pairs",
+    metadata,
+    Column(
+        "model_pair_id",
+        UUID(as_uuid=True),
+        server_default=text("gen_random_uuid()"),
+        primary_key=True,
+    ),
+    Column("model_version", Text, nullable=False),
+    Column("checkpoint_identity", Text, nullable=False),
+    Column("scaler_snapshot_corpus_id", Text, nullable=False),
+    Column("model_manifest_sha256", Text, nullable=False),
+    Column("checkpoint_sha256", Text, nullable=False),
+    Column("scaler_manifest_sha256", Text, nullable=False),
+    Column("scaler_sha256", Text, nullable=False),
+    Column("threshold", DOUBLE_PRECISION, nullable=False),
+    Column("contract_status", Text, nullable=False),
+    Column(
+        "created_at_utc",
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(
+        [
+            "model_version",
+            "contract_status",
+            "model_manifest_sha256",
+            "checkpoint_sha256",
+            "scaler_manifest_sha256",
+            "scaler_sha256",
+        ],
+        [
+            "model_versions.version",
+            "model_versions.contract_status",
+            "model_versions.model_manifest_sha256",
+            "model_versions.checkpoint_sha256",
+            "model_versions.scaler_manifest_sha256",
+            "model_versions.scaler_sha256",
+        ],
+        name="fk_live_model_pairs_artifact_identity",
+    ),
+    ForeignKeyConstraint(
+        ["scaler_snapshot_corpus_id", "contract_status"],
+        [
+            "preprocessing_snapshots.corpus_id",
+            "preprocessing_snapshots.contract_status",
+        ],
+        name="fk_live_model_pairs_snapshot_contract",
+    ),
+    UniqueConstraint(
+        "model_version",
+        "checkpoint_identity",
+        "scaler_snapshot_corpus_id",
+        name="uq_live_model_pairs_identity",
+    ),
+    UniqueConstraint(
+        "model_pair_id",
+        "model_version",
+        "scaler_snapshot_corpus_id",
+        name="uq_live_model_pairs_lineage",
+    ),
+)
+
+live_writer_leases = Table(
+    "live_writer_leases",
+    metadata,
+    Column("device_id", Text, ForeignKey("devices.device_id"), primary_key=True),
+    Column("lease_owner", Text, nullable=False),
+    Column("lease_expires_at_utc", DateTime(timezone=True), nullable=False),
+    Column("fencing_token", BigInteger, nullable=False),
+    Column(
+        "updated_at_utc",
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    ),
+)
+
+live_model_activation_requests = Table(
+    "live_model_activation_requests",
+    metadata,
+    Column(
+        "request_id",
+        UUID(as_uuid=True),
+        server_default=text("gen_random_uuid()"),
+        primary_key=True,
+    ),
+    Column("device_id", Text, ForeignKey("devices.device_id"), nullable=False),
+    Column(
+        "model_pair_id",
+        UUID(as_uuid=True),
+        ForeignKey("live_model_pairs.model_pair_id"),
+        nullable=False,
+    ),
+    Column("request_hash", Text, nullable=False, unique=True),
+    Column("requested_by", Text, nullable=False),
+    Column(
+        "requested_at_utc",
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    ),
+    UniqueConstraint(
+        "request_id",
+        "device_id",
+        "model_pair_id",
+        name="uq_live_activation_request_lineage",
+    ),
+)
+
+live_model_activations = Table(
+    "live_model_activations",
+    metadata,
+    Column(
+        "activation_event_id",
+        UUID(as_uuid=True),
+        server_default=text("gen_random_uuid()"),
+        primary_key=True,
+    ),
+    Column("device_id", Text, ForeignKey("devices.device_id"), nullable=False),
+    Column("activation_id", BigInteger, Identity(always=True), nullable=False),
+    Column("request_id", UUID(as_uuid=True), nullable=False, unique=True),
+    Column("model_pair_id", UUID(as_uuid=True), nullable=False),
+    Column("fencing_token", BigInteger, nullable=False),
+    Column(
+        "activated_at_utc",
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(
+        ["request_id", "device_id", "model_pair_id"],
+        [
+            "live_model_activation_requests.request_id",
+            "live_model_activation_requests.device_id",
+            "live_model_activation_requests.model_pair_id",
+        ],
+        name="fk_live_activation_request_lineage",
+    ),
+    UniqueConstraint(
+        "device_id", "activation_id", name="uq_live_model_activations_device_id"
+    ),
+    UniqueConstraint(
+        "device_id",
+        "activation_id",
+        "model_pair_id",
+        name="uq_live_activation_lineage",
+    ),
+    UniqueConstraint(
+        "activation_event_id",
+        "device_id",
+        "activation_id",
+        "model_pair_id",
+        name="uq_live_activation_event_lineage",
+    ),
+)
+
+live_model_selections = Table(
+    "live_model_selections",
+    metadata,
+    Column("device_id", Text, ForeignKey("devices.device_id"), primary_key=True),
+    Column("activation_event_id", UUID(as_uuid=True), nullable=False),
+    Column("model_pair_id", UUID(as_uuid=True), nullable=False),
+    Column("activation_id", BigInteger, nullable=False),
+    Column(
+        "selected_at_utc",
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(
+        ["activation_event_id", "device_id", "activation_id", "model_pair_id"],
+        [
+            "live_model_activations.activation_event_id",
+            "live_model_activations.device_id",
+            "live_model_activations.activation_id",
+            "live_model_activations.model_pair_id",
+        ],
+        name="fk_live_selection_activation_lineage",
+    ),
+)
+
+live_telemetry = Table(
+    "live_telemetry",
+    metadata,
+    Column(
+        "received_ts",
+        TIMESTAMP(timezone=False, precision=0),
+        primary_key=True,
+    ),
+    Column(
+        "telemetry_id",
+        UUID(as_uuid=True),
+        server_default=text("gen_random_uuid()"),
+        primary_key=True,
+    ),
+    Column("device_id", Text, ForeignKey("devices.device_id"), nullable=False),
+    Column("received_at_utc", DateTime(timezone=True), nullable=False),
+    Column("temperature_c", DOUBLE_PRECISION, nullable=False),
+    Column("relative_humidity_pct", DOUBLE_PRECISION, nullable=False),
+    Column("ingress_sequence", BigInteger, Identity(always=True), nullable=False),
+    Column("ingress_generation", BigInteger, nullable=False),
+    Column("activation_id", BigInteger, nullable=False),
+    Column("continuity_epoch", BigInteger, nullable=False),
+    Column("segment_start_reason", Text),
+    Column("fencing_token", BigInteger, nullable=False),
+    Column("processing_status", Text, nullable=False),
+    ForeignKeyConstraint(
+        ["device_id", "activation_id"],
+        ["live_model_activations.device_id", "live_model_activations.activation_id"],
+        name="fk_live_telemetry_activation",
+    ),
+    UniqueConstraint(
+        "received_ts",
+        "device_id",
+        "ingress_generation",
+        "ingress_sequence",
+        name="uq_live_telemetry_ingress_sequence",
+    ),
+    UniqueConstraint(
+        "received_ts",
+        "telemetry_id",
+        "device_id",
+        name="uq_live_telemetry_device_anchor",
+    ),
+)
+Index(
+    "ix_live_telemetry_device_received_tail",
+    live_telemetry.c.device_id,
+    live_telemetry.c.received_ts.desc(),
+    live_telemetry.c.telemetry_id.desc(),
+)
+
+live_inference = Table(
+    "live_inference",
+    metadata,
+    Column("score_ts", TIMESTAMP(timezone=False, precision=0), primary_key=True),
+    Column(
+        "inference_id",
+        UUID(as_uuid=True),
+        server_default=text("gen_random_uuid()"),
+        primary_key=True,
+    ),
+    Column("device_id", Text, ForeignKey("devices.device_id"), nullable=False),
+    Column("window_start_ts", TIMESTAMP(timezone=False, precision=0), nullable=False),
+    Column("window_end_ts", TIMESTAMP(timezone=False, precision=0), nullable=False),
+    Column("score", DOUBLE_PRECISION, nullable=False),
+    Column("threshold", DOUBLE_PRECISION, nullable=False),
+    Column("is_anomaly", Boolean, nullable=False),
+    Column("severity_at_score", Text, nullable=False),
+    Column("model_pair_id", UUID(as_uuid=True), nullable=False),
+    Column("activation_id", BigInteger, nullable=False),
+    Column("continuity_epoch", BigInteger, nullable=False),
+    Column("model_version", Text, nullable=False),
+    Column("snapshot_corpus_id", Text, nullable=False),
+    Column("ordered_source_fingerprint", Text, nullable=False),
+    ForeignKeyConstraint(
+        ["device_id", "activation_id", "model_pair_id"],
+        [
+            "live_model_activations.device_id",
+            "live_model_activations.activation_id",
+            "live_model_activations.model_pair_id",
+        ],
+        name="fk_live_inference_activation_lineage",
+    ),
+    ForeignKeyConstraint(
+        ["model_pair_id", "model_version", "snapshot_corpus_id"],
+        [
+            "live_model_pairs.model_pair_id",
+            "live_model_pairs.model_version",
+            "live_model_pairs.scaler_snapshot_corpus_id",
+        ],
+        name="fk_live_inference_pair_snapshot",
+    ),
+    UniqueConstraint(
+        "score_ts",
+        "device_id",
+        "model_pair_id",
+        "activation_id",
+        "continuity_epoch",
+        "ordered_source_fingerprint",
+        name="uq_live_inference_idempotency",
+    ),
+    UniqueConstraint(
+        "score_ts",
+        "inference_id",
+        "device_id",
+        name="uq_live_inference_device_anchor",
+    ),
+    UniqueConstraint(
+        "score_ts",
+        "inference_id",
+        "device_id",
+        "model_pair_id",
+        "activation_id",
+        "continuity_epoch",
+        "model_version",
+        "snapshot_corpus_id",
+        name="uq_live_inference_device_identity",
+    ),
+)
+
+live_inference_sources = Table(
+    "live_inference_sources",
+    metadata,
+    Column("score_ts", TIMESTAMP(timezone=False, precision=0), primary_key=True),
+    Column("inference_id", UUID(as_uuid=True), primary_key=True),
+    Column("ordinal", Integer, primary_key=True),
+    Column("received_ts", TIMESTAMP(timezone=False, precision=0), nullable=False),
+    Column("telemetry_id", UUID(as_uuid=True), nullable=False),
+    Column("device_id", Text, nullable=False),
+    ForeignKeyConstraint(
+        ["score_ts", "inference_id", "device_id"],
+        [
+            "live_inference.score_ts",
+            "live_inference.inference_id",
+            "live_inference.device_id",
+        ],
+        name="fk_live_inference_source_inference",
+    ),
+    ForeignKeyConstraint(
+        ["received_ts", "telemetry_id", "device_id"],
+        [
+            "live_telemetry.received_ts",
+            "live_telemetry.telemetry_id",
+            "live_telemetry.device_id",
+        ],
+        name="fk_live_inference_source_telemetry",
+    ),
+)
+
+live_processing_boundaries = Table(
+    "live_processing_boundaries",
+    metadata,
+    Column("boundary_id", BigInteger, Identity(always=True), primary_key=True),
+    Column("device_id", Text, ForeignKey("devices.device_id"), nullable=False),
+    Column("boundary_reason", Text, nullable=False),
+    Column(
+        "recorded_at_utc",
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    ),
+    Column("ingress_generation", BigInteger, nullable=False),
+    Column("continuity_epoch", BigInteger, nullable=False),
+    Column("fencing_token", BigInteger, nullable=False),
+    Column("after_received_ts", TIMESTAMP(timezone=False, precision=0)),
+    Column("after_telemetry_id", UUID(as_uuid=True)),
+    ForeignKeyConstraint(
+        ["after_received_ts", "after_telemetry_id", "device_id"],
+        [
+            "live_telemetry.received_ts",
+            "live_telemetry.telemetry_id",
+            "live_telemetry.device_id",
+        ],
+        name="fk_live_boundary_telemetry_anchor",
+    ),
+    UniqueConstraint(
+        "boundary_id", "device_id", name="uq_live_boundary_device_id"
+    ),
+    UniqueConstraint(
+        "device_id",
+        "continuity_epoch",
+        name="uq_live_processing_boundaries_epoch",
+    ),
+)
+
+live_cursors = Table(
+    "live_cursors",
+    metadata,
+    Column("device_id", Text, ForeignKey("devices.device_id"), primary_key=True),
+    Column("received_ts", TIMESTAMP(timezone=False, precision=0)),
+    Column("telemetry_id", UUID(as_uuid=True)),
+    Column("last_boundary_id", BigInteger),
+    Column("continuity_epoch", BigInteger, nullable=False),
+    Column("fencing_token", BigInteger, nullable=False),
+    Column(
+        "updated_at_utc",
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    ),
+    ForeignKeyConstraint(
+        ["received_ts", "telemetry_id", "device_id"],
+        [
+            "live_telemetry.received_ts",
+            "live_telemetry.telemetry_id",
+            "live_telemetry.device_id",
+        ],
+        name="fk_live_cursor_telemetry_anchor",
+    ),
+    ForeignKeyConstraint(
+        ["last_boundary_id", "device_id"],
+        [
+            "live_processing_boundaries.boundary_id",
+            "live_processing_boundaries.device_id",
+        ],
+        name="fk_live_cursor_boundary_device",
+    ),
+)
+
+live_health = Table(
+    "live_health",
+    metadata,
+    Column("device_id", Text, ForeignKey("devices.device_id"), primary_key=True),
+    Column("status", Text, nullable=False),
+    Column("detail_code", Text),
+    Column("fencing_token", BigInteger, nullable=False),
+    Column(
+        "observed_at_utc",
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        nullable=False,
+    ),
+)
+
+live_alert_episodes = Table(
+    "live_alert_episodes",
+    metadata,
+    Column(
+        "live_episode_id",
+        UUID(as_uuid=True),
+        server_default=text("gen_random_uuid()"),
+        primary_key=True,
+    ),
+    Column("alert_id", Text, ForeignKey("alerts.alert_id"), nullable=False, unique=True),
+    Column("device_id", Text, ForeignKey("devices.device_id"), nullable=False),
+    Column("model_pair_id", UUID(as_uuid=True), nullable=False),
+    Column("activation_id", BigInteger, nullable=False),
+    Column("continuity_epoch", BigInteger, nullable=False),
+    Column("model_version", Text, nullable=False),
+    Column("snapshot_corpus_id", Text, nullable=False),
+    Column("started_score_ts", TIMESTAMP(timezone=False, precision=0), nullable=False),
+    Column("ended_score_ts", TIMESTAMP(timezone=False, precision=0)),
+    Column("status", Text, nullable=False),
+    Column("close_reason", Text),
+    ForeignKeyConstraint(
+        ["device_id", "activation_id", "model_pair_id"],
+        [
+            "live_model_activations.device_id",
+            "live_model_activations.activation_id",
+            "live_model_activations.model_pair_id",
+        ],
+        name="fk_live_episode_activation_lineage",
+    ),
+    ForeignKeyConstraint(
+        ["model_pair_id", "model_version", "snapshot_corpus_id"],
+        [
+            "live_model_pairs.model_pair_id",
+            "live_model_pairs.model_version",
+            "live_model_pairs.scaler_snapshot_corpus_id",
+        ],
+        name="fk_live_episode_pair_snapshot",
+    ),
+    UniqueConstraint(
+        "alert_id", "live_episode_id", name="uq_live_episode_alert_link"
+    ),
+    UniqueConstraint(
+        "live_episode_id",
+        "device_id",
+        "model_pair_id",
+        "activation_id",
+        "continuity_epoch",
+        "model_version",
+        "snapshot_corpus_id",
+        name="uq_live_episode_lineage",
+    ),
+)
+
+live_alert_episode_points = Table(
+    "live_alert_episode_points",
+    metadata,
+    Column("live_episode_id", UUID(as_uuid=True), primary_key=True),
+    Column("score_ts", TIMESTAMP(timezone=False, precision=0), nullable=False),
+    Column("inference_id", UUID(as_uuid=True), nullable=False),
+    Column("ordinal", BigInteger, primary_key=True),
+    Column("device_id", Text, nullable=False),
+    Column("model_pair_id", UUID(as_uuid=True), nullable=False),
+    Column("activation_id", BigInteger, nullable=False),
+    Column("continuity_epoch", BigInteger, nullable=False),
+    Column("model_version", Text, nullable=False),
+    Column("snapshot_corpus_id", Text, nullable=False),
+    ForeignKeyConstraint(
+        [
+            "live_episode_id",
+            "device_id",
+            "model_pair_id",
+            "activation_id",
+            "continuity_epoch",
+            "model_version",
+            "snapshot_corpus_id",
+        ],
+        [
+            "live_alert_episodes.live_episode_id",
+            "live_alert_episodes.device_id",
+            "live_alert_episodes.model_pair_id",
+            "live_alert_episodes.activation_id",
+            "live_alert_episodes.continuity_epoch",
+            "live_alert_episodes.model_version",
+            "live_alert_episodes.snapshot_corpus_id",
+        ],
+        name="fk_live_episode_point_episode_lineage",
+    ),
+    ForeignKeyConstraint(
+        [
+            "score_ts",
+            "inference_id",
+            "device_id",
+            "model_pair_id",
+            "activation_id",
+            "continuity_epoch",
+            "model_version",
+            "snapshot_corpus_id",
+        ],
+        [
+            "live_inference.score_ts",
+            "live_inference.inference_id",
+            "live_inference.device_id",
+            "live_inference.model_pair_id",
+            "live_inference.activation_id",
+            "live_inference.continuity_epoch",
+            "live_inference.model_version",
+            "live_inference.snapshot_corpus_id",
+        ],
+        name="fk_live_episode_point_inference_lineage",
+    ),
+    UniqueConstraint(
+        "live_episode_id",
+        "score_ts",
+        "inference_id",
+        name="uq_live_alert_episode_points_inference",
+    ),
+)
 
 model_evaluations = Table(
     "model_evaluations",

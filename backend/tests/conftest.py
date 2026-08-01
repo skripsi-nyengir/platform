@@ -13,7 +13,7 @@ from psycopg import sql
 import pytest
 
 TEST_DATABASE_NAME = "anomaly_detection_test"
-# ponytail: one shared test DB keeps setup cheap; use per-worker names if tests run in parallel.
+# ponytail: one recreated DB per session isolates runs; use per-worker names for parallel tests.
 DATABASE_ENV = {
     "POSTGRES_HOST": os.environ.get("POSTGRES_HOST", "db"),
     "POSTGRES_PORT": os.environ.get("POSTGRES_PORT", "5432"),
@@ -26,9 +26,9 @@ DATABASE_ENV = {
 for _key, _value in DATABASE_ENV.items():
     os.environ[_key] = _value
 
-from anomaly_backend.config import Settings
-from anomaly_backend.db import create_database_engine
-from anomaly_backend.main import create_app
+from anomaly_backend.config import Settings  # noqa: E402
+from anomaly_backend.db import create_database_engine  # noqa: E402
+from anomaly_backend.main import create_app  # noqa: E402
 
 
 class ClientFactory(Protocol):
@@ -62,16 +62,11 @@ def test_database() -> None:
         password=settings.postgres_password,
         autocommit=True,
     ) as connection:
-        exists = connection.execute(
-            "SELECT 1 FROM pg_database WHERE datname = %s",
-            (TEST_DATABASE_NAME,),
-        ).fetchone()
-        if exists is None:
-            _ = connection.execute(
-                sql.SQL("CREATE DATABASE {}").format(
-                    sql.Identifier(TEST_DATABASE_NAME)
-                )
-            )
+        identifier = sql.Identifier(TEST_DATABASE_NAME)
+        _ = connection.execute(
+            sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(identifier)
+        )
+        _ = connection.execute(sql.SQL("CREATE DATABASE {}").format(identifier))
 
     backend = Path(__file__).parents[1]
     for command in (

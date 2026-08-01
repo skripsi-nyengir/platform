@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
-from typing import Literal, cast
+from typing import Literal
 from uuid import uuid4
 
 from sqlalchemy import func, select, true
@@ -38,7 +38,8 @@ async def alert_event_rows(
     from_ts: datetime | None,
     to_ts: datetime | None,
     limit: int,
-    offset: int,
+    after_ts: datetime | None,
+    after_id: str | None,
 ) -> list[RowMapping]:
     events = tables.alert_events
     commands = tables.alert_commands
@@ -69,18 +70,16 @@ async def alert_event_rows(
         statement = statement.where(events.c.event_at >= from_ts)
     if to_ts is not None:
         statement = statement.where(events.c.event_at < to_ts)
-    result = await connection.execute(statement.limit(limit + 1).offset(offset))
+    if after_ts is not None and after_id is not None:
+        statement = statement.where(
+            (events.c.event_at > after_ts)
+            | ((events.c.event_at == after_ts) & (events.c.event_id > after_id))
+        )
+    result = await connection.execute(statement.limit(limit + 1))
     return list(result.mappings())
 
 
-async def current_alert_rows(
-    connection: AsyncConnection,
-    *,
-    device_id: SensorId | None,
-    status: AlertStatus | None,
-    page: int,
-    page_size: int,
-) -> tuple[int, list[RowMapping]]:
+def _current_alert_projection():
     events = tables.alert_events
     ranked_events = (
         select(
@@ -99,7 +98,7 @@ async def current_alert_rows(
         .cte("ranked_alert_events")
     )
     alerts = tables.alerts
-    statement = (
+    return (
         select(
             alerts.c.alert_id,
             alerts.c.device_id,
@@ -114,9 +113,12 @@ async def current_alert_rows(
             alerts.c.threshold,
             alerts.c.model_version,
             alerts.c.detection_basis,
+            alerts.c.live_episode_id,
             ranked_events.c.latest_event_at,
             ranked_events.c.latest_event_id,
             ranked_events.c.status,
+            tables.live_alert_episodes.c.status.label("technical_status"),
+            tables.live_alert_episodes.c.close_reason,
         )
         .join(
             ranked_events,
@@ -127,17 +129,31 @@ async def current_alert_rows(
             tables.devices,
             tables.devices.c.device_id == alerts.c.device_id,
         )
+        .outerjoin(
+            tables.live_alert_episodes,
+            tables.live_alert_episodes.c.live_episode_id == alerts.c.live_episode_id,
+        )
         .where(
             tables.devices.c.is_active,
-            alerts.c.detection_basis.in_(
-                ("simulated_preview", "artifact_backed")
-            ),
+            alerts.c.detection_basis.in_(("simulated_preview", "artifact_backed")),
         )
     )
+
+
+async def current_alert_rows(
+    connection: AsyncConnection,
+    *,
+    device_id: SensorId | None,
+    status: AlertStatus | None,
+    page: int,
+    page_size: int,
+) -> tuple[int, list[RowMapping]]:
+    alerts = tables.alerts
+    statement = _current_alert_projection()
     if device_id is not None:
         statement = statement.where(alerts.c.device_id == device_id)
     if status is not None:
-        statement = statement.where(ranked_events.c.status == status)
+        statement = statement.where(statement.selected_columns.status == status)
 
     projection = statement.cte("current_alert_projection")
     page_rows = (
@@ -168,6 +184,65 @@ async def current_alert_rows(
     return total, [row for row in rows if row["alert_id"] is not None]
 
 
+async def alert_detail_rows(
+    connection: AsyncConnection,
+    *,
+    alert_id: str,
+) -> tuple[RowMapping | None, list[RowMapping]]:
+    alert = (
+        await connection.execute(
+            _current_alert_projection().where(tables.alerts.c.alert_id == alert_id)
+        )
+    ).mappings().one_or_none()
+    if alert is None:
+        return None, []
+    if alert["live_episode_id"] is None:
+        return alert, []
+    points = tables.live_alert_episode_points
+    inference = tables.live_inference
+    sources = tables.live_inference_sources
+    telemetry = tables.live_telemetry
+    rows = list(
+        (
+            await connection.execute(
+                select(
+                    points.c.ordinal.label("episode_ordinal"),
+                    inference.c.window_start_ts,
+                    inference.c.window_end_ts,
+                    inference.c.score_ts,
+                    inference.c.score,
+                    inference.c.threshold,
+                    inference.c.is_anomaly,
+                    inference.c.severity_at_score.label("severity"),
+                    inference.c.model_version,
+                    sources.c.ordinal.label("source_ordinal"),
+                    telemetry.c.received_ts.label("source_ts"),
+                    telemetry.c.temperature_c,
+                    telemetry.c.relative_humidity_pct,
+                )
+                .join(
+                    inference,
+                    (inference.c.score_ts == points.c.score_ts)
+                    & (inference.c.inference_id == points.c.inference_id),
+                )
+                .join(
+                    sources,
+                    (sources.c.score_ts == inference.c.score_ts)
+                    & (sources.c.inference_id == inference.c.inference_id),
+                )
+                .join(
+                    telemetry,
+                    (telemetry.c.received_ts == sources.c.received_ts)
+                    & (telemetry.c.telemetry_id == sources.c.telemetry_id),
+                )
+                .where(points.c.live_episode_id == alert["live_episode_id"])
+                .order_by(points.c.ordinal, sources.c.ordinal)
+            )
+        ).mappings()
+    )
+    return alert, rows
+
+
 async def apply_alert_command(
     connection: AsyncConnection,
     *,
@@ -176,7 +251,7 @@ async def apply_alert_command(
     action: AlertAction,
     actor: str,
     note: str | None,
-) -> tuple[RowMapping, bool]:
+) -> tuple[RowMapping | dict[str, object], bool]:
     commands = tables.alert_commands
     events = tables.alert_events
     payload_hash = _payload_hash(alert_id, action, note)
@@ -235,6 +310,15 @@ async def apply_alert_command(
             ):
                 raise Conflict("Command ID conflicts with persisted state")
             return existing, True
+
+        if action == "resolved" and alert["detection_basis"] == "artifact_backed":
+            episode_status = await connection.scalar(
+                select(tables.live_alert_episodes.c.status).where(
+                    tables.live_alert_episodes.c.alert_id == alert_id
+                )
+            )
+            if episode_status == "open":
+                raise Conflict("Alert cannot be resolved while its episode is open")
 
         latest = (
             await connection.execute(
@@ -299,10 +383,6 @@ async def apply_alert_command(
                 accepted_event_id=event_id,
             )
         )
-        return cast(
-            RowMapping,
-            {
-                **dict(accepted),
-                "accepted_at": accepted_at,
-            },
-        ), False
+        accepted_row = {str(key): value for key, value in accepted.items()}
+        accepted_row["accepted_at"] = accepted_at
+        return accepted_row, False

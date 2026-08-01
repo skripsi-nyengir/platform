@@ -8,122 +8,150 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from anomaly_backend.contracts import Bucket, CorpusDeviceId, SensorId
 
 
+_NORMALIZED_SOURCE = """
+    SELECT
+        telemetry.device_id,
+        telemetry.ts,
+        telemetry.temperature_c,
+        telemetry.relative_humidity_pct,
+        telemetry.ts AT TIME ZONE 'Asia/Jakarta' AS received_at_utc,
+        'historical:' || telemetry.corpus_id || ':' || telemetry.corpus_index::text
+            AS row_id
+    FROM telemetry
+    JOIN devices USING (device_id)
+    WHERE devices.is_active
+    UNION ALL
+    SELECT
+        live.device_id,
+        live.received_ts AS ts,
+        live.temperature_c,
+        live.relative_humidity_pct,
+        live.received_at_utc,
+        'live:' || live.telemetry_id::text AS row_id
+    FROM live_telemetry AS live
+    JOIN devices ON devices.device_id = live.device_id
+    WHERE devices.is_active
+"""
+
 _LATEST = text(
-    """
-    WITH observation AS (
-        SELECT max(ts) AS observation_reference
-        FROM telemetry
-        JOIN devices USING (device_id)
-        WHERE devices.is_active
-          AND devices.telemetry_kind = 'historical_replay'
-    ), ranked AS (
+    f"""
+    WITH normalized AS ({_NORMALIZED_SOURCE}), ranked AS (
         SELECT
-            device_id,
-            ts,
-            temperature_c,
-            relative_humidity_pct,
-            row_number() OVER (PARTITION BY device_id ORDER BY ts DESC) AS position
-        FROM telemetry
-        JOIN devices USING (device_id)
-        WHERE devices.is_active
-          AND devices.telemetry_kind = 'historical_replay'
-          AND (
-            CAST(:device_id AS text) IS NULL
-            OR device_id = CAST(:device_id AS text)
-        )
+            normalized.*,
+            row_number() OVER (
+                PARTITION BY device_id
+                ORDER BY received_at_utc DESC, ts DESC, row_id DESC
+            ) AS position
+        FROM normalized
+        WHERE CAST(:device_id AS text) IS NULL
+           OR device_id = CAST(:device_id AS text)
     )
     SELECT
-        ranked.device_id,
-        ranked.ts,
-        ranked.temperature_c,
-        ranked.relative_humidity_pct,
-        observation.observation_reference
-    FROM observation
-    LEFT JOIN ranked ON ranked.position = 1
-    ORDER BY ranked.device_id ASC NULLS LAST
+        device_id,
+        ts,
+        temperature_c,
+        relative_humidity_pct,
+        clock_timestamp() AT TIME ZONE 'Asia/Jakarta' AS observation_reference
+    FROM ranked
+    WHERE position = 1
+    ORDER BY device_id
     """
 )
 
 _RAW_HISTORY = text(
-    """
-    WITH source_ordered AS (
+    f"""
+    WITH normalized AS ({_NORMALIZED_SOURCE}), ordered AS (
         SELECT
-            ts,
-            temperature_c,
-            relative_humidity_pct,
-            source_index,
-            lag(ts) OVER (ORDER BY ts ASC) AS previous_ts,
-            lag(source_index) OVER (ORDER BY ts ASC) AS previous_source_index
-        FROM telemetry
+            normalized.*,
+            lag(ts) OVER (ORDER BY ts, row_id) AS previous_ts
+        FROM normalized
         WHERE device_id = :device_id
     )
     SELECT
+        ts AS cursor_ts,
+        row_id,
         ts,
         temperature_c,
         relative_humidity_pct,
+        temperature_c AS temperature_c_min,
+        temperature_c AS temperature_c_max,
+        relative_humidity_pct AS relative_humidity_pct_min,
+        relative_humidity_pct AS relative_humidity_pct_max,
         1 AS sample_count,
         previous_ts IS NOT NULL
-            AND source_index = previous_source_index + 1
             AND extract(epoch FROM ts - previous_ts) > 600 AS gap_before
-    FROM source_ordered
+    FROM ordered
     WHERE ts >= :from_ts AND ts < :to_ts
-    ORDER BY ts ASC
-    LIMIT :fetch_limit OFFSET :offset
+      AND (
+        CAST(:after_ts AS timestamp) IS NULL
+        OR ROW(ts, row_id) > ROW(CAST(:after_ts AS timestamp), :after_id)
+      )
+    ORDER BY ts, row_id
+    LIMIT :fetch_limit
     """
 )
 
 _BUCKETED_HISTORY = text(
-    """
-    WITH bucketed AS (
+    f"""
+    WITH normalized AS ({_NORMALIZED_SOURCE}), bucketed AS (
         SELECT
-            time_bucket(CAST(:bucket_interval AS interval), ts) AS ts,
+            date_bin(
+                make_interval(secs => :bucket_seconds),
+                ts,
+                TIMESTAMP '1970-01-01 00:00:00'
+            ) AS ts,
             avg(temperature_c) AS temperature_c,
             avg(relative_humidity_pct) AS relative_humidity_pct,
-            count(*) AS sample_count
-        FROM telemetry
+            min(temperature_c) AS temperature_c_min,
+            max(temperature_c) AS temperature_c_max,
+            min(relative_humidity_pct) AS relative_humidity_pct_min,
+            max(relative_humidity_pct) AS relative_humidity_pct_max,
+            count(*)::integer AS sample_count
+        FROM normalized
         WHERE device_id = :device_id
           AND ts >= :from_ts
           AND ts < :to_ts
         GROUP BY 1
     ), ordered AS (
         SELECT
-            ts,
-            temperature_c,
-            relative_humidity_pct,
-            sample_count,
-            lag(ts) OVER (ORDER BY ts ASC) AS previous_ts
+            bucketed.*,
+            'bucket:' || extract(epoch FROM ts)::bigint::text AS row_id,
+            lag(ts) OVER (ORDER BY ts) AS previous_ts
         FROM bucketed
     )
     SELECT
+        ts AS cursor_ts,
+        row_id,
         ts,
         temperature_c,
         relative_humidity_pct,
+        temperature_c_min,
+        temperature_c_max,
+        relative_humidity_pct_min,
+        relative_humidity_pct_max,
         sample_count,
         previous_ts IS NOT NULL
             AND extract(epoch FROM ts - previous_ts) > :bucket_seconds AS gap_before
     FROM ordered
-    ORDER BY ts ASC
-    LIMIT :fetch_limit OFFSET :offset
+    WHERE (
+        CAST(:after_ts AS timestamp) IS NULL
+        OR ROW(ts, row_id) > ROW(CAST(:after_ts AS timestamp), :after_id)
+    )
+    ORDER BY ts, row_id
+    LIMIT :fetch_limit
     """
 )
-
-_BUCKETS: dict[str, tuple[str, int]] = {
-    "1m": ("1 minute", 60),
-    "5m": ("5 minutes", 300),
-    "15m": ("15 minutes", 900),
-    "1h": ("1 hour", 3_600),
-    "1d": ("1 day", 86_400),
-}
 
 
 async def latest_rows(
     connection: AsyncConnection,
     device_id: SensorId | None,
 ) -> tuple[datetime | None, list[RowMapping]]:
-    result = await connection.execute(_LATEST, {"device_id": device_id})
-    rows = list(result.mappings())
-    reference = cast(datetime | None, rows[0]["observation_reference"])
-    return reference, [row for row in rows if row["device_id"] is not None]
+    rows = list((await connection.execute(_LATEST, {"device_id": device_id})).mappings())
+    reference = (
+        cast(datetime, rows[0]["observation_reference"]) if rows else None
+    )
+    return reference, rows
 
 
 async def history_rows(
@@ -133,20 +161,23 @@ async def history_rows(
     from_ts: datetime,
     to_ts: datetime,
     bucket: Bucket,
+    bucket_seconds: int | None,
     limit: int,
-    offset: int,
+    after_ts: datetime | None,
+    after_id: str | None,
 ) -> list[RowMapping]:
     parameters: dict[str, object] = {
         "device_id": device_id,
         "from_ts": from_ts,
         "to_ts": to_ts,
         "fetch_limit": limit + 1,
-        "offset": offset,
+        "after_ts": after_ts,
+        "after_id": after_id,
     }
     statement = _RAW_HISTORY
     if bucket != "raw":
-        interval, seconds = _BUCKETS[bucket]
-        parameters.update(bucket_interval=interval, bucket_seconds=seconds)
+        if bucket_seconds is None:
+            raise ValueError("bucketed telemetry requires an effective width")
+        parameters["bucket_seconds"] = bucket_seconds
         statement = _BUCKETED_HISTORY
-    result = await connection.execute(statement, parameters)
-    return list(result.mappings())
+    return list((await connection.execute(statement, parameters)).mappings())
