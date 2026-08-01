@@ -92,6 +92,8 @@ class _Model:
     model_version: str
     threshold: float
     scorer: _Scorer
+    minimum: tuple[float, float] = (0.0, 0.0)
+    maximum: tuple[float, float] = (100.0, 100.0)
 
     def scale_pair(self, value: tuple[float, float]) -> tuple[float, float]:
         return value[0] / 100.0, value[1] / 100.0

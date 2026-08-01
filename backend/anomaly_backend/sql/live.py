@@ -1339,6 +1339,8 @@ async def publish_live_inference(
     episode_close_reason: EpisodeCloseReason | None = None,
     health_status: HealthStatus | None = None,
     health_detail_code: str | None = None,
+    recon_temperature_c: float | None = None,
+    recon_relative_humidity_pct: float | None = None,
 ) -> tuple[RowMapping, bool]:
     if len(source_keys) != 10 or len(set(source_keys)) != 10:
         raise ValueError("live inference requires exactly ten unique source keys")
@@ -1473,6 +1475,8 @@ async def publish_live_inference(
                         severity_at_score=severity_at_score,
                         model_version=pair["model_version"],
                         snapshot_corpus_id=pair["scaler_snapshot_corpus_id"],
+                        recon_temperature_c=recon_temperature_c,
+                        recon_relative_humidity_pct=recon_relative_humidity_pct,
                     )
                     .on_conflict_do_nothing(constraint="uq_live_inference_idempotency")
                     .returning(*tables.live_inference.c)

@@ -1267,6 +1267,8 @@ live_inference = Table(
     Column("model_version", Text, nullable=False),
     Column("snapshot_corpus_id", Text, nullable=False),
     Column("ordered_source_fingerprint", Text, nullable=False),
+    Column("recon_temperature_c", Float, nullable=True),
+    Column("recon_relative_humidity_pct", Float, nullable=True),
     ForeignKeyConstraint(
         ["device_id", "activation_id", "model_pair_id"],
         [

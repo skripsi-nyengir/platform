@@ -46,8 +46,8 @@ _NORMALIZED_SOURCE = """
         live.severity_at_score AS severity,
         live.model_version,
         'artifact_backed'::text AS score_provenance,
-        NULL::double precision AS recon_temperature_c,
-        NULL::double precision AS recon_relative_humidity_pct,
+        live.recon_temperature_c,
+        live.recon_relative_humidity_pct,
         NULL::double precision AS band_half_temperature_c,
         NULL::double precision AS band_half_relative_humidity_pct,
         'live:' || live.inference_id::text AS row_id
