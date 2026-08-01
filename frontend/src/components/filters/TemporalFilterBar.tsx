@@ -19,6 +19,8 @@ const liveRangeLabels: Record<LiveRange, string> = {
   '1m': 'Last 1 minute',
   '5m': 'Last 5 minutes',
   '10m': 'Last 10 minutes',
+  '15m': 'Last 15 minutes',
+  '30m': 'Last 30 minutes',
   '1h': 'Last 1 hour',
   '6h': 'Last 6 hours',
   '12h': 'Last 12 hours',

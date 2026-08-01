@@ -19,7 +19,7 @@ export interface UrlFilters {
   modelVersion?: string
 }
 
-export const liveRanges = ['1m', '5m', '10m', '1h', '6h', '12h', '24h', 'custom'] as const
+export const liveRanges = ['1m', '5m', '10m', '15m', '30m', '1h', '6h', '12h', '24h', 'custom'] as const
 export type LiveRange = typeof liveRanges[number]
 
 export interface LiveUrlFilters {
@@ -55,13 +55,15 @@ const liveRangeDurationMs = {
   '1m': 60 * 1_000,
   '5m': 5 * 60 * 1_000,
   '10m': 10 * 60 * 1_000,
+  '15m': 15 * 60 * 1_000,
+  '30m': 30 * 60 * 1_000,
   '1h': 60 * 60 * 1_000,
   '6h': 6 * 60 * 60 * 1_000,
   '12h': 12 * 60 * 60 * 1_000,
   '24h': 24 * 60 * 60 * 1_000,
 } as const
 
-const rawBucketRanges = new Set<LiveRange>(['1m', '5m', '10m', '1h'])
+const rawBucketRanges = new Set<LiveRange>(['1m', '5m', '10m', '15m', '30m', '1h'])
 
 function isLiveRange(value: string | null): value is LiveRange {
   return liveRanges.some((range) => range === value)

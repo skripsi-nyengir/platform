@@ -21,9 +21,6 @@ export function AlertLifecycleActions({ alert }: AlertLifecycleActionsProps) {
 
   return (
     <Stack spacing={1} aria-busy={mutation.isPending} sx={{ minWidth: 0, width: '100%' }}>
-      <Typography variant="caption" color="text.secondary">
-        Lifecycle tersimpan; timestamp penerimaan dicatat sebagai UTC.
-      </Typography>
       {mutation.isPending ? (
         <Typography role="status" variant="caption" color="text.secondary">
           Action pending. The confirmed alert state is unchanged.
