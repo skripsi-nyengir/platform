@@ -29,6 +29,10 @@ import {
   type InferenceResponse,
 } from '../contracts/inference'
 import {
+  PostInferenceBinsQuerySchema,
+  type PostInferenceBinsResponse,
+} from '../contracts/postInferenceBins'
+import {
   TelemetryHistoryQuerySchema,
   type TelemetryHistoryResponse,
 } from '../contracts/telemetry'
@@ -56,6 +60,7 @@ import {
   activeAnomalyInferenceBySensor,
   normalInferenceBySensor,
 } from './fixtures/inference'
+import { normalPostInferenceBinsBySensor } from './fixtures/postInferenceBins'
 import { modelRegistryResponse } from './fixtures/modelRegistry'
 import { offlineEvaluationsResponse } from './fixtures/offlineEvaluations'
 import {
@@ -554,6 +559,48 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
         next_cursor: nextCursor('inference', offset, points.length, bounded.length),
         returned_count: points.length,
       } satisfies InferenceResponse
+      return HttpResponse.json(body)
+    }),
+
+    http.get('/api/post-inference-bins', ({ request }) => {
+      const url = new URL(request.url)
+      const parsed = PostInferenceBinsQuerySchema.safeParse({
+        deviceId: queryValue(url, 'device_id'),
+        from: queryValue(url, 'from'),
+        to: queryValue(url, 'to'),
+        limit: queryNumber(url, 'limit'),
+        cursor: queryValue(url, 'cursor'),
+        modelVersion: queryValue(url, 'model_version'),
+      })
+      if (!parsed.success) return invalidQuery(request)
+      const { deviceId, from, to, limit } = parsed.data
+      const offset = cursorOffset(url, 'post-inference-bins')
+      const source =
+        deviceId === simDeviceId ||
+        (state.scenario === 'empty' && deviceId === scenarioDevice.empty)
+          ? []
+          : normalPostInferenceBinsBySensor[deviceId]
+      const bounded = source.filter(
+        (item) =>
+          compareHistoricalDateTimes(item.start_score_ts, from) >= 0 &&
+          compareHistoricalDateTimes(item.start_score_ts, to) < 0,
+      )
+      const bins = bounded.slice(offset, offset + limit)
+      const modelVersion =
+        deviceId === simDeviceId
+          ? ''
+          : normalInferenceBySensor[deviceId][0]?.model_version ?? ''
+      const body = {
+        request_id: 'req_post_inference_bins',
+        device_id: deviceId,
+        from,
+        to,
+        time_zone: 'Asia/Jakarta',
+        model_version: modelVersion,
+        bins,
+        next_cursor: nextCursor('post-inference-bins', offset, bins.length, bounded.length),
+        returned_count: bins.length,
+      } satisfies PostInferenceBinsResponse
       return HttpResponse.json(body)
     }),
 

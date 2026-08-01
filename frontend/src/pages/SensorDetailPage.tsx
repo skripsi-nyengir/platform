@@ -153,6 +153,7 @@ export function SensorDetailPage() {
         telemetry={live.telemetryHistory}
         inference={live.inference}
         alertEvents={live.alertEvents}
+        postInferenceBins={live.postInferenceBins}
       />
       {live.currentAlerts.data?.items.length
         ? <ActiveAlertsSection alerts={live.currentAlerts.data.items} />

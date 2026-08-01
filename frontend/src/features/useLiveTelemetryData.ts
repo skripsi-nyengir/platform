@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { getCurrentAlerts, getAlertEvents } from '../api/alerts'
 import { getInferenceResults } from '../api/inference'
+import { getPostInferenceBins } from '../api/postInferenceBins'
 import { getSystemStatus } from '../api/systemHealth'
 import { getLatestTelemetry, getTelemetryHistory } from '../api/telemetry'
 import { wibHistoricalDateTimeToUtcInstant, type SensorId } from '../contracts/common'
@@ -58,6 +59,26 @@ export function useLiveTelemetryData(sensorId: SensorId, filters: LiveUrlFilters
     },
     ...liveQueryOptions,
   })
+  const postInferenceBins = useQuery({
+    queryKey: [
+      'live',
+      'post-inference-bins',
+      sensorId,
+      ...semanticRange,
+      filters.modelVersion ?? null,
+    ],
+    queryFn: ({ signal }) => {
+      const range = resolveLiveRange(filters)
+      return getPostInferenceBins({
+        deviceId: sensorId,
+        from: range.from,
+        to: range.to,
+        limit: 5_000,
+        modelVersion: filters.modelVersion,
+      }, signal)
+    },
+    ...liveQueryOptions,
+  })
   const currentAlerts = useQuery({
     queryKey: ['live', 'current-alerts', sensorId],
     queryFn: ({ signal }) => getCurrentAlerts({ deviceId: sensorId, page: 1, pageSize: 100 }, signal),
@@ -82,5 +103,5 @@ export function useLiveTelemetryData(sensorId: SensorId, filters: LiveUrlFilters
     ...liveQueryOptions,
   })
 
-  return { latestTelemetry, telemetryHistory, inference, currentAlerts, alertEvents, health }
+  return { latestTelemetry, telemetryHistory, inference, postInferenceBins, currentAlerts, alertEvents, health }
 }

@@ -23,9 +23,12 @@ import {
 } from '../../contracts/common'
 import type { AlertEventsResponse } from '../../contracts/alerts'
 import type { InferenceResultsResponse } from '../../contracts/inference'
+import type { PostInferenceBinsResponse } from '../../contracts/postInferenceBins'
 import type { TelemetryHistoryResponse } from '../../contracts/telemetry'
 import { resolveLiveRange, type LiveUrlFilters } from '../filters/urlFilters'
 import { tokens } from '../../theme/tokens'
+import { AlertBinOverlay } from './AlertBinOverlay'
+import { toAlertBinIntervals } from './alertBinShapes'
 import { ReconstructionChart } from './ReconstructionChart'
 
 export interface SensorHistoryPanelProps {
@@ -34,6 +37,7 @@ export interface SensorHistoryPanelProps {
   telemetry: UseQueryResult<TelemetryHistoryResponse, ApiError>
   inference: UseQueryResult<InferenceResultsResponse, ApiError>
   alertEvents: UseQueryResult<AlertEventsResponse, ApiError>
+  postInferenceBins: UseQueryResult<PostInferenceBinsResponse, ApiError>
 }
 
 interface HistoryTableRow extends GridValidRowModel {
@@ -79,6 +83,7 @@ export function SensorHistoryPanel({
   telemetry,
   inference,
   alertEvents,
+  postInferenceBins,
 }: SensorHistoryPanelProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const theme = useTheme()
@@ -86,6 +91,9 @@ export function SensorHistoryPanel({
   const displayedRange = telemetry.data ?? inference.data ?? resolveLiveRange(filters)
   const telemetryPoints = telemetry.data?.points ?? []
   const inferencePoints = inference.data?.points ?? []
+  const binIntervals = toAlertBinIntervals(postInferenceBins.data?.bins ?? [])
+  const completeBinCount = postInferenceBins.data?.bins.length ?? 0
+  const binsUnavailable = postInferenceBins.isError
   const rows: readonly HistoryTableRow[] = [
     ...telemetryPoints.map((point) => ({
       id: `telemetry:${point.ts}`,
@@ -276,7 +284,13 @@ export function SensorHistoryPanel({
                           yAxisId: 'temperature-y-axis',
                         },
                       ]}
-                    />
+                    >
+                      <AlertBinOverlay
+                        intervals={binIntervals}
+                        xAxisId="temperature-x-axis"
+                        color={chartColors.reconstructionError}
+                      />
+                    </LineChart>
                   </Box>
                 </Stack>
               </Paper>
@@ -322,7 +336,13 @@ export function SensorHistoryPanel({
                           yAxisId: 'humidity-y-axis',
                         },
                       ]}
-                    />
+                    >
+                      <AlertBinOverlay
+                        intervals={binIntervals}
+                        xAxisId="humidity-x-axis"
+                        color={chartColors.reconstructionError}
+                      />
+                    </LineChart>
                   </Box>
                 </Stack>
               </Paper>
@@ -399,10 +419,23 @@ export function SensorHistoryPanel({
                 </Stack>
               </Paper>
 
+              {binsUnavailable ? (
+                <Alert severity="warning" variant="outlined" sx={{ minWidth: 0 }}>
+                  Overlay bin alert tidak tersedia (endpoint gagal). Chart tetap
+                  ditampilkan; skor dan alert lama tidak berubah.
+                </Alert>
+              ) : completeBinCount < 3 ? (
+                <Alert severity="info" variant="outlined" sx={{ minWidth: 0 }}>
+                  Konteks bin belum lengkap: {completeBinCount}/3 bin lengkap. Butuh
+                  {' '}~{(3 - completeBinCount) * 51} timestamp-score lagi.
+                </Alert>
+              ) : null}
               <ReconstructionChart
                 sensorId={sensorId}
                 telemetry={telemetryPoints}
                 inference={inferencePoints}
+                binIntervals={binIntervals}
+                windowCount={153}
               />
             </Box>
             <Button variant="outlined" onClick={() => setDialogOpen(true)} sx={{ alignSelf: 'flex-start' }}>

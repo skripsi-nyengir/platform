@@ -920,12 +920,32 @@ async def test_worker_keeps_results_private_until_atomic_success_publication(
                 .select_from(tables.replay_result_staging)
                 .where(tables.replay_result_staging.c.job_id == job_id)
             )
+            bin_count = await connection.scalar(
+                select(func.count())
+                .select_from(tables.post_inference_bins)
+                .where(tables.post_inference_bins.c.replay_job_id == job_id)
+            )
+            bin_staging_count = await connection.scalar(
+                select(func.count())
+                .select_from(tables.post_inference_bin_staging)
+                .where(tables.post_inference_bin_staging.c.job_id == job_id)
+            )
+            bin_checkpoint_count = await connection.scalar(
+                select(func.count())
+                .select_from(tables.post_inference_bin_checkpoints)
+                .where(tables.post_inference_bin_checkpoints.c.job_id == job_id)
+            )
     finally:
         await engine.dispose()
 
     assert job["status"] == "succeeded"
     assert final_count == job["result_count"] == 111
     assert staging_count == 0
+    # 111 scores in one contiguous segment -> 2 full 51-score bins; the
+    # 9-score remainder stays an open bin, never reaches the final table.
+    assert bin_count == 2
+    assert bin_staging_count == 0
+    assert bin_checkpoint_count == 0
 
 
 @pytest.mark.anyio
