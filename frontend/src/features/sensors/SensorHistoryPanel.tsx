@@ -26,6 +26,7 @@ import type { InferenceResultsResponse } from '../../contracts/inference'
 import type { TelemetryHistoryResponse } from '../../contracts/telemetry'
 import { resolveLiveRange, type LiveUrlFilters } from '../filters/urlFilters'
 import { tokens } from '../../theme/tokens'
+import { ReconstructionChart } from './ReconstructionChart'
 
 export interface SensorHistoryPanelProps {
   sensorId: SensorId
@@ -397,6 +398,12 @@ export function SensorHistoryPanel({
                   </Box>
                 </Stack>
               </Paper>
+
+              <ReconstructionChart
+                sensorId={sensorId}
+                telemetry={telemetryPoints}
+                inference={inferencePoints}
+              />
             </Box>
             <Button variant="outlined" onClick={() => setDialogOpen(true)} sx={{ alignSelf: 'flex-start' }}>
               Lihat data

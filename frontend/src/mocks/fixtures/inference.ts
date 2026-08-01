@@ -24,8 +24,8 @@ function inferencePoint(
     sample_count: 1,
     model_version: fixtureModelVersion,
     score_provenance: 'simulated_preview',
-    recon_temperature_c: null,
-    recon_relative_humidity_pct: null,
+    recon_temperature_c: Number((24.6 + score * 0.4).toFixed(4)),
+    recon_relative_humidity_pct: Number((54 + score * 2).toFixed(4)),
     band_half_temperature_c: null,
     band_half_relative_humidity_pct: null,
   })

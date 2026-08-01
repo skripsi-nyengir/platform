@@ -37,7 +37,7 @@ describe('B02 URL filters', () => {
     expect(parseLiveUrlFilters(new URLSearchParams({ range: 'invalid' }))).toEqual({ range: '1h' })
   })
 
-  it.each(['1h', '6h', '12h', '24h'] as const)(
+  it.each(['1m', '5m', '10m', '1h', '6h', '12h', '24h'] as const)(
     'round-trips the %s rolling range without fixed timestamps',
     (range) => {
       const next = updateLiveUrlFilters(
@@ -77,6 +77,9 @@ describe('B02 URL filters', () => {
   })
 
   it.each([
+    ['1m', '2026-07-31T07:59:00', 'raw'],
+    ['5m', '2026-07-31T07:55:00', 'raw'],
+    ['10m', '2026-07-31T07:50:00', 'raw'],
     ['1h', '2026-07-31T07:00:00', 'raw'],
     ['6h', '2026-07-31T02:00:00', 'one_minute'],
     ['12h', '2026-07-30T20:00:00', 'one_minute'],

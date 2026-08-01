@@ -1,3 +1,4 @@
+import { pink } from '@mui/material/colors'
 import { createTheme } from '@mui/material/styles'
 import { describe, expect, it } from 'vitest'
 import { formatChartNumber, getChartColors } from './muiChartTheme'
@@ -22,6 +23,7 @@ describe('getChartColors', () => {
       outlier: theme.palette.error.main,
       threshold: theme.palette.text.secondary,
       normalPoint: theme.palette.info.main,
+      reconstructionError: pink[300],
     })
   })
 })

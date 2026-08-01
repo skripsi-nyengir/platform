@@ -19,7 +19,7 @@ export interface UrlFilters {
   modelVersion?: string
 }
 
-export const liveRanges = ['1h', '6h', '12h', '24h', 'custom'] as const
+export const liveRanges = ['1m', '5m', '10m', '1h', '6h', '12h', '24h', 'custom'] as const
 export type LiveRange = typeof liveRanges[number]
 
 export interface LiveUrlFilters {
@@ -51,12 +51,17 @@ const defaults: Pick<UrlFilters, 'from' | 'to' | 'bucket'> = {
   bucket: 'adaptive',
 }
 
-const liveRangeHours = {
-  '1h': 1,
-  '6h': 6,
-  '12h': 12,
-  '24h': 24,
+const liveRangeDurationMs = {
+  '1m': 60 * 1_000,
+  '5m': 5 * 60 * 1_000,
+  '10m': 10 * 60 * 1_000,
+  '1h': 60 * 60 * 1_000,
+  '6h': 6 * 60 * 60 * 1_000,
+  '12h': 12 * 60 * 60 * 1_000,
+  '24h': 24 * 60 * 60 * 1_000,
 } as const
+
+const rawBucketRanges = new Set<LiveRange>(['1m', '5m', '10m', '1h'])
 
 function isLiveRange(value: string | null): value is LiveRange {
   return liveRanges.some((range) => range === value)
@@ -131,11 +136,11 @@ export function resolveLiveRange(filters: LiveUrlFilters, now = new Date()): Res
     }
     return { from: filters.from, to: filters.to, bucket: 'adaptive' }
   }
-  const durationMs = liveRangeHours[filters.range] * 60 * 60 * 1_000
+  const durationMs = liveRangeDurationMs[filters.range]
   return {
     from: toWibHistoricalDateTime(new Date(now.getTime() - durationMs)),
     to: toWibHistoricalDateTime(now),
-    bucket: filters.range === '1h' ? 'raw' : 'one_minute',
+    bucket: rawBucketRanges.has(filters.range) ? 'raw' : 'one_minute',
   }
 }
 

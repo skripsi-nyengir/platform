@@ -1,3 +1,4 @@
+import { pink } from '@mui/material/colors'
 import type { Theme } from '@mui/material/styles'
 
 export function getChartColors(theme: Theme) {
@@ -8,6 +9,7 @@ export function getChartColors(theme: Theme) {
     outlier: theme.palette.error.main,
     threshold: theme.palette.text.secondary,
     normalPoint: theme.palette.info.main,
+    reconstructionError: pink[300],
   } as const
 }
 
