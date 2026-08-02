@@ -1483,6 +1483,8 @@ live_cursors = Table(
     Column("device_id", Text, ForeignKey("devices.device_id"), primary_key=True),
     Column("received_ts", TIMESTAMP(timezone=False, precision=0)),
     Column("telemetry_id", UUID(as_uuid=True)),
+    # ponytail: monotonic arrival key; telemetry_id (random UUID) mis-orders rows sharing a whole-second received_ts.
+    Column("ingress_sequence", BigInteger),
     Column("last_boundary_id", BigInteger),
     Column("continuity_epoch", BigInteger, nullable=False),
     Column("fencing_token", BigInteger, nullable=False),

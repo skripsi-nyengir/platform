@@ -668,6 +668,178 @@ async def test_equal_second_keyset_tail_orders_anchored_boundaries(
 
 
 @pytest.mark.anyio
+async def test_late_same_second_smaller_uuid_row_is_not_stranded(
+    live_lineage: dict[str, object],
+) -> None:
+    async for engine, lease in _leased_engine(f"late-arrival-{uuid4().hex}"):
+        activation_id = cast(int, live_lineage["activation_id"])
+        token = cast(int, lease["fencing_token"])
+        epoch = await _next_epoch(engine)
+        received_ts = await _next_received_ts(engine)
+        # Same whole-second received_ts; the later arrival (low_id) sorts BEFORE
+        # the earlier one by UUID, so telemetry_id ordering would strand it.
+        high_id, low_id = sorted((uuid4(), uuid4()), reverse=True)
+        async with engine.connect() as connection:
+            startup, _ = await publish_processing_boundary(
+                connection,
+                device_id=LIVE_DEVICE_ID,
+                boundary_reason="startup",
+                ingress_generation=epoch,
+                continuity_epoch=epoch,
+                fencing_token=token,
+                after_key=await _committed_cursor_key(engine),
+            )
+            await insert_live_telemetry(
+                connection,
+                telemetry_id=high_id,
+                device_id=LIVE_DEVICE_ID,
+                received_ts=received_ts,
+                received_at_utc=received_ts.replace(tzinfo=timezone.utc),
+                temperature_c=25.0,
+                relative_humidity_pct=60.0,
+                ingress_generation=epoch,
+                activation_id=activation_id,
+                continuity_epoch=epoch,
+                segment_start_reason="startup",
+                fencing_token=token,
+            )
+            await commit_boundary_effect(
+                connection,
+                device_id=LIVE_DEVICE_ID,
+                boundary_id=cast(int, startup["boundary_id"]),
+                fencing_token=token,
+            )
+            assert await mark_telemetry_processed(
+                connection,
+                device_id=LIVE_DEVICE_ID,
+                telemetry_key=(received_ts, high_id),
+                continuity_epoch=epoch,
+                fencing_token=token,
+            )
+            await insert_live_telemetry(
+                connection,
+                telemetry_id=low_id,
+                device_id=LIVE_DEVICE_ID,
+                received_ts=received_ts,
+                received_at_utc=received_ts.replace(tzinfo=timezone.utc),
+                temperature_c=26.0,
+                relative_humidity_pct=61.0,
+                ingress_generation=epoch,
+                activation_id=activation_id,
+                continuity_epoch=epoch,
+                segment_start_reason=None,
+                fencing_token=token,
+            )
+            tail = await unprocessed_live_tail(
+                connection,
+                device_id=LIVE_DEVICE_ID,
+                after_key=(received_ts, high_id),
+                last_boundary_id=cast(int, startup["boundary_id"]),
+                limit=10,
+            )
+            assert [item["telemetry_id"] for item in tail] == [low_id]
+            await connection.rollback()
+            assert await mark_telemetry_processed(
+                connection,
+                device_id=LIVE_DEVICE_ID,
+                telemetry_key=(received_ts, low_id),
+                continuity_epoch=epoch,
+                fencing_token=token,
+            )
+            cursor = await read_live_cursor(connection, device_id=LIVE_DEVICE_ID)
+            assert cursor is not None
+            assert cursor["telemetry_id"] == low_id
+
+
+@pytest.mark.anyio
+async def test_same_second_window_scores_in_ingress_order(
+    live_lineage: dict[str, object],
+) -> None:
+    async for engine, lease in _leased_engine(f"same-second-score-{uuid4().hex}"):
+        epoch = await _next_epoch(engine)
+        token = cast(int, lease["fencing_token"])
+        activation_id = cast(int, live_lineage["activation_id"])
+        start = await _next_received_ts(engine)
+        # Rows 8 and 9 share a whole-second received_ts; the later arrival (row 9)
+        # sorts BEFORE row 8 by UUID, so telemetry_id ordering would mis-order the window.
+        high_id, low_id = sorted((uuid4(), uuid4()), reverse=True)
+        same_second = start + timedelta(seconds=8 * 6)
+        specs = [
+            (start + timedelta(seconds=index * 6), uuid4()) for index in range(8)
+        ]
+        specs.append((same_second, high_id))
+        specs.append((same_second, low_id))
+        async with engine.connect() as connection:
+            boundary, _ = await publish_processing_boundary(
+                connection,
+                device_id=LIVE_DEVICE_ID,
+                boundary_reason="startup",
+                ingress_generation=epoch,
+                continuity_epoch=epoch,
+                fencing_token=token,
+                after_key=await _committed_cursor_key(engine),
+            )
+            await commit_boundary_effect(
+                connection,
+                device_id=LIVE_DEVICE_ID,
+                boundary_id=cast(int, boundary["boundary_id"]),
+                fencing_token=token,
+            )
+            for index, (received_ts, telemetry_id) in enumerate(specs):
+                await insert_live_telemetry(
+                    connection,
+                    telemetry_id=telemetry_id,
+                    device_id=LIVE_DEVICE_ID,
+                    received_ts=received_ts,
+                    received_at_utc=received_ts.replace(tzinfo=timezone.utc),
+                    temperature_c=25.0 + index,
+                    relative_humidity_pct=60.0 + index,
+                    ingress_generation=epoch,
+                    activation_id=activation_id,
+                    continuity_epoch=epoch,
+                    segment_start_reason="startup" if index == 0 else None,
+                    fencing_token=token,
+                )
+            for key in specs[:9]:
+                assert await mark_telemetry_processed(
+                    connection,
+                    device_id=LIVE_DEVICE_ID,
+                    telemetry_key=key,
+                    continuity_epoch=epoch,
+                    fencing_token=token,
+                )
+            result, duplicate = await publish_live_inference(
+                connection,
+                device_id=LIVE_DEVICE_ID,
+                source_keys=specs,
+                score=1.0,
+                is_anomaly=False,
+                severity_at_score="info",
+                fencing_token=token,
+            )
+            assert not duplicate
+            source_rows = (
+                await connection.execute(
+                    select(
+                        tables.live_inference_sources.c.ordinal,
+                        tables.live_inference_sources.c.received_ts,
+                        tables.live_inference_sources.c.telemetry_id,
+                    )
+                    .where(
+                        tables.live_inference_sources.c.score_ts == specs[-1][0],
+                        tables.live_inference_sources.c.inference_id
+                        == result["inference_id"],
+                    )
+                    .order_by(tables.live_inference_sources.c.ordinal)
+                )
+            ).all()
+            assert source_rows == [
+                (ordinal, received_ts, telemetry_id)
+                for ordinal, (received_ts, telemetry_id) in enumerate(specs)
+            ]
+
+
+@pytest.mark.anyio
 async def test_row_effects_wait_for_boundary_and_prior_telemetry(
     live_lineage: dict[str, object],
 ) -> None:

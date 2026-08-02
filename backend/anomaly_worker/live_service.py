@@ -263,7 +263,7 @@ class LiveService:
                             .where(tables.live_telemetry.c.device_id == self._device_id)
                             .order_by(
                                 tables.live_telemetry.c.received_ts.desc(),
-                                tables.live_telemetry.c.telemetry_id.desc(),
+                                tables.live_telemetry.c.ingress_sequence.desc(),
                             )
                             .limit(1)
                         )
