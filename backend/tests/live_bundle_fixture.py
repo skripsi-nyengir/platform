@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 import hashlib
 import json
 from pathlib import Path
@@ -39,6 +40,10 @@ def write_bundle(
     *,
     bundle_id: str | None = None,
     model_version: str | None = None,
+    architecture: str = "artifact-lstm-ae-v3",
+    state_dict: Mapping[str, torch.Tensor] | None = None,
+    threshold: float = 0.25,
+    threshold_name: str = "validation-p995",
 ) -> tuple[str, BundleFiles]:
     bundle_id = bundle_id or f"approved-{uuid4().hex}"
     model_version = model_version or f"artifact-lstm-live-{uuid4().hex}"
@@ -46,7 +51,10 @@ def write_bundle(
     bundle.mkdir(parents=True)
 
     checkpoint = bundle / "model.pt"
-    torch.save({"state_dict": LstmAutoencoder().state_dict()}, checkpoint)
+    checkpoint_state = (
+        LstmAutoencoder().state_dict() if state_dict is None else state_dict
+    )
+    torch.save({"state_dict": checkpoint_state}, checkpoint)
 
     source_identity = f"dataset://b02f3872/{uuid4().hex}"
     scaler: dict[str, object] = {
@@ -68,7 +76,7 @@ def write_bundle(
         "manifest_version": 1,
         "bundle_id": bundle_id,
         "model_version": model_version,
-        "architecture": "artifact-lstm-ae-v3",
+        "architecture": architecture,
         "checkpoint_file": checkpoint.name,
         "checkpoint_sha256": sha256(checkpoint),
         "scaler_manifest_file": scaler_manifest.name,
@@ -78,11 +86,11 @@ def write_bundle(
         "window_size": 10,
         "stride": 1,
         "temporal_semantics": "context_end",
-        "threshold": 0.25,
+        "threshold": threshold,
         "threshold_policy": {
             "comparison": ">",
             "fit_split": "validation",
-            "name": "validation-p995",
+            "name": threshold_name,
         },
     }
     model_manifest = bundle / "model-manifest-v1.json"

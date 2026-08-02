@@ -230,12 +230,17 @@ def test_compose_enforces_the_database_seed_api_nginx_dependency_chain() -> None
         assert _environment_keys(services[name]) == set(DATABASE_ENV)
     assert _environment_keys(services["worker"]) == set(DATABASE_ENV) | {
         "MODEL_ARTIFACTS_PATH",
+        "NVIDIA_VISIBLE_DEVICES",
+        "NVIDIA_DRIVER_CAPABILITIES",
     }
     assert _environment_keys(services["live-model-bootstrap"]) == set(
         DATABASE_ENV
     ) | {
         "MODEL_ARTIFACTS_PATH",
         "LIVE_MODEL_BUNDLE_ID",
+        "LIVE_MODEL_BUNDLE_IDS",
+        "NVIDIA_VISIBLE_DEVICES",
+        "NVIDIA_DRIVER_CAPABILITIES",
     }
     assert _environment_keys(services["live-subscriber"]) == set(DATABASE_ENV) | {
         "MODEL_ARTIFACTS_PATH",
@@ -247,10 +252,11 @@ def test_compose_enforces_the_database_seed_api_nginx_dependency_chain() -> None
         "MQTT_PASSWORD",
         "MQTT_CLIENT_ID",
         "MQTT_TLS_ENABLED",
-        "MQTT_CA_FILE",
         "MQTT_RECONNECT_MIN_SECONDS",
         "MQTT_RECONNECT_MAX_SECONDS",
         "LIVE_RUNTIME_MODE",
+        "NVIDIA_VISIBLE_DEVICES",
+        "NVIDIA_DRIVER_CAPABILITIES",
     }
     for dependency, condition in (
         ("db", "service_healthy"),
@@ -288,6 +294,31 @@ def test_compose_enforces_the_database_seed_api_nginx_dependency_chain() -> None
     }
 
 
+def test_compose_scopes_live_bundle_list_to_bootstrap() -> None:
+    project_root = Path(os.environ["PROJECT_ROOT"])
+    compose = (project_root / "compose.yaml").read_text(encoding="utf-8")
+    services = _compose_services(compose)
+
+    assert (
+        "      LIVE_MODEL_BUNDLE_IDS: "
+        "${LIVE_MODEL_BUNDLE_IDS:-${LIVE_MODEL_BUNDLE_ID:-REPLACE_WITH_LIVE_MODEL_BUNDLE_ID}}"
+        in services["live-model-bootstrap"]
+    )
+    assert "LIVE_MODEL_BUNDLE_IDS" not in services["live-subscriber"]
+
+
+def test_compose_uses_live_nvidia_runtime_for_artifact_inference() -> None:
+    project_root = Path(os.environ["PROJECT_ROOT"])
+    compose = (project_root / "compose.yaml").read_text(encoding="utf-8")
+    services = _compose_services(compose)
+
+    for service in ("worker", "live-model-bootstrap", "live-subscriber"):
+        assert "    runtime: nvidia" in services[service]
+        assert "NVIDIA_VISIBLE_DEVICES" in services[service]
+        assert "NVIDIA_DRIVER_CAPABILITIES: compute,utility" in services[service]
+        assert "reservations:" not in services[service]
+
+
 def test_compose_uses_only_checked_in_build_contexts_and_private_backend_network() -> None:
     project_root = Path(os.environ["PROJECT_ROOT"])
     compose = (project_root / "compose.yaml").read_text(encoding="utf-8")
@@ -300,8 +331,7 @@ def test_compose_uses_only_checked_in_build_contexts_and_private_backend_network
         assert "      - public" not in services[name]
     assert "    build:\n      context: ./backend\n      target: worker" in services["worker"]
     assert services["worker"].count(":ro\"") == 1
-    assert "driver: nvidia" in services["worker"]
-    assert "capabilities: [gpu]" in services["worker"]
+    assert "    runtime: nvidia" in services["worker"]
     for name in ("live-model-bootstrap", "live-subscriber"):
         assert "    build:\n      context: ./backend\n      target: worker" in services[name]
         assert services[name].count(":ro\"") == 1
@@ -315,8 +345,7 @@ def test_compose_uses_only_checked_in_build_contexts_and_private_backend_network
         in services["live-subscriber"]
     )
     assert "    restart: unless-stopped" in services["live-subscriber"]
-    assert "driver: nvidia" in services["live-subscriber"]
-    assert "capabilities: [gpu]" in services["live-subscriber"]
+    assert "    runtime: nvidia" in services["live-subscriber"]
     assert (
         "    build:\n      context: ./backend\n      target: eda-worker"
         in services["eda-worker"]
@@ -386,6 +415,7 @@ def test_environment_example_adds_only_nginx_port_to_database_settings() -> None
         "MQTT_TOPIC",
         "MQTT_CLIENT_ID",
         "MODEL_ARTIFACTS_DIR",
+        "LIVE_MODEL_BUNDLE_ID",
     }
     assert "./REPLACE_WITH_B02_V3_SOURCE/sensor_data_long.csv" in environment_example
     assert "<verify-from-eda-worker>" in environment_example
@@ -394,6 +424,11 @@ def test_environment_example_adds_only_nginx_port_to_database_settings() -> None
     assert "MQTT_TOPIC=<mqtt-topic>" in environment_example
     assert "MQTT_CLIENT_ID=<mqtt-client-id>" in environment_example
     assert "MODEL_ARTIFACTS_DIR=<model-artifacts-directory>" in environment_example
+    assert "LIVE_MODEL_BUNDLE_ID=<primary-live-model-bundle-id>" in environment_example
+    assert (
+        "# LIVE_MODEL_BUNDLE_IDS=<comma-separated-live-model-bundle-ids>"
+        in environment_example
+    )
     assert "# MQTT_USERNAME=<mqtt-username>" in environment_example
     assert "# MQTT_PASSWORD=<mqtt-password>" in environment_example
 

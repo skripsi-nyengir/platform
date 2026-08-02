@@ -19,15 +19,25 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection
+import torch
 
 from anomaly_backend import tables
 from anomaly_backend.config import Settings
 from anomaly_backend.db import create_database_engine
 from anomaly_backend.live_model_bootstrap import (
     LiveModelBundleError,
+    _ordered_bundle_ids,
     bootstrap_live_model,
 )
 from anomaly_worker import artifact_scorer
+from anomaly_worker.architectures import (
+    Conv1dAutoencoder,
+    GruAutoencoder,
+    LstmAutoencoder,
+    RnnAutoencoder,
+    TransformerAutoencoder,
+    build_model,
+)
 from anomaly_worker.artifact_scorer import ArtifactDescriptor, ArtifactScorer
 from tests.live_bundle_fixture import (
     canonical_bytes,
@@ -100,6 +110,95 @@ def _configure_bundle(
     monkeypatch.setenv("MODEL_ARTIFACTS_PATH", str(root))
     monkeypatch.setenv("LIVE_MODEL_BUNDLE_ID", bundle_id)
     monkeypatch.delenv("MODEL_ARTIFACTS_DIR", raising=False)
+
+
+def test_ordered_bundle_ids_trims_values_and_puts_primary_first() -> None:
+    assert _ordered_bundle_ids(
+        "live-transformer-v2",
+        " live-lstm-v2, live-transformer-v2 ,live-conv1d-v2 ",
+    ) == ("live-transformer-v2", "live-lstm-v2", "live-conv1d-v2")
+
+
+@pytest.mark.parametrize(
+    ("primary", "configured", "message"),
+    [
+        (None, "live-transformer-v2", "LIVE_MODEL_BUNDLE_ID is required"),
+        ("live-transformer-v2", "", "empty entry"),
+        ("live-transformer-v2", "live-transformer-v2, ", "empty entry"),
+        (
+            "live-transformer-v2",
+            "live-transformer-v2,live-transformer-v2",
+            "duplicate",
+        ),
+        (
+            "live-transformer-v2",
+            "live-lstm-v2,live-conv1d-v2",
+            "must contain LIVE_MODEL_BUNDLE_ID",
+        ),
+    ],
+)
+def test_ordered_bundle_ids_rejects_invalid_lists(
+    primary: str | None, configured: str, message: str
+) -> None:
+    with pytest.raises(LiveModelBundleError, match=message):
+        _ordered_bundle_ids(primary, configured)
+
+
+@pytest.mark.parametrize(
+    ("architecture", "model_type", "threshold"),
+    [
+        ("artifact-rnn-v3", RnnAutoencoder, 0.0005023972923204374),
+        ("artifact-gru-v3", GruAutoencoder, 0.0005618056084495022),
+        (
+            "artifact-transformer-v3",
+            TransformerAutoencoder,
+            0.00026567234380490805,
+        ),
+        ("artifact-lstm-ae-v3", LstmAutoencoder, 0.0009487349475675721),
+        ("artifact-conv1d-v3", Conv1dAutoencoder, 0.0003201981883103135),
+    ],
+)
+def test_generated_bundles_strictly_load_and_forward_score(
+    tmp_path: Path,
+    architecture: str,
+    model_type: type[torch.nn.Module],
+    threshold: float,
+) -> None:
+    source_model = model_type()
+    bundle_id, _ = write_bundle(
+        tmp_path,
+        model_version=f"{architecture}-test",
+        architecture=architecture,
+        state_dict=source_model.state_dict(),
+        threshold=threshold,
+        threshold_name="clean-point-p995",
+    )
+    descriptor = ArtifactDescriptor.load(tmp_path, bundle_id)
+
+    assert descriptor.architecture == architecture
+    assert descriptor.threshold == threshold
+    assert descriptor.threshold_policy == {
+        "comparison": ">",
+        "fit_split": "validation",
+        "name": "clean-point-p995",
+    }
+    state_dict = cast(
+        dict[str, torch.Tensor],
+        torch.load(
+            descriptor.checkpoint_path,
+            map_location="cpu",
+            weights_only=True,
+        )["state_dict"],
+    )
+    model = build_model(architecture, state_dict).eval()
+    inputs = torch.zeros((1, 10, 2), dtype=torch.float32)
+    with torch.no_grad():
+        reconstruction = model(inputs)
+        scores = (inputs - reconstruction).square().mean(dim=(1, 2))
+
+    assert reconstruction.shape == inputs.shape
+    assert scores.shape == (1,)
+    assert torch.isfinite(scores).all()
 
 
 def test_clean_database_bootstrap_is_atomic_and_idempotent(
@@ -191,7 +290,7 @@ def test_clean_database_bootstrap_is_atomic_and_idempotent(
                     .one()
                 )
                 assert corpus["filter_config"]["artifact_owned"] is True
-                assert corpus["archive_sha256"] == expected_hashes["scaler_manifest_sha256"]
+                assert corpus["archive_sha256"] == source_config["snapshot_identity"]
                 assert snapshot["channels"] == [
                     "temperature_c",
                     "relative_humidity_pct",
@@ -273,6 +372,48 @@ def test_clean_database_bootstrap_is_atomic_and_idempotent(
                     )
                     == 0
                 )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(run())
+
+
+def test_distinct_bundles_can_share_one_scaler_without_corpus_collision(
+    clean_settings: Settings,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_id, first = write_bundle(tmp_path, bundle_id="shared-scaler-a")
+    second_id, second = write_bundle(tmp_path, bundle_id="shared-scaler-b")
+    second["scaler_manifest"].write_bytes(first["scaler_manifest"].read_bytes())
+    second_model = dict(second["model"])
+    second_model["scaler_manifest_sha256"] = sha256(second["scaler_manifest"])
+    second["model_manifest"].write_bytes(canonical_bytes(second_model))
+    _allow_cpu_load(monkeypatch)
+
+    async def run() -> None:
+        engine = create_database_engine(clean_settings)
+        try:
+            async with engine.connect() as connection:
+                _configure_bundle(monkeypatch, tmp_path, first_id)
+                first_registration = await bootstrap_live_model(connection)
+                _configure_bundle(monkeypatch, tmp_path, second_id)
+                second_registration = await bootstrap_live_model(connection)
+
+                corpus_ids = (
+                    await connection.execute(
+                        select(tables.live_model_pairs.c.scaler_snapshot_corpus_id)
+                        .where(
+                            tables.live_model_pairs.c.model_pair_id.in_(
+                                (
+                                    first_registration.model_pair_id,
+                                    second_registration.model_pair_id,
+                                )
+                            )
+                        )
+                    )
+                ).scalars().all()
+                assert len(set(corpus_ids)) == 2
         finally:
             await engine.dispose()
 
