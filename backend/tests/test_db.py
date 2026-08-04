@@ -153,7 +153,7 @@ def test_database_health_and_revision_use_injected_connection() -> None:
                 assert await database_is_healthy(connection)
                 assert (
                     await current_migration_revision(connection)
-                    == "20260731_0010"
+                    == "20260803_0014"
                 )
         finally:
             await engine.dispose()

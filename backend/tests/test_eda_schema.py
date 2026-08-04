@@ -165,7 +165,7 @@ def test_schema_is_current_and_raw_readings_are_timescale_float64() -> None:
         revision = connection.execute(
             "SELECT version_num FROM alembic_version"
         ).fetchone()
-        assert revision == ("20260731_0010",)
+        assert revision == ("20260803_0014",)
         assert EDA_TABLES <= _public_tables(connection)
 
         dimension = connection.execute(
@@ -497,7 +497,7 @@ def test_downgrade_is_blocked_without_mutating_eda_objects() -> None:
     with _connect() as connection:
         assert connection.execute(
             "SELECT version_num FROM alembic_version"
-        ).fetchone() == ("20260731_0010",)
+        ).fetchone() == ("20260803_0014",)
         assert _public_tables(connection) == before
         assert connection.execute(
             """

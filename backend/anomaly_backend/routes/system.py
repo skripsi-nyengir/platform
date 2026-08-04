@@ -26,7 +26,7 @@ from anomaly_backend.problems import DependencyFailure, new_request_id
 from anomaly_backend.sql.system import telemetry_observation
 
 
-_EXPECTED_REVISION = "20260731_0010"
+_EXPECTED_REVISION = "20260803_0014"
 _STALL_BACKLOG_THRESHOLD = 100
 
 router = APIRouter()
