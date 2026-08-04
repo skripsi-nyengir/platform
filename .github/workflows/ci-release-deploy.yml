@@ -48,6 +48,7 @@ jobs:
         working-directory: backend
         run: |
           . ../.github/ci-tools.lock
+          python -m pip install --disable-pip-version-check "torch==2.13.0" --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --disable-pip-version-check -e '.[test]' "ruff==$RUFF_VERSION" "pyright==$PYRIGHT_VERSION"
       - name: Ruff
         run: . .github/ci-tools.lock && ruff check backend
@@ -113,12 +114,12 @@ jobs:
       - name: Install pinned workflow linters
         run: |
           . .github/ci-tools.lock
-          test "$(shellcheck --version | awk '/version:/ {print $2}')" = "$SHELLCHECK_VERSION"
           go install "github.com/rhysd/actionlint/cmd/actionlint@v$ACTIONLINT_VERSION"
       - name: Validate workflows and shell
         run: |
+          . .github/ci-tools.lock
           "$(go env GOPATH)/bin/actionlint"
-          shellcheck scripts/ci/*.sh scripts/deploy/anomaly-platform-deploy scripts/deploy/anomaly-deploy-force-command scripts/deploy/install-vps.sh scripts/deploy/configure-github.sh scripts/deploy/tests/*.sh
+          docker run --rm -v "$PWD:/repo:ro" -w /repo "koalaman/shellcheck:v$SHELLCHECK_VERSION" scripts/ci/*.sh scripts/deploy/anomaly-platform-deploy scripts/deploy/anomaly-deploy-force-command scripts/deploy/install-vps.sh scripts/deploy/configure-github.sh scripts/deploy/tests/*.sh
       - name: Render CPU, production CPU, and GPU Compose contracts
         run: scripts/ci/render-compose-contracts.sh
       - name: Exercise deployment state machine with fake dependencies
