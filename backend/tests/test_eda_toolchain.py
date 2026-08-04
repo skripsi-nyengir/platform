@@ -18,7 +18,9 @@ EXPECTED_EDA_VERSIONS = {
     "scikit-learn": "1.9.0",
     "seaborn": "0.13.2",
 }
-HEAVY_MODULES = {"numpy", "scipy", "statsmodels", "ruptures"}
+# NumPy is a direct runtime dependency for artifact scoring. The API image must
+# exclude the heavier EDA-only stack.
+HEAVY_MODULES = {"scipy", "statsmodels", "ruptures"}
 SOURCE_REPOSITORY = Path("/home/reky/college/skripsih/anomaly-detection")
 TOOLCHAIN_ROLE = os.environ.get("EDA_TOOLCHAIN_ROLE")
 

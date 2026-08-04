@@ -345,6 +345,7 @@ async def _insert_series(
     continuity_epoch: int,
     start: datetime,
     count: int,
+    interval_seconds: int = 6,
 ) -> list[tuple[datetime, UUID]]:
     cursor_key = await _committed_cursor_key(engine)
     async with engine.connect() as connection:
@@ -366,7 +367,7 @@ async def _insert_series(
     assert not duplicate
     keys: list[tuple[datetime, UUID]] = []
     for index in range(count):
-        key = (start + timedelta(seconds=index * 6), uuid4())
+        key = (start + timedelta(seconds=index * interval_seconds), uuid4())
         async with engine.connect() as connection:
             row = await insert_live_telemetry(
                 connection,
@@ -395,6 +396,7 @@ def _alert_values(
     model_version: str,
     corpus_id: str,
     replay_job_id: str | None,
+    window_start_ts: datetime | None = None,
 ) -> dict[str, object]:
     return {
         "alert_id": alert_id,
@@ -403,7 +405,9 @@ def _alert_values(
         "score": 2.5,
         "threshold": 1.0,
         "model_version": model_version,
-        "inference_result_window_start_ts": score_ts - timedelta(seconds=54),
+        "inference_result_window_start_ts": (
+            window_start_ts or score_ts - timedelta(seconds=54)
+        ),
         "inference_result_window_end_ts": score_ts,
         "detection_basis": "artifact_backed",
         "corpus_id": corpus_id,
@@ -1161,7 +1165,7 @@ async def test_live_episode_alert_rejects_replay_lineage(
 
 
 @pytest.mark.anyio
-async def test_linked_episode_alert_is_atomic_and_not_duplicated(
+async def test_equal_second_linked_episode_alert_is_atomic_and_not_duplicated(
     live_lineage: dict[str, object],
 ) -> None:
     async for engine, lease in _leased_engine(f"alert-{uuid4().hex}"):
@@ -1174,6 +1178,7 @@ async def test_linked_episode_alert_is_atomic_and_not_duplicated(
             continuity_epoch=epoch,
             start=await _next_received_ts(engine),
             count=10,
+            interval_seconds=0,
         )
         episode_id = uuid4()
         alert_id = f"live-alert-{uuid4().hex}"
@@ -1184,6 +1189,7 @@ async def test_linked_episode_alert_is_atomic_and_not_duplicated(
             model_version=cast(str, live_lineage["model_version"]),
             corpus_id=cast(str, live_lineage["corpus_id"]),
             replay_job_id=None,
+            window_start_ts=keys[0][0],
         )
         async with engine.connect() as connection:
             for key in keys[:9]:

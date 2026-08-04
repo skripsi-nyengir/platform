@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from datetime import datetime, timedelta
 import hashlib
 import inspect
 import json
@@ -39,6 +40,7 @@ from anomaly_worker.architectures import (
     build_model,
 )
 from anomaly_worker.artifact_scorer import ArtifactDescriptor, ArtifactScorer
+from anomaly_worker.scorer import CHANNELS, ScoreBatch
 from tests.live_bundle_fixture import (
     canonical_bytes,
     rewrite_json,
@@ -95,13 +97,7 @@ def clean_settings() -> Iterator[Settings]:
 
 
 def _allow_cpu_load(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(artifact_scorer.torch.cuda, "is_available", lambda: True)
-    monkeypatch.setattr(
-        artifact_scorer,
-        "_cuda_device",
-        lambda: artifact_scorer.torch.device("cpu"),
-        raising=False,
-    )
+    monkeypatch.setenv("INFERENCE_DEVICE", "cpu")
 
 
 def _configure_bundle(
@@ -615,17 +611,74 @@ def test_descriptor_requires_selected_bundle_and_blocks_path_escape(
         ArtifactDescriptor.load(tmp_path, "../outside")
 
 
-def test_artifact_scorer_requires_cuda_and_loadable_checkpoint(
+def test_artifact_scorer_defaults_to_cuda_and_fails_when_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     bundle_id, _ = write_bundle(tmp_path)
     descriptor = ArtifactDescriptor.load(tmp_path, bundle_id)
+    monkeypatch.delenv("INFERENCE_DEVICE", raising=False)
     monkeypatch.setattr(artifact_scorer.torch.cuda, "is_available", lambda: False)
     with pytest.raises(LiveModelBundleError, match="CUDA"):
         ArtifactScorer(descriptor)
 
+
+def test_artifact_scorer_cpu_device_loads_without_cuda(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle_id, _ = write_bundle(tmp_path)
+    descriptor = ArtifactDescriptor.load(tmp_path, bundle_id)
     _allow_cpu_load(monkeypatch)
+    monkeypatch.setattr(artifact_scorer.torch.cuda, "is_available", lambda: False)
+    scorer = ArtifactScorer(descriptor)
+    context = tuple(
+        datetime(2026, 8, 4) + timedelta(seconds=index) for index in range(10)
+    )
+    values = tuple((0.25, 0.5) for _ in context)
+    batch = ScoreBatch(
+        model_version=descriptor.model_version,
+        schema_version=descriptor.schema_version,
+        channels=CHANNELS,
+        raw_values=(values,),
+        model_values=(values,),
+        context_ts=(context,),
+        context_start_indices=(0,),
+        context_end_indices=(9,),
+        segment_ids=(0,),
+        eligible_window_ordinals=(0,),
+        target_ts=(context[-1],),
+    )
+
+    result = scorer.score(batch)
+
+    assert scorer.model_version == descriptor.model_version
+    assert len(result.points) == 1
+    assert torch.isfinite(torch.tensor(result.points[0].score))
+
+
+def test_artifact_scorer_accepts_explicit_cuda_device(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle_id, _ = write_bundle(tmp_path)
+    descriptor = ArtifactDescriptor.load(tmp_path, bundle_id)
+    monkeypatch.setenv("INFERENCE_DEVICE", "cuda")
+    monkeypatch.setattr(artifact_scorer.torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(artifact_scorer, "_cuda_device", lambda: torch.device("cpu"))
+
     assert ArtifactScorer(descriptor).model_version == descriptor.model_version
+
+
+def test_artifact_scorer_rejects_invalid_inference_device(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bundle_id, _ = write_bundle(tmp_path)
+    descriptor = ArtifactDescriptor.load(tmp_path, bundle_id)
+    monkeypatch.setenv("INFERENCE_DEVICE", "gpu")
+
+    with pytest.raises(
+        LiveModelBundleError,
+        match="INFERENCE_DEVICE must be one of: cpu, cuda",
+    ):
+        ArtifactScorer(descriptor)
 
 
 def test_artifact_scorer_revalidates_checkpoint_after_descriptor_load(

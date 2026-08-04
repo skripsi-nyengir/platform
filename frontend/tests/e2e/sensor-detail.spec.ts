@@ -14,6 +14,20 @@ test('sensor detail uses B02 identity, WIB bounds, and API provenance', async ({
   await expect(page.getByText('12 bounded telemetry records')).toBeVisible()
   await expect(page.getByText(/View truncated/)).toHaveCount(0)
   await expect(page.getByText('Simulasi preview').first()).toBeVisible()
+  const temperatureReconstruction = page.getByRole('heading', {
+    name: 'Temperature reconstruction · last 153 windows',
+  })
+  const humidityReconstruction = page.getByRole('heading', {
+    name: 'RH reconstruction · last 153 windows',
+  })
+  await expect(temperatureReconstruction).toBeVisible()
+  await expect(humidityReconstruction).toBeVisible()
+  await expect(page.getByRole('heading', {
+    name: /reconstruction · last 153 windows/i,
+  })).toHaveText([
+    'Temperature reconstruction · last 153 windows',
+    'RH reconstruction · last 153 windows',
+  ])
   await expect(page.getByRole('region', { name: 'Related alert history' }))
     .toContainText('2026-06-01T00:00:05Z')
 })

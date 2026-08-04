@@ -432,6 +432,15 @@ export function SensorHistoryPanel({
               ) : null}
               <ReconstructionChart
                 sensorId={sensorId}
+                channel="temperature"
+                telemetry={telemetryPoints}
+                inference={inferencePoints}
+                binIntervals={binIntervals}
+                windowCount={153}
+              />
+              <ReconstructionChart
+                sensorId={sensorId}
+                channel="humidity"
                 telemetry={telemetryPoints}
                 inference={inferencePoints}
                 binIntervals={binIntervals}

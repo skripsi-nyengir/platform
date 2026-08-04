@@ -86,14 +86,25 @@ describe('buildReconstructionBand', () => {
       [telemetry(t1, 25, 60), telemetry(t2, 26, 61)],
       [inference(t1, { t: 24.5, h: 59 }), inference(t2, { t: 26.5, h: 62 })],
     )
-    const band = buildReconstructionBand(slice)
-    expect(band.baseline).toEqual([24.5, 26])
-    expect(band.error).toEqual([0.5, 0.5])
+    expect(buildReconstructionBand(slice, 'temperature')).toEqual({
+      baseline: [24.5, 26],
+      error: [0.5, 0.5],
+    })
+    expect(buildReconstructionBand(slice, 'humidity')).toEqual({
+      baseline: [59, 61],
+      error: [1, 1],
+    })
   })
 
   it('yields null band entries when actual is missing', () => {
-    const band = buildReconstructionBand(buildReconstructionSlice([], [inference(t1, { t: 24.9, h: 58 })]))
-    expect(band.baseline).toEqual([null])
-    expect(band.error).toEqual([null])
+    const slice = buildReconstructionSlice([], [inference(t1, { t: 24.9, h: 58 })])
+    expect(buildReconstructionBand(slice, 'temperature')).toEqual({
+      baseline: [null],
+      error: [null],
+    })
+    expect(buildReconstructionBand(slice, 'humidity')).toEqual({
+      baseline: [null],
+      error: [null],
+    })
   })
 })

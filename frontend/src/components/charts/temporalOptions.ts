@@ -141,18 +141,34 @@ export interface ReconstructionBand {
   error: (number | null)[]
 }
 
+export type ReconstructionChannel = 'temperature' | 'humidity'
+
 export function buildReconstructionBand(
   slice: readonly ReconstructionSlicePoint[],
+  channel: ReconstructionChannel,
 ): ReconstructionBand {
-  const baseline = slice.map((point) =>
-    point.actualTemperature !== null && point.reconTemperature !== null
-      ? Math.min(point.actualTemperature, point.reconTemperature)
-      : null,
-  )
-  const error = slice.map((point) =>
-    point.actualTemperature !== null && point.reconTemperature !== null
-      ? Math.abs(point.actualTemperature - point.reconTemperature)
-      : null,
-  )
+  const baseline: (number | null)[] = []
+  const error: (number | null)[] = []
+
+  for (const point of slice) {
+    const actual = channel === 'temperature'
+      ? point.actualTemperature
+      : point.actualHumidity
+    const reconstructed = channel === 'temperature'
+      ? point.reconTemperature
+      : point.reconHumidity
+
+    baseline.push(
+      actual !== null && reconstructed !== null
+        ? Math.min(actual, reconstructed)
+        : null,
+    )
+    error.push(
+      actual !== null && reconstructed !== null
+        ? Math.abs(actual - reconstructed)
+        : null,
+    )
+  }
+
   return { baseline, error }
 }

@@ -1,4 +1,4 @@
-"""GPU artifact inference with strict deployment-bundle verification."""
+"""Device-aware artifact inference with strict deployment-bundle verification."""
 
 from __future__ import annotations
 
@@ -29,6 +29,8 @@ from .scorer import (
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 _SOURCE_CHANNELS = ("suhu", "rh")
 _LIVE_SCHEMA_VERSION = "b02-live-v1"
+_INFERENCE_DEVICE_ENV = "INFERENCE_DEVICE"
+_INFERENCE_DEVICES = {"cpu", "cuda"}
 _DATASET_SPLITS = {"train", "validation", "test"}
 _MODEL_MANIFEST_FIELDS = {
     "architecture",
@@ -436,15 +438,24 @@ def _cuda_device() -> torch.device:
     return torch.device("cuda")
 
 
-class ArtifactScorer:
-    def __init__(self, descriptor: ArtifactDescriptor) -> None:
+def _inference_device() -> torch.device:
+    configured = os.environ.get(_INFERENCE_DEVICE_ENV, "cuda")
+    if configured not in _INFERENCE_DEVICES:
+        raise ArtifactBundleError(f"{_INFERENCE_DEVICE_ENV} must be one of: cpu, cuda")
+    if configured == "cuda":
         if not torch.cuda.is_available():
             raise ArtifactBundleError(
                 "artifact inference requires CUDA, which is unavailable"
             )
+        return _cuda_device()
+    return torch.device("cpu")
+
+
+class ArtifactScorer:
+    def __init__(self, descriptor: ArtifactDescriptor) -> None:
         self.model_version = descriptor.model_version
         self.temporal_semantics = descriptor.temporal_semantics
-        self._device = _cuda_device()
+        self._device = _inference_device()
         try:
             if _sha256(descriptor.checkpoint_path) != descriptor.checkpoint_sha256:
                 raise ArtifactBundleError(

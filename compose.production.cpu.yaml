@@ -1,0 +1,40 @@
+services:
+  migrate:
+    build: !reset null
+    image: ${RUNTIME_IMAGE:?RUNTIME_IMAGE must be an immutable GHCR digest}
+
+  seed:
+    build: !reset null
+    image: ${RUNTIME_IMAGE:?RUNTIME_IMAGE must be an immutable GHCR digest}
+
+  api:
+    build: !reset null
+    image: ${RUNTIME_IMAGE:?RUNTIME_IMAGE must be an immutable GHCR digest}
+
+  worker:
+    build: !reset null
+    image: ${WORKER_IMAGE:?WORKER_IMAGE must be an immutable GHCR digest}
+
+  live-model-bootstrap:
+    build: !reset null
+    image: ${WORKER_IMAGE:?WORKER_IMAGE must be an immutable GHCR digest}
+
+  live-subscriber:
+    build: !reset null
+    image: ${WORKER_IMAGE:?WORKER_IMAGE must be an immutable GHCR digest}
+    environment:
+      LIVE_RUNTIME_MODE: production
+      MQTT_TLS_ENABLED: "true"
+      MQTT_CA_FILE: /run/secrets/mqtt-ca.crt
+    volumes:
+      - /opt/anomaly-platform/shared/mqtt-ca.crt:/run/secrets/mqtt-ca.crt:ro
+
+  nginx:
+    build: !reset null
+    image: ${WEB_IMAGE:?WEB_IMAGE must be an immutable GHCR digest}
+
+  eda-worker: !reset null
+  eda-cli: !reset null
+  import: !reset null
+  eda-import: !reset null
+  sim-import: !reset null

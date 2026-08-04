@@ -991,7 +991,7 @@ alerts = Table(
     CheckConstraint(_FINITE_SCORE_CHECK, name="ck_alerts_score_finite"),
     CheckConstraint(_FINITE_THRESHOLD_CHECK, name="ck_alerts_threshold_finite"),
     CheckConstraint(
-        "inference_result_window_start_ts < inference_result_window_end_ts",
+        "inference_result_window_start_ts <= inference_result_window_end_ts",
         name="ck_alerts_window_order",
     ),
     CheckConstraint(

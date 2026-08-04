@@ -683,6 +683,60 @@ async def test_inference_bucket_preserves_peak_anomaly_and_latest_value(
 
 
 @pytest.mark.anyio
+async def test_raw_inference_returns_equal_second_live_window(
+    client_factory: ClientFactory,
+    live_api_fixture: dict[str, object],
+) -> None:
+    score_ts = cast(datetime, live_api_fixture["base"]) + timedelta(hours=7)
+    inference_id = uuid4()
+    engine = create_database_engine(Settings.from_environ())
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                insert(tables.live_inference).values(
+                    score_ts=score_ts,
+                    inference_id=inference_id,
+                    device_id=LIVE_DEVICE_ID,
+                    window_start_ts=score_ts,
+                    window_end_ts=score_ts,
+                    score=0.25,
+                    threshold=1.0,
+                    is_anomaly=False,
+                    severity_at_score="info",
+                    model_pair_id=live_api_fixture["model_pair_id"],
+                    activation_id=live_api_fixture["activation_id"],
+                    continuity_epoch=1,
+                    model_version=live_api_fixture["model_version"],
+                    snapshot_corpus_id=live_api_fixture["corpus_id"],
+                    ordered_source_fingerprint=f"equal-second-{inference_id}",
+                )
+            )
+
+        async with client_factory(_router("anomaly_backend.routes.inference")) as (
+            _,
+            client,
+        ):
+            response = await client.get(
+                "/api/inference-results",
+                params={
+                    "device_id": LIVE_DEVICE_ID,
+                    "from": score_ts.isoformat(),
+                    "to": (score_ts + timedelta(seconds=1)).isoformat(),
+                    "bucket": "raw",
+                    "model_version": cast(str, live_api_fixture["model_version"]),
+                },
+            )
+
+        assert response.status_code == 200
+        body = _payload(response)
+        assert body["returned_count"] == 1
+        assert body["points"][0]["window_start_ts"] == score_ts.isoformat()
+        assert body["points"][0]["window_end_ts"] == score_ts.isoformat()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.anyio
 async def test_live_alert_detail_events_and_manual_lifecycle_race(
     client_factory: ClientFactory,
     live_api_fixture: dict[str, object],

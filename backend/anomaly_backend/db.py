@@ -8,6 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_en
 from anomaly_backend.config import Settings
 
 
+def _single_migration_revision(revisions: list[str]) -> str | None:
+    return revisions[0] if len(revisions) == 1 else None
+
+
 def create_database_engine(settings: Settings) -> AsyncEngine:
     return create_async_engine(settings.async_database_url)
 
@@ -27,10 +31,12 @@ async def current_migration_revision(connection: AsyncConnection) -> str | None:
         return None
     version_num = column("version_num", String)
     alembic_version = table("alembic_version", version_num)
-    revision = await connection.scalar(
-        select(version_num).select_from(alembic_version)
-    )
-    return None if revision is None else str(revision)
+    revisions = (
+        await connection.scalars(select(version_num).select_from(alembic_version))
+    ).all()
+    # A linear Alembic history has exactly one current revision. Returning no
+    # revision for a branched database makes readiness fail closed.
+    return _single_migration_revision([str(revision) for revision in revisions])
 
 
 async def get_connection(request: Request) -> AsyncIterator[AsyncConnection]:

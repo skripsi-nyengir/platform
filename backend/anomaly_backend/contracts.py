@@ -442,8 +442,8 @@ class InferencePoint(StrictModel):
 
     @model_validator(mode="after")
     def validate_window(self) -> InferencePoint:
-        if compare_historical_datetimes(self.window_start_ts, self.window_end_ts) >= 0:
-            raise ValueError("window_start_ts must be earlier than window_end_ts")
+        if compare_historical_datetimes(self.window_start_ts, self.window_end_ts) > 0:
+            raise ValueError("window_start_ts must not be later than window_end_ts")
         if compare_historical_datetimes(self.window_end_ts, self.score_ts) > 0:
             raise ValueError("score_ts must not be earlier than window_end_ts")
         return self
@@ -1000,6 +1000,8 @@ class ReadinessResponse(StrictModel):
     status: Literal["ready", "not_ready"]
     request_id: str
     checked_at: OperationalInstant
+    database_revision: str
+    minimum_database_revision: str
     dependencies: list[ReadinessDependency] = Field(max_length=500)
 
 

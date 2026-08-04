@@ -1,0 +1,62 @@
+name: Production release operations
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Restricted production operation
+        required: true
+        type: choice
+        options: [deploy-release, rollback-last]
+      release_tag:
+        description: Required SemVer tag for deploy-release
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  operate:
+    runs-on: ubuntu-24.04
+    environment: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Validate requested operation
+        env:
+          OPERATION: ${{ inputs.operation }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          if [[ "$OPERATION" == deploy-release ]]; then
+            [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "release_tag must be vX.Y.Z" >&2; exit 64; }
+          elif [[ -n "$RELEASE_TAG" ]]; then
+            echo "release_tag is only valid with deploy-release" >&2
+            exit 64
+          fi
+      - name: Download release manifest
+        if: inputs.operation == 'deploy-release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: gh release download "$RELEASE_TAG" --pattern release-manifest.json
+      - name: Run forced production operation
+        env:
+          DEPLOY_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          DEPLOY_HOST: ${{ vars.PRODUCTION_HOST }}
+          DEPLOY_USER: ${{ vars.PRODUCTION_USER }}
+          KNOWN_HOSTS: ${{ vars.PRODUCTION_SSH_KNOWN_HOSTS }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          install -m 0700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 0600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          if [[ "$OPERATION" == deploy-release ]]; then
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+              "$DEPLOY_USER@$DEPLOY_HOST" deploy < release-manifest.json
+          else
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+              "$DEPLOY_USER@$DEPLOY_HOST" rollback-last
+          fi

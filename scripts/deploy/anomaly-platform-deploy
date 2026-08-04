@@ -1,0 +1,211 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+
+if [[ ${ANOMALY_DEPLOY_TESTING:-0} != 1 && $EUID -ne 0 ]]; then
+  echo "anomaly-platform-deploy must run as root" >&2
+  exit 77
+fi
+
+state_dir=${ANOMALY_STATE_DIR:-/opt/anomaly-platform}
+compose_cpu=${ANOMALY_COMPOSE_CPU:-$state_dir/compose.cpu.yaml}
+compose_production=${ANOMALY_COMPOSE_PRODUCTION:-$state_dir/compose.production.cpu.yaml}
+environment_file=${ANOMALY_ENV_FILE:-$state_dir/shared/.env}
+ca_file=${ANOMALY_CA_FILE:-$state_dir/shared/mqtt-ca.crt}
+model_directory=${ANOMALY_MODEL_DIR:-$state_dir/shared/models}
+current_manifest=$state_dir/manifests/current.json
+previous_manifest=$state_dir/manifests/previous.json
+backup_directory=$state_dir/backups
+log_file=$state_dir/logs/deploy.log
+lock_file=$state_dir/deploy.lock
+health_timeout=${ANOMALY_HEALTH_TIMEOUT:-180}
+
+mkdir -p "$state_dir/manifests" "$state_dir/tmp" "$backup_directory" "$state_dir/logs"
+
+log() {
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" | tee -a "$log_file"
+}
+
+fail() {
+  log "CRITICAL: $*"
+  return 1
+}
+
+validate_manifest() {
+  local manifest=$1
+  jq -e '
+    type == "object" and
+    (keys | sort) == ["commit", "release", "runtime", "schema", "web", "worker"] and
+    .schema == 1 and
+    (.release | test("^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$")) and
+    (.commit | test("^[0-9a-f]{40}$")) and
+    (.runtime | test("^ghcr\\.io/skripsi-nyengir/platform-api@sha256:[0-9a-f]{64}$")) and
+    (.worker | test("^ghcr\\.io/skripsi-nyengir/platform-worker-cpu@sha256:[0-9a-f]{64}$")) and
+    (.web | test("^ghcr\\.io/skripsi-nyengir/platform-web@sha256:[0-9a-f]{64}$"))
+  ' "$manifest" >/dev/null
+}
+
+load_manifest_images() {
+  local manifest=$1
+  export RUNTIME_IMAGE WORKER_IMAGE WEB_IMAGE
+  RUNTIME_IMAGE=$(jq -r '.runtime' "$manifest")
+  WORKER_IMAGE=$(jq -r '.worker' "$manifest")
+  WEB_IMAGE=$(jq -r '.web' "$manifest")
+}
+
+compose() {
+  docker compose \
+    --env-file "$environment_file" \
+    -f "$compose_cpu" \
+    -f "$compose_production" \
+    "$@"
+}
+
+preflight() {
+  local available_kb
+  for required in "$compose_cpu" "$compose_production" "$environment_file" "$ca_file"; do
+    [[ -r $required ]] || fail "required file is not readable: $required"
+  done
+  [[ -d $model_directory && -n $(find "$model_directory" -mindepth 1 -maxdepth 1 -print -quit) ]] \
+    || fail "model artifact directory is empty: $model_directory"
+  command -v docker >/dev/null
+  command -v jq >/dev/null
+  command -v curl >/dev/null
+  command -v pg_restore >/dev/null
+  docker compose version >/dev/null
+  docker network inspect reverse_proxy >/dev/null
+  docker ps --filter label=traefik.enable=true --format '{{.ID}}' | grep -q . \
+    || fail "Traefik container was not detected"
+  available_kb=$(df -Pk "$state_dir" | awk 'NR == 2 {print $4}')
+  [[ $available_kb =~ ^[0-9]+$ && $available_kb -ge 1048576 ]] \
+    || fail "less than 1 GiB free in $state_dir"
+  export RUNTIME_IMAGE=${RUNTIME_IMAGE:-ghcr.io/skripsi-nyengir/platform-api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+  export WORKER_IMAGE=${WORKER_IMAGE:-ghcr.io/skripsi-nyengir/platform-worker-cpu@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}
+  export WEB_IMAGE=${WEB_IMAGE:-ghcr.io/skripsi-nyengir/platform-web@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc}
+  compose config >/dev/null
+  log "preflight passed"
+}
+
+pull_images() {
+  local manifest=$1 image
+  while IFS= read -r image; do
+    docker pull "$image"
+  done < <(jq -r '.runtime, .worker, .web' "$manifest")
+}
+
+backup_database() {
+  local container backup
+  container=$(compose ps -q db)
+  [[ -n $container ]] || return 0
+  backup="$backup_directory/database-$(date -u +%Y%m%dT%H%M%S-%NZ).dump"
+  # Expansion is intentionally performed inside the database container.
+  # shellcheck disable=SC2016
+  compose exec -T db sh -eu -c \
+    'exec pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >"$backup"
+  pg_restore --list "$backup" >/dev/null
+  mapfile -t backups < <(find "$backup_directory" -maxdepth 1 -type f -name 'database-*.dump' -printf '%T@ %p\n' | sort -rn | cut -d' ' -f2-)
+  if ((${#backups[@]} > 7)); then
+    rm -- "${backups[@]:7}"
+  fi
+  log "database backup verified: $(basename "$backup")"
+}
+
+start_application() {
+  compose up -d --no-build --no-deps --force-recreate \
+    api worker live-subscriber nginx
+}
+
+stop_application() {
+  compose stop api worker live-subscriber nginx || true
+}
+
+verify_application() {
+  local host deadline health readiness status classification
+  host=$(awk -F= '$1 == "APP_HOST" {print substr($0, index($0, "=") + 1); exit}' "$environment_file")
+  [[ -n $host && $host =~ ^[A-Za-z0-9.-]+$ ]] || fail "APP_HOST is missing or invalid"
+  deadline=$((SECONDS + health_timeout))
+  while ((SECONDS < deadline)); do
+    health=$(curl --fail --silent --show-error --max-time 5 "https://$host/health" 2>/dev/null || true)
+    readiness=$(curl --fail --silent --show-error --max-time 5 "https://$host/ready" 2>/dev/null || true)
+    status=$(curl --fail --silent --show-error --max-time 5 "https://$host/api/system/status" 2>/dev/null || true)
+    if jq -e '.status == "alive"' <<<"$health" >/dev/null 2>&1 \
+      && jq -e '.status == "ready"' <<<"$readiness" >/dev/null 2>&1 \
+      && jq -e '.telemetry.classification != "failed"' <<<"$status" >/dev/null 2>&1 \
+      && ! grep -Eqi 'retrying' <<<"$status"; then
+      classification=$(jq -r '.telemetry.classification' <<<"$status")
+      [[ $classification != degraded ]] || log "WARNING: telemetry is degraded"
+      log "HTTPS health and readiness passed; telemetry=$classification"
+      return 0
+    fi
+    sleep 3
+  done
+  fail "health verification timed out after ${health_timeout}s"
+}
+
+apply_without_migrations() {
+  local manifest=$1
+  load_manifest_images "$manifest"
+  start_application
+  verify_application
+}
+
+rollback_after_failure() {
+  if [[ ! -f $current_manifest ]]; then
+    stop_application
+    fail "first release failed; application stopped and no previous manifest exists"
+  fi
+  log "automatic rollback to current last-known-good manifest"
+  if ! apply_without_migrations "$current_manifest"; then
+    fail "automatic rollback failed; production status is critical"
+  fi
+}
+
+deploy() {
+  local incoming=$state_dir/tmp/incoming.$$.json
+  trap 'rm -f "$incoming"' RETURN
+  cat >"$incoming"
+  validate_manifest "$incoming" || fail "deployment manifest is invalid"
+  preflight
+  load_manifest_images "$incoming"
+  pull_images "$incoming"
+  backup_database
+  if ! compose run --rm migrate \
+    || ! compose run --rm seed \
+    || ! compose run --rm live-model-bootstrap \
+    || ! start_application \
+    || ! verify_application; then
+    rollback_after_failure
+    return 1
+  fi
+  if [[ -f $current_manifest ]]; then
+    cp -- "$current_manifest" "$previous_manifest"
+  fi
+  cp -- "$incoming" "$current_manifest"
+  log "deployment complete: $(jq -r '.release' "$current_manifest")"
+}
+
+rollback_last() {
+  local old_current=$state_dir/tmp/current.$$.json
+  [[ -f $current_manifest ]] || fail "no current last-known-good manifest exists"
+  [[ -f $previous_manifest ]] || fail "no previous last-known-good manifest exists"
+  validate_manifest "$previous_manifest" || fail "previous manifest is invalid"
+  preflight
+  cp -- "$current_manifest" "$old_current"
+  if ! apply_without_migrations "$previous_manifest"; then
+    fail "manual rollback failed; production status is critical"
+  fi
+  cp -- "$previous_manifest" "$current_manifest"
+  cp -- "$old_current" "$previous_manifest"
+  rm -f "$old_current"
+  log "rollback complete: $(jq -r '.release' "$current_manifest")"
+}
+
+exec 9>"$lock_file"
+flock -n 9 || fail "another deployment operation holds the lock"
+
+case ${1:-} in
+  preflight) preflight ;;
+  deploy) deploy ;;
+  rollback-last) rollback_last ;;
+  *) echo "usage: anomaly-platform-deploy {preflight|deploy|rollback-last}" >&2; exit 64 ;;
+esac

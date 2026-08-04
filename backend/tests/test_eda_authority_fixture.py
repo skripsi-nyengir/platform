@@ -12,6 +12,9 @@ from typing import Any
 import pytest
 
 
+pytestmark = pytest.mark.canonical
+
+
 FIXTURE_DIR = Path(__file__).parent / "fixtures/eda_authority"
 GOLDENS_PATH = FIXTURE_DIR / "goldens.json"
 ARRAYS_PATH = FIXTURE_DIR / "golden_arrays.json.gz"

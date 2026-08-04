@@ -2,7 +2,11 @@ import { Box, Paper, Stack, Typography } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { LineChart } from '@mui/x-charts/LineChart'
 import { getChartColors } from '../../components/charts/muiChartTheme'
-import { buildReconstructionBand, buildReconstructionSlice } from '../../components/charts/temporalOptions'
+import {
+  buildReconstructionBand,
+  buildReconstructionSlice,
+  type ReconstructionChannel,
+} from '../../components/charts/temporalOptions'
 import { EmptyState } from '../../components/states/EmptyState'
 import { sensorLabels, type SensorId } from '../../contracts/common'
 import type { InferencePoint } from '../../contracts/inference'
@@ -13,6 +17,7 @@ import type { AlertBinInterval } from './alertBinShapes'
 
 export interface ReconstructionChartProps {
   sensorId: SensorId
+  channel: ReconstructionChannel
   telemetry: readonly TelemetryPoint[]
   inference: readonly InferencePoint[]
   binIntervals?: readonly AlertBinInterval[]
@@ -23,6 +28,7 @@ const chartHeight = tokens.size.control * 5
 
 export function ReconstructionChart({
   sensorId,
+  channel,
   telemetry,
   inference,
   binIntervals = [],
@@ -32,12 +38,26 @@ export function ReconstructionChart({
   const colors = getChartColors(theme)
   const sensorLabel = sensorLabels[sensorId]
   const slice = buildReconstructionSlice(telemetry, inference, windowCount)
+  const isTemperature = channel === 'temperature'
+  const channelTitle = isTemperature ? 'Temperature reconstruction' : 'RH reconstruction'
+  const metricName = isTemperature ? 'temperature' : 'relative humidity'
+  const unit = isTemperature ? '°C' : '%'
+  const yAxisLabel = isTemperature ? 'Temperature (°C)' : 'Relative humidity (%)'
+  const idPrefix = isTemperature ? 'reconstruction' : 'rh-reconstruction'
+  const xAxisId = `${idPrefix}-x-axis`
+  const yAxisId = `${idPrefix}-y-axis`
+  const actualValues = slice.map((point) =>
+    isTemperature ? point.actualTemperature : point.actualHumidity,
+  )
+  const reconstructedValues = slice.map((point) =>
+    isTemperature ? point.reconTemperature : point.reconHumidity,
+  )
   const description =
-    `Actual versus reconstructed temperature for the last ${windowCount} inferred ` +
-    'windows (about one minute). The pink band is the reconstruction error.'
+    `Actual versus reconstructed ${metricName} for the last ${windowCount} inferred windows. ` +
+    'The pink band is the absolute reconstruction error.'
 
-  const values = slice.flatMap((point) =>
-    [point.actualTemperature, point.reconTemperature].filter(
+  const values = actualValues.flatMap((actual, index) =>
+    [actual, reconstructedValues[index]].filter(
       (value): value is number => value !== null,
     ),
   )
@@ -45,16 +65,19 @@ export function ReconstructionChart({
   const dataMax = values.length > 0 ? Math.max(...values) : 1
   const margin = (dataMax - dataMin) * 0.15 || 1
 
-  const { baseline: bandBaseline, error: bandError } = buildReconstructionBand(slice)
+  const { baseline: bandBaseline, error: bandError } = buildReconstructionBand(slice, channel)
+  const valueFormatter = (value: number | null) =>
+    value === null ? null : `${value} ${unit}`
 
   return (
     <Paper component="article" variant="outlined" sx={{ minWidth: 0, p: 2 }}>
       <Stack spacing={1} sx={{ minWidth: 0 }}>
         <Typography variant="h3">
-          Reconstruction · last {windowCount} windows
+          {channelTitle} · last {windowCount} windows
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Data asli vs reconstruction; selisih (error) diarsir pink · Asia/Jakarta (WIB)
+          Data {isTemperature ? 'suhu' : 'RH'} asli vs reconstruction; selisih (error)
+          {' '}diarsir pink · Asia/Jakarta (WIB)
         </Typography>
         {slice.length === 0 ? (
           <EmptyState
@@ -64,19 +87,19 @@ export function ReconstructionChart({
         ) : (
           <Box
             role="img"
-            aria-label={`Reconstruction chart for sensor ${sensorLabel}`}
+            aria-label={`${channelTitle} chart for sensor ${sensorLabel}`}
             aria-description={description}
           >
             <LineChart
-              id={`reconstruction-chart-${sensorId}`}
-              title="Reconstruction"
+              id={`${idPrefix}-chart-${sensorId}`}
+              title={channelTitle}
               desc={description}
               disableKeyboardNavigation
               height={chartHeight}
               skipAnimation
               xAxis={[
                 {
-                  id: 'reconstruction-x-axis',
+                  id: xAxisId,
                   data: slice.map((point) => point.x),
                   scaleType: 'time',
                   label: 'Window end (WIB)',
@@ -84,67 +107,67 @@ export function ReconstructionChart({
               ]}
               yAxis={[
                 {
-                  id: 'reconstruction-y-axis',
-                  label: 'Temperature (°C)',
+                  id: yAxisId,
+                  label: yAxisLabel,
                   min: dataMin - margin,
                   max: dataMax + margin,
                 },
               ]}
               series={[
                 {
-                  id: 'reconstruction-band-baseline',
+                  id: `${idPrefix}-band-baseline`,
                   data: bandBaseline,
                   area: true,
-                  stack: 'reconstruction-band',
+                  stack: `${idPrefix}-band`,
                   color: 'transparent',
                   showMark: false,
                   disableHighlight: true,
                   curve: 'linear',
-                  xAxisId: 'reconstruction-x-axis',
-                  yAxisId: 'reconstruction-y-axis',
+                  xAxisId,
+                  yAxisId,
                 },
                 {
-                  id: 'reconstruction-band-error',
+                  id: `${idPrefix}-band-error`,
                   data: bandError,
                   label: 'Reconstruction error',
                   area: true,
-                  stack: 'reconstruction-band',
+                  stack: `${idPrefix}-band`,
                   color: colors.reconstructionError,
                   showMark: false,
                   disableHighlight: true,
                   curve: 'linear',
-                  xAxisId: 'reconstruction-x-axis',
-                  yAxisId: 'reconstruction-y-axis',
+                  xAxisId,
+                  yAxisId,
                 },
                 {
-                  id: 'reconstruction-actual',
-                  data: slice.map((point) => point.actualTemperature),
-                  label: 'Actual (°C)',
-                  color: colors.temperature,
+                  id: `${idPrefix}-actual`,
+                  data: actualValues,
+                  label: isTemperature ? 'Actual (°C)' : 'Actual RH (%)',
+                  color: isTemperature ? colors.temperature : colors.humidity,
                   curve: 'linear',
                   connectNulls: false,
                   showMark: true,
-                  valueFormatter: (value) => (value === null ? null : `${value} °C`),
-                  xAxisId: 'reconstruction-x-axis',
-                  yAxisId: 'reconstruction-y-axis',
+                  valueFormatter,
+                  xAxisId,
+                  yAxisId,
                 },
                 {
-                  id: 'reconstruction-recon',
-                  data: slice.map((point) => point.reconTemperature),
-                  label: 'Reconstruction (°C)',
+                  id: `${idPrefix}-recon`,
+                  data: reconstructedValues,
+                  label: isTemperature ? 'Reconstruction (°C)' : 'Reconstruction RH (%)',
                   color: colors.threshold,
                   curve: 'linear',
                   connectNulls: false,
                   showMark: true,
-                  valueFormatter: (value) => (value === null ? null : `${value} °C`),
-                  xAxisId: 'reconstruction-x-axis',
-                  yAxisId: 'reconstruction-y-axis',
+                  valueFormatter,
+                  xAxisId,
+                  yAxisId,
                 },
               ]}
             >
               <AlertBinOverlay
                 intervals={binIntervals}
-                xAxisId="reconstruction-x-axis"
+                xAxisId={xAxisId}
                 color={colors.reconstructionError}
               />
             </LineChart>

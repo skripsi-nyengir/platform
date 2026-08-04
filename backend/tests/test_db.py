@@ -30,8 +30,10 @@ def _compose_services(compose: str) -> dict[str, str]:
     services: dict[str, str] = {}
     current_name: str | None = None
     current_lines: list[str] = []
+    lines = compose.splitlines()
+    services_start = lines.index("services:")
 
-    for line in compose.splitlines()[1:]:
+    for line in lines[services_start + 1 :]:
         if line and not line.startswith(" "):
             break
         if line.startswith("  ") and not line.startswith("    ") and line.endswith(":"):
@@ -131,6 +133,9 @@ def test_database_engine_is_async_core_owned() -> None:
         "model_families",
         "model_versions",
         "preprocessing_snapshots",
+        "post_inference_bin_checkpoints",
+        "post_inference_bin_staging",
+        "post_inference_bins",
         "published_corpora",
         "replay_commands",
         "replay_episode_checkpoints",
@@ -153,7 +158,7 @@ def test_database_health_and_revision_use_injected_connection() -> None:
                 assert await database_is_healthy(connection)
                 assert (
                     await current_migration_revision(connection)
-                    == "20260803_0014"
+                    == "20260804_0015"
                 )
         finally:
             await engine.dispose()
@@ -319,6 +324,67 @@ def test_compose_uses_live_nvidia_runtime_for_artifact_inference() -> None:
         assert "reservations:" not in services[service]
 
 
+def test_cpu_compose_selects_cpu_and_routes_only_nginx_through_traefik() -> None:
+    project_root = Path(os.environ["PROJECT_ROOT"])
+    compose = (project_root / "compose.cpu.yaml").read_text(encoding="utf-8")
+    services = _compose_services(compose)
+
+    assert "runtime: nvidia" not in compose
+    assert "NVIDIA_VISIBLE_DEVICES" not in compose
+    assert "NVIDIA_DRIVER_CAPABILITIES" not in compose
+    assert "download.pytorch.org/whl/cu130" not in compose
+    for name in set(services) - {"db", "nginx"}:
+        assert "      context: ./backend" in services[name]
+        assert "      dockerfile: Dockerfile.cpu" in services[name]
+
+    assert "INFERENCE_DEVICE: cpu" in compose
+    assert 'OMP_NUM_THREADS: "${INFERENCE_CPU_THREADS:-1}"' in compose
+    assert 'MKL_NUM_THREADS: "${INFERENCE_CPU_THREADS:-1}"' in compose
+    for name in ("worker", "live-model-bootstrap", "live-subscriber"):
+        assert "    runtime:" not in services[name]
+        assert "      INFERENCE_DEVICE: cpu" in services[name]
+        assert '      OMP_NUM_THREADS: "${INFERENCE_CPU_THREADS:-1}"' in services[name]
+        assert '      MKL_NUM_THREADS: "${INFERENCE_CPU_THREADS:-1}"' in services[name]
+
+    assert '    profiles: ["eda"]' in services["eda-worker"]
+    assert "    ports:" not in services["nginx"]
+    assert "      - backend" in services["nginx"]
+    assert "      - reverse_proxy" in services["nginx"]
+    assert '      traefik.enable: "true"' in services["nginx"]
+    assert "      traefik.docker.network: reverse_proxy" in services["nginx"]
+    assert "${APP_HOST:?APP_HOST is required}" in services["nginx"]
+    assert (
+        '      traefik.http.services.anomaly-platform.loadbalancer.server.port: "80"'
+        in services["nginx"]
+    )
+    assert "  reverse_proxy:\n    external: true\n    name: reverse_proxy" in compose
+
+
+def test_cpu_and_cuda_builds_use_separate_dockerfiles() -> None:
+    project_root = Path(os.environ["PROJECT_ROOT"])
+    cuda_dockerfile = (project_root / "backend" / "Dockerfile").read_text(
+        encoding="utf-8"
+    )
+    cpu_dockerfile = (project_root / "backend" / "Dockerfile.cpu").read_text(
+        encoding="utf-8"
+    )
+
+    assert "download.pytorch.org/whl/cu130" in cuda_dockerfile
+    assert "download.pytorch.org/whl/cpu" not in cuda_dockerfile
+    assert "download.pytorch.org/whl/cpu" in cpu_dockerfile
+    assert "download.pytorch.org/whl/cu130" not in cpu_dockerfile
+    assert "ARG TORCH_INDEX_URL" not in cuda_dockerfile
+    assert "ARG TORCH_INDEX_URL" not in cpu_dockerfile
+
+
+def test_gpu_compose_entrypoint_keeps_the_canonical_cuda_stack() -> None:
+    project_root = Path(os.environ["PROJECT_ROOT"])
+    compose = (project_root / "compose.gpu.yaml").read_text(encoding="utf-8")
+
+    assert compose.splitlines() == ["include:", "  - path: compose.yaml"]
+    assert "compose.cpu.yaml" not in compose
+
+
 def test_compose_uses_only_checked_in_build_contexts_and_private_backend_network() -> None:
     project_root = Path(os.environ["PROJECT_ROOT"])
     compose = (project_root / "compose.yaml").read_text(encoding="utf-8")
@@ -391,7 +457,7 @@ def test_compose_uses_only_checked_in_build_contexts_and_private_backend_network
         assert forbidden not in compose
 
 
-def test_environment_example_adds_only_nginx_port_to_database_settings() -> None:
+def test_environment_example_documents_runtime_and_ingress_settings() -> None:
     project_root = Path(os.environ["PROJECT_ROOT"])
     environment_example = (project_root / ".env.example").read_text(encoding="utf-8")
     keys = {
@@ -402,6 +468,8 @@ def test_environment_example_adds_only_nginx_port_to_database_settings() -> None
 
     assert keys == set(DATABASE_ENV) | {
         "NGINX_PORT",
+        "APP_HOST",
+        "INFERENCE_CPU_THREADS",
         "B02_RAW_ARCHIVE_PATH",
         "EDA_WORKER_LEASE_SECONDS",
         "EDA_WORKER_HEARTBEAT_SECONDS",
@@ -425,12 +493,25 @@ def test_environment_example_adds_only_nginx_port_to_database_settings() -> None
     assert "MQTT_CLIENT_ID=<mqtt-client-id>" in environment_example
     assert "MODEL_ARTIFACTS_DIR=<model-artifacts-directory>" in environment_example
     assert "LIVE_MODEL_BUNDLE_ID=<primary-live-model-bundle-id>" in environment_example
+    assert "APP_HOST=anomaly.mytekna.io" in environment_example
+    assert "INFERENCE_CPU_THREADS=1" in environment_example
     assert (
         "# LIVE_MODEL_BUNDLE_IDS=<comma-separated-live-model-bundle-ids>"
         in environment_example
     )
     assert "# MQTT_USERNAME=<mqtt-username>" in environment_example
     assert "# MQTT_PASSWORD=<mqtt-password>" in environment_example
+
+
+def test_backend_dockerignore_excludes_local_environment_and_caches() -> None:
+    project_root = Path(os.environ["PROJECT_ROOT"])
+    dockerignore = (project_root / "backend" / ".dockerignore").read_text(
+        encoding="utf-8"
+    )
+
+    assert ".venv/" in dockerignore
+    assert ".pytest_cache/" in dockerignore
+    assert "**/__pycache__/" in dockerignore
 
 
 def test_direct_dependencies_are_exactly_pinned() -> None:

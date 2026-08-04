@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as alertContracts from './alerts'
 import { BucketSchema, SensorIdSchema } from './common'
-import { InferenceResponseSchema } from './inference'
+import { InferencePointSchema, InferenceResponseSchema } from './inference'
 import { SystemStatusResponseSchema } from './systemHealth'
 import { TelemetryHistoryResponseSchema } from './telemetry'
 
@@ -72,6 +72,32 @@ describe('B02 public contracts', () => {
     })
 
     expect(response.points[0]).toMatchObject({ severity: 'critical', latest_score: 0.7, sample_count: 3 })
+  })
+
+  it('accepts equal-second live inference windows', () => {
+    const point = {
+      window_start_ts: '2026-08-04T20:57:05',
+      window_end_ts: '2026-08-04T20:57:05',
+      score_ts: '2026-08-04T20:57:05',
+      score: 0.25,
+      latest_score: 0.25,
+      threshold: 1,
+      is_anomaly: false,
+      severity: 'info',
+      sample_count: 1,
+      model_version: 'artifact-transformer-live-point-v1',
+      score_provenance: 'artifact_backed',
+      recon_temperature_c: 25.1,
+      recon_relative_humidity_pct: 61.2,
+      band_half_temperature_c: null,
+      band_half_relative_humidity_pct: null,
+    }
+
+    expect(InferencePointSchema.parse(point).window_end_ts).toBe(point.window_start_ts)
+    expect(InferencePointSchema.safeParse({
+      ...point,
+      window_start_ts: '2026-08-04T20:57:06',
+    }).success).toBe(false)
   })
 
   it('accepts Task 9 alert detail context and nullable replay IDs', () => {

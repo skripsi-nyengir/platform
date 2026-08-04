@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import ValidationError
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -59,7 +60,10 @@ async def post_inference_bins(
         query_fields["cursor"] = cursor
     if model_version is not None:
         query_fields["model_version"] = model_version
-    query = PostInferenceBinsQuery.model_validate(query_fields, strict=True)
+    try:
+        query = PostInferenceBinsQuery.model_validate(query_fields, strict=True)
+    except ValidationError as error:
+        raise InvalidQuery("Query parameters failed validation") from error
     filters: dict[str, object] = {
         "device_id": query.device_id,
         "from": query.from_ts,
