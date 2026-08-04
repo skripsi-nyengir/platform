@@ -14,6 +14,12 @@ from psycopg.rows import dict_row
 
 from anomaly_backend.config import Settings
 from anomaly_backend.replay_contract import acquire_shared_replay_contract_lock
+from anomaly_worker.bin_accumulator import (
+    BinState,
+    ScoredRow,
+    accumulate_bins,
+    default_bin_state,
+)
 from anomaly_worker.scorer import (
     CHANNELS,
     PreviewSimulatorScorer,
@@ -27,6 +33,7 @@ from anomaly_worker.scorer import (
 CHUNK_SIZE = 512
 LEASE_SECONDS = 60
 POLL_SECONDS = 1.0
+POST_INFERENCE_BIN_SCHEMA_VERSION = "post-inference-bins-v1"
 
 
 class ReplayWorkerError(RuntimeError):
@@ -119,6 +126,14 @@ def claim_job(
             )
             connection.execute(
                 "DELETE FROM replay_episode_checkpoints WHERE job_id = %s",
+                (job_id,),
+            )
+            connection.execute(
+                "DELETE FROM post_inference_bin_staging WHERE job_id = %s",
+                (job_id,),
+            )
+            connection.execute(
+                "DELETE FROM post_inference_bin_checkpoints WHERE job_id = %s",
                 (job_id,),
             )
             connection.execute(
@@ -539,6 +554,74 @@ def _accumulate_episodes(
         open_episode["last_eligible_window_ordinal"] = row["eligible_window_ordinal"]
 
 
+def _optional_ts(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value) if value is not None else None
+
+
+def _load_bin_checkpoint(
+    connection: psycopg.Connection[dict[str, Any]], job_id: str
+) -> BinState:
+    row = connection.execute(
+        "SELECT state FROM post_inference_bin_checkpoints WHERE job_id = %s",
+        (job_id,),
+    ).fetchone()
+    if row is None:
+        return default_bin_state()
+    state = row["state"]
+    if not isinstance(state, dict):
+        raise ReplayWorkerError("post-inference bin checkpoint is malformed")
+    return cast(BinState, cast(object, state))
+
+
+def _accumulate_post_inference_bins(
+    connection: psycopg.Connection[dict[str, Any]],
+    job: dict[str, Any],
+    state: BinState,
+    staged_rows: list[dict[str, Any]],
+) -> BinState:
+    rows = [
+        ScoredRow(
+            score_ts=row["score_ts"].isoformat(),
+            score=float(row["score"]),
+            is_anomaly=bool(row["is_anomaly"]),
+            threshold=float(row["threshold"]),
+            segment_id=int(row["segment_id"]),
+        )
+        for row in staged_rows
+    ]
+    completed, new_state = accumulate_bins(state, rows)
+    for completed_bin in completed:
+        connection.execute(
+            """
+            INSERT INTO post_inference_bin_staging (
+                job_id, segment_id, bin_ordinal,
+                start_score_ts, end_score_ts, scored_timestamp_count,
+                is_alert, candidate_alert_count,
+                first_alert_ts, last_alert_ts,
+                peak_score, latest_score, threshold
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+            """,
+            (
+                job["job_id"],
+                completed_bin.segment_id,
+                completed_bin.bin_ordinal,
+                datetime.fromisoformat(completed_bin.start_score_ts),
+                datetime.fromisoformat(completed_bin.end_score_ts),
+                completed_bin.scored_timestamp_count,
+                completed_bin.is_alert,
+                completed_bin.candidate_alert_count,
+                _optional_ts(completed_bin.first_alert_ts),
+                _optional_ts(completed_bin.last_alert_ts),
+                completed_bin.peak_score,
+                completed_bin.latest_score,
+                completed_bin.threshold,
+            ),
+        )
+    return new_state
+
+
 def process_chunk(
     connection: psycopg.Connection[dict[str, Any]],
     worker_id: str,
@@ -763,6 +846,19 @@ def process_chunk(
             """,
                 staged_rows,
             )
+        bin_state = _load_bin_checkpoint(connection, str(job["job_id"]))
+        bin_state = _accumulate_post_inference_bins(
+            connection, job, bin_state, staged_rows
+        )
+        connection.execute(
+            """
+            INSERT INTO post_inference_bin_checkpoints (job_id, state, updated_at)
+            VALUES (%s, %s::jsonb, %s)
+            ON CONFLICT (job_id) DO UPDATE
+            SET state = EXCLUDED.state, updated_at = EXCLUDED.updated_at
+            """,
+            (job["job_id"], json.dumps(bin_state), now),
+        )
         state = _load_checkpoint(connection, str(job["job_id"]))
         _accumulate_episodes(connection, job, state, staged_rows)
         connection.execute(
@@ -859,6 +955,35 @@ def publish_job(
             ORDER BY score_ts
             """,
             (job["device_id"], job["corpus_id"], job["job_id"]),
+        )
+        connection.execute(
+            """
+            INSERT INTO post_inference_bins (
+                device_id, model_version, score_provenance, replay_job_id,
+                segment_id, bin_ordinal, start_score_ts, end_score_ts,
+                scored_timestamp_count, is_alert, candidate_alert_count,
+                first_alert_ts, last_alert_ts, peak_score, latest_score,
+                threshold, schema_version, created_at
+            )
+            SELECT
+                %s, %s, %s, %s,
+                segment_id, bin_ordinal, start_score_ts, end_score_ts,
+                scored_timestamp_count, is_alert, candidate_alert_count,
+                first_alert_ts, last_alert_ts, peak_score, latest_score,
+                threshold, %s, %s
+            FROM post_inference_bin_staging
+            WHERE job_id = %s
+            ORDER BY segment_id, bin_ordinal
+            """,
+            (
+                job["device_id"],
+                job["model_version"],
+                job["score_provenance"],
+                job["job_id"],
+                POST_INFERENCE_BIN_SCHEMA_VERSION,
+                created_at,
+                job["job_id"],
+            ),
         )
         for episode in episodes:
             alert_id = _stable_id(
@@ -974,6 +1099,14 @@ def publish_job(
             "DELETE FROM replay_episode_checkpoints WHERE job_id = %s",
             (job["job_id"],),
         )
+        connection.execute(
+            "DELETE FROM post_inference_bin_staging WHERE job_id = %s",
+            (job["job_id"],),
+        )
+        connection.execute(
+            "DELETE FROM post_inference_bin_checkpoints WHERE job_id = %s",
+            (job["job_id"],),
+        )
         _heartbeat(connection, worker_id)
 
 
@@ -1004,6 +1137,14 @@ def fail_or_release_job(
             )
             connection.execute(
                 "DELETE FROM replay_episode_checkpoints WHERE job_id = %s",
+                (job["job_id"],),
+            )
+            connection.execute(
+                "DELETE FROM post_inference_bin_staging WHERE job_id = %s",
+                (job["job_id"],),
+            )
+            connection.execute(
+                "DELETE FROM post_inference_bin_checkpoints WHERE job_id = %s",
                 (job["job_id"],),
             )
         updated = connection.execute(

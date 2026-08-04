@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
+from pathlib import Path
 from typing import cast
 from uuid import UUID
 
@@ -31,6 +33,21 @@ from anomaly_worker.scorer import CHANNELS
 LiveModelBundleError = ArtifactBundleError
 
 
+def _ordered_bundle_ids(primary: str | None, configured: str) -> tuple[str, ...]:
+    if not primary:
+        raise ArtifactBundleError("LIVE_MODEL_BUNDLE_ID is required")
+    bundle_ids = tuple(value.strip() for value in configured.split(","))
+    if any(not value for value in bundle_ids):
+        raise ArtifactBundleError("LIVE_MODEL_BUNDLE_IDS contains an empty entry")
+    if len(set(bundle_ids)) != len(bundle_ids):
+        raise ArtifactBundleError("LIVE_MODEL_BUNDLE_IDS contains duplicate entries")
+    if primary not in bundle_ids:
+        raise ArtifactBundleError(
+            "LIVE_MODEL_BUNDLE_IDS must contain LIVE_MODEL_BUNDLE_ID"
+        )
+    return (primary, *(value for value in bundle_ids if value != primary))
+
+
 def _canonical_json(value: object) -> str:
     return json.dumps(
         value,
@@ -55,13 +72,17 @@ async def bootstrap_live_model(
     connection: AsyncConnection,
     *,
     device_id: str = LIVE_DEVICE_ID,
+    descriptor: ArtifactDescriptor | None = None,
 ) -> LiveModelBootstrapResult:
-    descriptor = ArtifactDescriptor.from_environ()
+    if descriptor is None:
+        descriptor = ArtifactDescriptor.from_environ()
     _ = ArtifactScorer(descriptor)
 
     snapshot_identity = hashlib.sha256(
         _canonical_json(
             {
+                "bundle_id": descriptor.bundle_id,
+                "model_manifest_sha256": descriptor.model_manifest_sha256,
                 "scaler_manifest_sha256": descriptor.scaler_manifest_sha256,
                 "scaler_sha256": descriptor.scaler_sha256,
                 "source": descriptor.source,
@@ -90,7 +111,7 @@ async def bootstrap_live_model(
         "corpus_id": corpus_id,
         "device_id": device_id,
         "status": "published",
-        "archive_sha256": descriptor.scaler_manifest_sha256,
+        "archive_sha256": snapshot_identity,
         "member_sha256": None,
         "preprocessing_contract_version": "live-artifact-v1",
         "source_device_uuid": None,
@@ -217,7 +238,19 @@ async def _main() -> None:
     engine = create_database_engine(Settings.from_environ())
     try:
         async with engine.connect() as connection:
-            _ = await bootstrap_live_model(connection)
+            configured = os.environ.get("LIVE_MODEL_BUNDLE_IDS")
+            if configured is None:
+                _ = await bootstrap_live_model(connection)
+                return
+            bundle_ids = _ordered_bundle_ids(
+                os.environ.get("LIVE_MODEL_BUNDLE_ID"), configured
+            )
+            artifacts_path = os.environ.get("MODEL_ARTIFACTS_PATH")
+            if not artifacts_path:
+                raise ArtifactBundleError("MODEL_ARTIFACTS_PATH is required")
+            for bundle_id in bundle_ids:
+                descriptor = ArtifactDescriptor.load(Path(artifacts_path), bundle_id)
+                _ = await bootstrap_live_model(connection, descriptor=descriptor)
     finally:
         await engine.dispose()
 

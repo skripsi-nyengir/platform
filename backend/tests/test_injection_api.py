@@ -66,7 +66,25 @@ async def test_injection_events_returns_rows_ordered_by_start_ts(
         "SELECT corpus_id FROM corpora WHERE device_id = %s LIMIT 1",
         (PUBLIC_DEVICE_ID,),
     ).fetchone()
-    assert corpus is not None, "seed must provide a corpus for the public device"
+    created_corpus = corpus is None
+    if corpus is None:
+        corpus = connection.execute(
+            """
+            INSERT INTO corpora (
+                corpus_id, device_id, status, archive_sha256,
+                preprocessing_contract_version, time_zone, interval_start,
+                interval_end, filter_config, started_at, completed_at,
+                accepted_count, ignored_index_count, rejection_counts
+            ) VALUES (
+                'test-injection-corpus', %s, 'published', repeat('f', 64),
+                'test-injection-v1', 'Asia/Jakarta',
+                '2026-02-01 00:00:00', '2026-02-01 00:02:00', '{}',
+                now(), now(), 120, 0, '{}'
+            ) RETURNING corpus_id
+            """,
+            (PUBLIC_DEVICE_ID,),
+        ).fetchone()
+    assert corpus is not None
     corpus_id = corpus["corpus_id"]
     event_ids = ("test_inj_evt_b", "test_inj_evt_a")
     try:
@@ -98,6 +116,10 @@ async def test_injection_events_returns_rows_ordered_by_start_ts(
             "DELETE FROM injection_events WHERE event_id = ANY(%s)",
             (list(event_ids),),
         )
+        if created_corpus:
+            connection.execute(
+                "DELETE FROM corpora WHERE corpus_id = 'test-injection-corpus'"
+            )
         connection.close()
 
     assert response.status_code == 200

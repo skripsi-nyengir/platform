@@ -85,7 +85,7 @@ function ScopeCard({
         height: '100%',
         borderTop: `${tokens.size.activeRule}px solid`,
         borderTopColor: primary ? 'primary.main' : 'divider',
-        backgroundColor: primary ? tokens.color.signalSoft : 'background.paper',
+        backgroundColor: primary ? 'app.signalSoft' : 'background.paper',
       }}
     >
       <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>

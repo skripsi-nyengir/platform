@@ -29,6 +29,10 @@ import {
   type InferenceResponse,
 } from '../contracts/inference'
 import {
+  PostInferenceBinsQuerySchema,
+  type PostInferenceBinsResponse,
+} from '../contracts/postInferenceBins'
+import {
   TelemetryHistoryQuerySchema,
   type TelemetryHistoryResponse,
 } from '../contracts/telemetry'
@@ -56,6 +60,7 @@ import {
   activeAnomalyInferenceBySensor,
   normalInferenceBySensor,
 } from './fixtures/inference'
+import { normalPostInferenceBinsBySensor } from './fixtures/postInferenceBins'
 import { modelRegistryResponse } from './fixtures/modelRegistry'
 import { offlineEvaluationsResponse } from './fixtures/offlineEvaluations'
 import {
@@ -557,6 +562,50 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
       return HttpResponse.json(body)
     }),
 
+    http.get('/api/post-inference-bins', ({ request }) => {
+      const url = new URL(request.url)
+      const parsed = PostInferenceBinsQuerySchema.safeParse({
+        deviceId: queryValue(url, 'device_id'),
+        from: queryValue(url, 'from'),
+        to: queryValue(url, 'to'),
+        source: queryValue(url, 'source'),
+        limit: queryNumber(url, 'limit'),
+        cursor: queryValue(url, 'cursor'),
+        modelVersion: queryValue(url, 'model_version'),
+      })
+      if (!parsed.success) return invalidQuery(request)
+      const { deviceId, from, to, limit, source } = parsed.data
+      const offset = cursorOffset(url, 'post-inference-bins')
+      const available =
+        deviceId === simDeviceId ||
+        (state.scenario === 'empty' && deviceId === scenarioDevice.empty)
+          ? []
+          : normalPostInferenceBinsBySensor[deviceId]
+      const bounded = available.filter(
+        (item) =>
+          compareHistoricalDateTimes(item.start_score_ts, from) >= 0 &&
+          compareHistoricalDateTimes(item.start_score_ts, to) < 0,
+      )
+      const bins = bounded.slice(offset, offset + limit)
+      const modelVersion =
+        deviceId === simDeviceId
+          ? ''
+          : normalInferenceBySensor[deviceId][0]?.model_version ?? ''
+      const body = {
+        request_id: 'req_post_inference_bins',
+        device_id: deviceId,
+        from,
+        to,
+        time_zone: 'Asia/Jakarta',
+        source,
+        model_version: modelVersion,
+        bins,
+        next_cursor: nextCursor('post-inference-bins', offset, bins.length, bounded.length),
+        returned_count: bins.length,
+      } satisfies PostInferenceBinsResponse
+      return HttpResponse.json(body)
+    }),
+
     http.get('/api/alert-events', ({ request }) => {
       const url = new URL(request.url)
       const parsed = AlertEventsQuerySchema.safeParse({
@@ -842,23 +891,37 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
           { status: 503 },
         )
       }
-       const telemetry =
-         state.scenario === 'stale'
-           ? {
-               ...systemStatus.telemetry,
-               fresh_sensor_count: 0,
-               stale_sensor_count: 1,
-               offline_sensor_count: 0,
-             }
-           : state.scenario === 'offline'
-             ? {
-                 ...systemStatus.telemetry,
-                 fresh_sensor_count: 0,
-                 stale_sensor_count: 0,
-                 offline_sensor_count: 1,
-               }
-             : { ...systemStatus.telemetry }
-      return HttpResponse.json({ ...systemStatus, telemetry })
+      const staleReason = 'Check broker delivery because the latest valid reading is stale.'
+      const telemetry =
+        state.scenario === 'stale'
+          ? {
+              ...systemStatus.telemetry,
+              classification: 'degraded' as const,
+              reasons: [staleReason],
+              age_seconds: 601,
+              fresh_sensor_count: 0,
+              stale_sensor_count: 1,
+              offline_sensor_count: 0,
+            }
+          : state.scenario === 'offline'
+            ? {
+                ...systemStatus.telemetry,
+                fresh_sensor_count: 0,
+                stale_sensor_count: 0,
+                offline_sensor_count: 1,
+              }
+            : { ...systemStatus.telemetry }
+      const services = state.scenario === 'stale'
+        ? systemStatus.services.map((service) => service.name === 'live-subscriber'
+          ? { ...service, readiness: 'not_ready' as const, detail: staleReason }
+          : { ...service })
+        : systemStatus.services.map((service) => ({ ...service }))
+      return HttpResponse.json({
+        ...systemStatus,
+        overall_observation: state.scenario === 'stale' ? staleReason : systemStatus.overall_observation,
+        services,
+        telemetry,
+      })
     }),
 
     http.get('/health', () => HttpResponse.json(livenessResponse)),

@@ -8,6 +8,7 @@ export function getChartColors(theme: Theme) {
     outlier: theme.palette.error.main,
     threshold: theme.palette.text.secondary,
     normalPoint: theme.palette.info.main,
+    reconstructionError: theme.palette.app.reconstructionError,
   } as const
 }
 

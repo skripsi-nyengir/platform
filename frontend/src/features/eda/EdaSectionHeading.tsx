@@ -10,7 +10,7 @@ export interface EdaSectionHeadingProps {
 export function EdaSectionHeading({ id, title, supportingText }: EdaSectionHeadingProps) {
   return (
     <Stack spacing={1} sx={{ minWidth: 0 }}>
-      <Divider sx={{ borderColor: tokens.color.rule }} />
+      <Divider sx={{ borderColor: 'divider' }} />
       <Typography
         component="h2"
         id={id}

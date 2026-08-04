@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends
@@ -26,10 +27,26 @@ from anomaly_backend.problems import DependencyFailure, new_request_id
 from anomaly_backend.sql.system import telemetry_observation
 
 
-_EXPECTED_REVISION = "20260731_0010"
+_MINIMUM_REVISION = "20260804_0015"
+_REVISION_PATTERN = re.compile(r"^\d{8}_(\d{4})$")
 _STALL_BACKLOG_THRESHOLD = 100
 
 router = APIRouter()
+
+
+def _revision_ordinal(revision: str | None) -> int | None:
+    if revision is None or (match := _REVISION_PATTERN.fullmatch(revision)) is None:
+        return None
+    return int(match.group(1))
+
+
+def _revision_is_compatible(
+    actual_revision: str | None,
+    minimum_revision: str = _MINIMUM_REVISION,
+) -> bool:
+    actual = _revision_ordinal(actual_revision)
+    minimum = _revision_ordinal(minimum_revision)
+    return actual is not None and minimum is not None and actual >= minimum
 
 
 @router.get("/health", response_model=LivenessResponse)
@@ -48,12 +65,17 @@ async def ready(
     if not await database_is_healthy(connection):
         raise DependencyFailure("Database connectivity check failed")
     revision = await current_migration_revision(connection)
-    if revision != _EXPECTED_REVISION:
-        raise DependencyFailure("Database migration revision is not current")
+    if not _revision_is_compatible(revision):
+        raise DependencyFailure(
+            "Database migration revision is malformed, branched, or older than required"
+        )
+    assert revision is not None
     return ReadinessResponse(
         status="ready",
         request_id=new_request_id(),
         checked_at=current_operational_instant(),
+        database_revision=revision,
+        minimum_database_revision=_MINIMUM_REVISION,
         dependencies=[
             ReadinessDependency(
                 name="database",
@@ -63,7 +85,10 @@ async def ready(
             ReadinessDependency(
                 name="migration",
                 status="ready",
-                detail=f"Database revision {_EXPECTED_REVISION} is current",
+                detail=(
+                    f"Database revision {revision} satisfies minimum "
+                    f"{_MINIMUM_REVISION}"
+                ),
             ),
         ],
     )
@@ -77,7 +102,7 @@ async def system_status(
     database_healthy = await database_is_healthy(connection)
     revision = await current_migration_revision(connection)
     observation = await telemetry_observation(connection)
-    database_ready = database_healthy and revision == _EXPECTED_REVISION
+    database_ready = database_healthy and _revision_is_compatible(revision)
     published_count = int(
         await connection.scalar(
             select(func.count()).select_from(tables.published_corpora)
@@ -180,9 +205,12 @@ async def system_status(
                 readiness="ready" if database_ready else "not_ready",
                 checked_at=checked_at,
                 detail=(
-                    f"Database connectivity and revision {_EXPECTED_REVISION} observed"
+                    f"Database connectivity and compatible revision {revision} observed"
                     if database_ready
-                    else "Database connectivity or current revision was not observed"
+                    else (
+                        "Database connectivity or minimum revision "
+                        f"{_MINIMUM_REVISION} was not observed"
+                    )
                 ),
             ),
             SystemServiceStatus(

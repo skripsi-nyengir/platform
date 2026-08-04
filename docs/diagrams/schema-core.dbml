@@ -1,0 +1,128 @@
+Project anomaly_detection_core {
+  database_type: 'PostgreSQL'
+  Note: 'Tampilan INTI (bukan skema fisik penuh). 8 tabel utama jalur live: subjek -> telemetry -> inferensi (skor vs threshold + rekonstruksi) -> alert. Kolom operasional/plumbing (fencing_token, continuity_epoch, lineage, idempotency) sengaja dipangkas. Catatan: tidak ada tabel users; operator tersimpan sebagai kolom actor. Relasi live_inference->model_versions disederhanakan (fisik: lewat live_model_pairs).'
+}
+
+Table devices {
+  device_id text [pk]
+  display_name text [not null]
+  telemetry_kind text [not null]
+  is_active boolean [not null]
+  Note: 'Perangkat/sensor yang dipantau (subjek deteksi).'
+}
+
+Table model_families {
+  model_key text [pk]
+  display_name text [not null]
+  is_public boolean [not null]
+  Note: 'Katalog jenis model deteksi anomali.'
+}
+
+Table model_versions {
+  version text [pk]
+  model_key text [not null, ref: > model_families.model_key]
+  runtime_kind text [not null]
+  window_size int [not null]
+  score_semantics text [not null]
+  threshold double [not null]
+  threshold_policy jsonb [not null]
+  temporal_semantics text [not null]
+  created_at timestamptz [not null]
+  Note: 'Versi model beserta threshold dan semantik skor.'
+}
+
+Table live_telemetry {
+  received_ts timestamp [not null]
+  telemetry_id uuid [not null]
+  device_id text [not null, ref: > devices.device_id]
+  received_at_utc timestamptz [not null]
+  temperature_c double [not null]
+  relative_humidity_pct double [not null]
+  processing_status text [not null]
+
+  indexes {
+    (received_ts, telemetry_id) [pk]
+  }
+  Note: 'Pembacaan sensor live per kanal (suhu, kelembapan).'
+}
+
+Table live_inference {
+  score_ts timestamp [not null]
+  inference_id uuid [not null]
+  device_id text [not null, ref: > devices.device_id]
+  model_version text [not null, ref: > model_versions.version]
+  window_start_ts timestamp [not null]
+  window_end_ts timestamp [not null]
+  score double [not null]
+  threshold double [not null]
+  is_anomaly boolean [not null]
+  severity_at_score text [not null]
+  recon_temperature_c double
+  recon_relative_humidity_pct double
+
+  indexes {
+    (score_ts, inference_id) [pk]
+  }
+  Note: 'Skor anomali vs threshold + hasil rekonstruksi per titik.'
+}
+
+Table alerts {
+  alert_id text [pk]
+  device_id text [not null, ref: > devices.device_id]
+  model_version text [not null, ref: > model_versions.version]
+  score double [not null]
+  threshold double [not null]
+  detection_basis text [not null]
+  episode_start_ts timestamp [not null]
+  episode_end_ts timestamp [not null]
+  last_score_ts timestamp [not null]
+  peak_score double [not null]
+  latest_score double [not null]
+  anomalous_window_count int [not null]
+  closure_reason text [not null]
+  created_at timestamptz
+  Note: 'Catatan alert anomali (satu episode).'
+}
+
+Table alert_events {
+  event_id text [pk]
+  alert_id text [not null, ref: > alerts.alert_id]
+  device_id text [not null, ref: > devices.device_id]
+  event_type text [not null]
+  event_at timestamptz
+  actor text [not null]
+  note text
+  detection_basis text [not null]
+  Note: 'Riwayat siklus alert: detected / acknowledged / resolved (actor = operator).'
+}
+
+Table live_alert_episodes {
+  live_episode_id uuid [pk]
+  alert_id text [not null, unique]
+  device_id text [not null, ref: > devices.device_id]
+  model_version text [not null]
+  started_score_ts timestamp [not null]
+  ended_score_ts timestamp
+  status text [not null]
+  close_reason text
+  Note: 'Episode alert live (rentang mulai-selesai).'
+}
+
+Ref: live_alert_episodes.alert_id - alerts.alert_id
+
+TableGroup "Perangkat & Model" {
+  devices
+  model_families
+  model_versions
+}
+
+TableGroup "Deteksi Live" {
+  live_telemetry
+  live_inference
+}
+
+TableGroup "Alert" {
+  alerts
+  alert_events
+  live_alert_episodes
+}

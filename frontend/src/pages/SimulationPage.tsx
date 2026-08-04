@@ -115,7 +115,7 @@ function ModelCard({
           borderLeft: `${tokens.size.activeRule}px solid transparent`,
           '&[data-active="true"]': {
             borderLeftColor: 'primary.main',
-            backgroundColor: tokens.color.signalSoft,
+            backgroundColor: 'app.signalSoft',
           },
         }}
       >

@@ -14,5 +14,8 @@ test('operator completes acknowledge and resolve lifecycle', async ({ page }) =>
   await page.getByRole('button', { name: 'Acknowledge alert' }).click()
   await expect(page.getByRole('button', { name: 'Resolve alert' })).toBeEnabled()
   await page.getByRole('button', { name: 'Resolve alert' }).click()
-  await expect(page.getByRole('gridcell', { name: 'resolved' })).toBeVisible()
+  await expect(
+    page.getByRole('grid', { name: 'Current alerts' })
+      .getByRole('gridcell', { name: 'resolved', exact: true }),
+  ).toBeVisible()
 })

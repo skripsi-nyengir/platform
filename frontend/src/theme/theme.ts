@@ -1,40 +1,56 @@
 import { createTheme } from '@mui/material/styles'
 import type {} from '@mui/x-charts/themeAugmentation'
 import type {} from '@mui/x-data-grid/themeAugmentation'
+import type { AppPalette } from './mui'
 import { tokens } from './tokens'
 
+export const THEME_MODE_STORAGE_KEY = 'adp-theme-mode'
+export const THEME_COLOR_SCHEME_STORAGE_KEY = 'adp-theme-scheme'
+
+type SchemeColors = typeof tokens.color.dark | typeof tokens.color.light
+
+function appPalette(colors: SchemeColors): AppPalette {
+  return {
+    signalSoft: colors.signalSoft,
+    successSoft: colors.successSoft,
+    successText: colors.successText,
+    warningSoft: colors.warningSoft,
+    offlineSoft: colors.offlineSoft,
+    strongDivider: colors.ruleStrong,
+    sidebarDivider: colors.ruleStrong,
+    sidebarText: colors.sidebarText,
+    sidebarMuted: colors.sidebarMuted,
+    sidebarHover: colors.sidebarHover,
+    sidebarActive: colors.sidebarActive,
+    reconstructionError: colors.reconstructionError,
+  }
+}
+
+function palette(colors: SchemeColors) {
+  return {
+    primary: { main: colors.signal },
+    success: { main: colors.success },
+    warning: { main: colors.warning },
+    error: { main: colors.alarm },
+    info: { main: colors.offline, light: colors.offlineSoft },
+    text: { primary: colors.ink, secondary: colors.inkMuted },
+    divider: colors.rule,
+    background: { default: colors.paper, paper: colors.surface },
+    app: appPalette(colors),
+  }
+}
+
 export const theme = createTheme({
+  cssVariables: {
+    colorSchemeSelector: 'data',
+  },
+  colorSchemes: {
+    light: { palette: palette(tokens.color.light) },
+    dark: { palette: palette(tokens.color.dark) },
+  },
   spacing: tokens.spacing.unit,
   shape: {
     borderRadius: tokens.radius.sm,
-  },
-  palette: {
-    mode: 'dark',
-    primary: {
-      main: tokens.color.signal,
-    },
-    success: {
-      main: tokens.color.success,
-    },
-    warning: {
-      main: tokens.color.warning,
-    },
-    error: {
-      main: tokens.color.alarm,
-    },
-    info: {
-      main: tokens.color.offline,
-      light: tokens.color.offlineSoft,
-    },
-    text: {
-      primary: tokens.color.ink,
-      secondary: tokens.color.inkMuted,
-    },
-    divider: tokens.color.rule,
-    background: {
-      default: tokens.color.paper,
-      paper: tokens.color.surface,
-    },
   },
   typography: {
     fontFamily: tokens.font.ui,
@@ -79,15 +95,14 @@ export const theme = createTheme({
       },
     },
     MuiCssBaseline: {
-      styleOverrides: {
+      styleOverrides: (activeTheme) => ({
         html: {
-          colorScheme: 'dark',
-          backgroundColor: tokens.color.paper,
+          backgroundColor: activeTheme.vars.palette.background.default,
         },
         body: {
           margin: 0,
-          color: tokens.color.ink,
-          backgroundColor: tokens.color.paper,
+          color: activeTheme.vars.palette.text.primary,
+          backgroundColor: activeTheme.vars.palette.background.default,
         },
         '#root': {
           minWidth: 0,
@@ -97,48 +112,48 @@ export const theme = createTheme({
           boxSizing: 'border-box',
         },
         'a:focus-visible, button:focus-visible, [tabindex]:focus-visible': {
-          outline: `${tokens.focus.width}px solid ${tokens.color.signal}`,
+          outline: `${tokens.focus.width}px solid ${activeTheme.vars.palette.primary.main}`,
           outlineOffset: tokens.focus.offset,
         },
-      },
+      }),
     },
     MuiDrawer: {
       styleOverrides: {
-        paper: {
+        paper: ({ theme: activeTheme }) => ({
           borderRight: 'none',
-          backgroundColor: tokens.color.paper,
-          color: tokens.color.ink,
-        },
+          backgroundColor: activeTheme.vars.palette.background.default,
+          color: activeTheme.vars.palette.text.primary,
+        }),
       },
     },
     MuiListItemButton: {
       styleOverrides: {
-        root: {
+        root: ({ theme: activeTheme }) => ({
           minHeight: tokens.size.control,
           borderLeft: `${tokens.size.activeRule}px solid transparent`,
-          color: tokens.color.sidebarText,
+          color: activeTheme.vars.palette.app.sidebarText,
           '&:hover': {
-            backgroundColor: tokens.color.sidebarHover,
-            color: tokens.color.ink,
+            backgroundColor: activeTheme.vars.palette.app.sidebarHover,
+            color: activeTheme.vars.palette.text.primary,
           },
           '&.active': {
-            borderLeftColor: tokens.color.signal,
-            backgroundColor: tokens.color.sidebarActive,
-            color: tokens.color.ink,
+            borderLeftColor: activeTheme.vars.palette.primary.main,
+            backgroundColor: activeTheme.vars.palette.app.sidebarActive,
+            color: activeTheme.vars.palette.text.primary,
           },
           '&.Mui-focusVisible': {
-            outline: `${tokens.focus.width}px solid ${tokens.color.signal}`,
+            outline: `${tokens.focus.width}px solid ${activeTheme.vars.palette.primary.main}`,
             outlineOffset: -tokens.focus.width,
           },
-        },
+        }),
       },
     },
     MuiCard: {
       styleOverrides: {
-        root: {
+        root: ({ theme: activeTheme }) => ({
           backgroundImage: 'none',
-          borderColor: tokens.color.rule,
-        },
+          borderColor: activeTheme.vars.palette.divider,
+        }),
       },
     },
     MuiChip: {
@@ -146,10 +161,10 @@ export const theme = createTheme({
         root: {
           fontWeight: 600,
         },
-        colorSuccess: {
-          backgroundColor: tokens.color.successSoft,
-          color: tokens.color.successText,
-        },
+        colorSuccess: ({ theme: activeTheme }) => ({
+          backgroundColor: activeTheme.vars.palette.app.successSoft,
+          color: activeTheme.vars.palette.app.successText,
+        }),
       },
     },
     MuiButton: {
@@ -166,17 +181,17 @@ export const theme = createTheme({
     },
     MuiPaper: {
       styleOverrides: {
-        outlined: {
-          borderColor: tokens.color.rule,
+        outlined: ({ theme: activeTheme }) => ({
+          borderColor: activeTheme.vars.palette.divider,
           boxShadow: 'none',
-        },
+        }),
       },
     },
     MuiDataGrid: {
       styleOverrides: {
-        root: {
-          borderColor: tokens.color.ruleStrong,
-        },
+        root: ({ theme: activeTheme }) => ({
+          borderColor: activeTheme.vars.palette.app.strongDivider,
+        }),
         columnHeaderTitle: {
           fontWeight: 700,
         },

@@ -81,18 +81,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       MODEL_ARTIFACTS_PATH: /models
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
     volumes:
       - "${MODEL_ARTIFACTS_DIR:-./REPLACE_WITH_MODEL_ARTIFACTS}:/models:ro"
+    runtime: nvidia
     depends_on:
       seed:
         condition: service_completed_successfully
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     restart: unless-stopped
     networks:
       - backend
@@ -110,8 +106,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       MODEL_ARTIFACTS_PATH: /models
       LIVE_MODEL_BUNDLE_ID: ${LIVE_MODEL_BUNDLE_ID:-REPLACE_WITH_LIVE_MODEL_BUNDLE_ID}
+      LIVE_MODEL_BUNDLE_IDS: ${LIVE_MODEL_BUNDLE_IDS:-${LIVE_MODEL_BUNDLE_ID:-REPLACE_WITH_LIVE_MODEL_BUNDLE_ID}}
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
     volumes:
       - "${MODEL_ARTIFACTS_DIR:-./REPLACE_WITH_MODEL_ARTIFACTS}:/models:ro"
+    runtime: nvidia
     depends_on:
       db:
         condition: service_healthy
@@ -119,13 +119,6 @@ services:
         condition: service_completed_successfully
       seed:
         condition: service_completed_successfully
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     networks:
       - backend
 
@@ -152,8 +145,11 @@ services:
       MQTT_RECONNECT_MIN_SECONDS: "1"
       MQTT_RECONNECT_MAX_SECONDS: "30"
       LIVE_RUNTIME_MODE: ${LIVE_RUNTIME_MODE:-test}
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
     volumes:
       - "${MODEL_ARTIFACTS_DIR:-./REPLACE_WITH_MODEL_ARTIFACTS}:/models:ro"
+    runtime: nvidia
     depends_on:
       db:
         condition: service_healthy
@@ -163,13 +159,6 @@ services:
         condition: service_completed_successfully
       live-model-bootstrap:
         condition: service_completed_successfully
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
     restart: unless-stopped
     networks:
       - backend

@@ -16,6 +16,7 @@ from anomaly_backend.sql.live import (
     BoundaryReason,
     EpisodeCloseReason,
     LiveLeaseLost,
+    LiveWindowDesyncError,
     TelemetryKey,
     acquire_writer_lease,
     apply_live_activation,
@@ -95,6 +96,12 @@ class LiveScoringModel(Protocol):
 
     @property
     def scorer(self) -> Scorer: ...
+
+    @property
+    def minimum(self) -> tuple[float, float]: ...
+
+    @property
+    def maximum(self) -> tuple[float, float]: ...
 
     def scale_pair(self, value: tuple[float, float]) -> tuple[float, float]: ...
 
@@ -256,7 +263,7 @@ class LiveService:
                             .where(tables.live_telemetry.c.device_id == self._device_id)
                             .order_by(
                                 tables.live_telemetry.c.received_ts.desc(),
-                                tables.live_telemetry.c.telemetry_id.desc(),
+                                tables.live_telemetry.c.ingress_sequence.desc(),
                             )
                             .limit(1)
                         )
@@ -827,6 +834,17 @@ class LiveService:
 
         point = result.points[0]
         score = float(point.score)
+        recon = point.reconstruction
+        if recon is not None:
+            recon_temperature_c: float | None = (
+                recon[0] * (model.maximum[0] - model.minimum[0]) + model.minimum[0]
+            )
+            recon_relative_humidity_pct: float | None = (
+                recon[1] * (model.maximum[1] - model.minimum[1]) + model.minimum[1]
+            )
+        else:
+            recon_temperature_c = None
+            recon_relative_humidity_pct = None
         next_episode_id = uuid4()
         episode_transition = evaluate_score(
             self._episode_state,
@@ -887,7 +905,13 @@ class LiveService:
                         "normal_recovery" if episode_transition.closed else None
                     ),
                     health_status="healthy",
+                    recon_temperature_c=recon_temperature_c,
+                    recon_relative_humidity_pct=recon_relative_humidity_pct,
                 )
+        except LiveWindowDesyncError:
+            self._window_state = WindowEngineState()
+            self._health_detail_code = "window_desync_reset"
+            raise
         except Exception:
             self._health_detail_code = "persistence_retry"
             raise

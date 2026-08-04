@@ -33,7 +33,7 @@ InjectionFamily = Literal[
 InjectionSeverity = Literal["low", "medium", "high"]
 LivenessState = Literal["alive", "not_alive", "unknown"]
 ReadinessState = Literal["ready", "not_ready", "unknown"]
-CursorScope = Literal["telemetry", "inference", "alert-events"]
+CursorScope = Literal["telemetry", "inference", "alert-events", "post_inference_bins"]
 
 _HISTORICAL_DATETIME = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$")
 _OPERATIONAL_INSTANT = re.compile(
@@ -442,8 +442,8 @@ class InferencePoint(StrictModel):
 
     @model_validator(mode="after")
     def validate_window(self) -> InferencePoint:
-        if compare_historical_datetimes(self.window_start_ts, self.window_end_ts) >= 0:
-            raise ValueError("window_start_ts must be earlier than window_end_ts")
+        if compare_historical_datetimes(self.window_start_ts, self.window_end_ts) > 0:
+            raise ValueError("window_start_ts must not be later than window_end_ts")
         if compare_historical_datetimes(self.window_end_ts, self.score_ts) > 0:
             raise ValueError("score_ts must not be earlier than window_end_ts")
         return self
@@ -498,6 +498,70 @@ class InferenceResponse(StrictModel):
 
 
 InferenceResultsResponse = InferenceResponse
+
+
+PostInferenceBinSource = Literal["replay", "live"]
+
+
+class PostInferenceBin(StrictModel):
+    segment_id: int
+    bin_ordinal: int
+    start_score_ts: HistoricalDateTime
+    end_score_ts: HistoricalDateTime
+    scored_timestamp_count: int
+    is_alert: bool
+    candidate_alert_count: Annotated[int, Field(ge=0)]
+    first_alert_ts: HistoricalDateTime | None = None
+    last_alert_ts: HistoricalDateTime | None = None
+    peak_score: float
+    latest_score: float
+    threshold: float
+    schema_version: str
+
+    @model_validator(mode="after")
+    def validate_window(self) -> PostInferenceBin:
+        if compare_historical_datetimes(self.start_score_ts, self.end_score_ts) > 0:
+            raise ValueError("start_score_ts must not be later than end_score_ts")
+        return self
+
+
+class PostInferenceBinsQuery(StrictModel):
+    _optional_non_nullable_fields: ClassVar[frozenset[str]] = frozenset(
+        {"cursor", "model_version"}
+    )
+
+    device_id: CorpusDeviceId
+    from_ts: HistoricalDateTime = Field(alias="from")
+    to_ts: HistoricalDateTime = Field(alias="to")
+    source: PostInferenceBinSource = "replay"
+    limit: Annotated[int, Field(ge=1, le=5_000)] = 500
+    cursor: str | None = Field(default=None, exclude_if=_is_none)
+    model_version: str | None = Field(default=None, exclude_if=_is_none)
+
+    @model_validator(mode="after")
+    def validate_range(self) -> PostInferenceBinsQuery:
+        if compare_historical_datetimes(self.from_ts, self.to_ts) >= 0:
+            raise ValueError("from must be earlier than to")
+        return self
+
+
+class PostInferenceBinsResponse(StrictModel):
+    request_id: str
+    device_id: CorpusDeviceId
+    from_ts: HistoricalDateTime = Field(alias="from")
+    to_ts: HistoricalDateTime = Field(alias="to")
+    time_zone: Literal["Asia/Jakarta"]
+    source: PostInferenceBinSource
+    model_version: str
+    bins: list[PostInferenceBin] = Field(max_length=5_000)
+    next_cursor: str | None
+    returned_count: Annotated[int, Field(ge=0)]
+
+    @model_validator(mode="after")
+    def validate_count(self) -> PostInferenceBinsResponse:
+        if self.returned_count != len(self.bins):
+            raise ValueError("returned_count must equal bins length")
+        return self
 
 
 class AlertEvent(StrictModel):
@@ -936,6 +1000,8 @@ class ReadinessResponse(StrictModel):
     status: Literal["ready", "not_ready"]
     request_id: str
     checked_at: OperationalInstant
+    database_revision: str
+    minimum_database_revision: str
     dependencies: list[ReadinessDependency] = Field(max_length=500)
 
 

@@ -1,0 +1,318 @@
+services:
+  db:
+    image: timescale/timescaledb:2.28.3-pg17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - backend
+
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+      target: runtime
+    command: ["alembic", "-c", "alembic.ini", "upgrade", "head"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend
+
+  seed:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+      target: runtime
+    command: ["python", "-m", "anomaly_backend.seed"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+      target: runtime
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).read()"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    networks:
+      - backend
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+      target: worker
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MODEL_ARTIFACTS_PATH: /models
+      INFERENCE_DEVICE: cpu
+      OMP_NUM_THREADS: "${INFERENCE_CPU_THREADS:-1}"
+      MKL_NUM_THREADS: "${INFERENCE_CPU_THREADS:-1}"
+    volumes:
+      - "${MODEL_ARTIFACTS_DIR:-./REPLACE_WITH_MODEL_ARTIFACTS}:/models:ro"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - backend
+
+  live-model-bootstrap:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+      target: worker
+    command: ["python", "-m", "anomaly_backend.live_model_bootstrap"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MODEL_ARTIFACTS_PATH: /models
+      LIVE_MODEL_BUNDLE_ID: ${LIVE_MODEL_BUNDLE_ID:-REPLACE_WITH_LIVE_MODEL_BUNDLE_ID}
+      LIVE_MODEL_BUNDLE_IDS: ${LIVE_MODEL_BUNDLE_IDS:-${LIVE_MODEL_BUNDLE_ID:-REPLACE_WITH_LIVE_MODEL_BUNDLE_ID}}
+      INFERENCE_DEVICE: cpu
+      OMP_NUM_THREADS: "${INFERENCE_CPU_THREADS:-1}"
+      MKL_NUM_THREADS: "${INFERENCE_CPU_THREADS:-1}"
+    volumes:
+      - "${MODEL_ARTIFACTS_DIR:-./REPLACE_WITH_MODEL_ARTIFACTS}:/models:ro"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      seed:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  live-subscriber:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+      target: worker
+    command: ["python", "-m", "anomaly_worker.live_subscriber"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      MODEL_ARTIFACTS_PATH: /models
+      LIVE_MODEL_BUNDLE_ID: ${LIVE_MODEL_BUNDLE_ID:-REPLACE_WITH_LIVE_MODEL_BUNDLE_ID}
+      MQTT_BROKER_HOST: ${MQTT_BROKER_HOST}
+      MQTT_BROKER_PORT: ${MQTT_BROKER_PORT}
+      MQTT_TOPIC: ${MQTT_TOPIC}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID}
+      MQTT_TLS_ENABLED: ${MQTT_TLS_ENABLED:-false}
+      MQTT_RECONNECT_MIN_SECONDS: "1"
+      MQTT_RECONNECT_MAX_SECONDS: "30"
+      LIVE_RUNTIME_MODE: ${LIVE_RUNTIME_MODE:-test}
+      INFERENCE_DEVICE: cpu
+      OMP_NUM_THREADS: "${INFERENCE_CPU_THREADS:-1}"
+      MKL_NUM_THREADS: "${INFERENCE_CPU_THREADS:-1}"
+    volumes:
+      - "${MODEL_ARTIFACTS_DIR:-./REPLACE_WITH_MODEL_ARTIFACTS}:/models:ro"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      seed:
+        condition: service_completed_successfully
+      live-model-bootstrap:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - backend
+      - public
+
+  eda-worker:
+    profiles: ["eda"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+      target: eda-worker
+    command: ["python", "-m", "anomaly_worker.eda_service"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      EDA_WORKER_LEASE_SECONDS: ${EDA_WORKER_LEASE_SECONDS:-900}
+      EDA_WORKER_HEARTBEAT_SECONDS: ${EDA_WORKER_HEARTBEAT_SECONDS:-30}
+      EDA_WORKER_MAX_ATTEMPTS: ${EDA_WORKER_MAX_ATTEMPTS:-3}
+      EDA_WORKER_COMPUTE_TIMEOUT_SECONDS: ${EDA_WORKER_COMPUTE_TIMEOUT_SECONDS:-1800}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          memory: "2147483648"
+    restart: unless-stopped
+    networks:
+      - backend
+
+  eda-cli:
+    profiles: ["ops"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+      target: runtime
+    entrypoint: ["python", "-m", "anomaly_backend.eda_cli"]
+    command: ["--help"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  import:
+    profiles: ["import"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+      target: worker
+    command: ["python", "-m", "anomaly_backend.importer"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      B02_RAW_ARCHIVE_PATH: /data/b02f3872.tar.gz
+    volumes:
+      - "${B02_RAW_ARCHIVE_PATH:-./REPLACE_WITH_LEGACY_B02_ARCHIVE.tar.gz}:/data/b02f3872.tar.gz:ro"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  eda-import:
+    profiles: ["eda-import"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+      target: eda-worker
+    command: ["python", "-m", "anomaly_backend.eda_importer"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      EDA_RAW_SOURCE_PATH: /data/sensor_data_long.csv
+      EDA_SOURCE_MANIFEST_PATH: /data/bivariate_b02f3872_source_v1.json
+      EDA_SOURCE_MANIFEST_SHA256: 196178e7424bd2e92268606f0ef33237d2329bdfefd9dce592283c07a697d486
+    volumes:
+      - "${EDA_RAW_SOURCE_PATH:-./REPLACE_WITH_B02_V3_SOURCE/sensor_data_long.csv}:/data/sensor_data_long.csv:ro"
+      - "${EDA_SOURCE_MANIFEST_PATH:-./REPLACE_WITH_B02_V3_SOURCE/source-manifest.json}:/data/bivariate_b02f3872_source_v1.json:ro"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  sim-import:
+    profiles: ["sim-import"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.cpu
+      target: eda-worker
+    command: ["python", "-m", "anomaly_backend.sim_importer"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SIM_INJECTED_NPZ_PATH: /data/test_injected.npz
+      SIM_INJECTED_EVENTS_PATH: /data/test_injected_events.json
+    volumes:
+      - "${SIM_INJECTED_DIR:-./REPLACE_WITH_INJECTED_DATASET}:/data:ro"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  nginx:
+    build:
+      context: ./frontend
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - backend
+      - reverse_proxy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: reverse_proxy
+      traefik.http.routers.anomaly-platform.rule: "Host(`${APP_HOST:?APP_HOST is required}`)"
+      traefik.http.routers.anomaly-platform.entrypoints: websecure
+      traefik.http.routers.anomaly-platform.tls.certresolver: mytlschallenge
+      traefik.http.routers.anomaly-platform.service: anomaly-platform
+      traefik.http.services.anomaly-platform.loadbalancer.server.port: "80"
+
+networks:
+  backend:
+    internal: true
+  public:
+  reverse_proxy:
+    external: true
+    name: reverse_proxy
+
+volumes:
+  db_data:

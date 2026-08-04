@@ -38,6 +38,19 @@ def test_live_runtime_contract_is_canonical_with_ten_rows_and_unit_stride() -> N
     assert "window_size = 10 AND stride = 1" in str(constraint.sqltext)
 
 
+def test_alert_window_contract_allows_equal_second_live_inference() -> None:
+    constraint = next(
+        item
+        for item in tables.alerts.constraints
+        if isinstance(item, CheckConstraint)
+        and item.name == "ck_alerts_window_order"
+    )
+
+    assert "inference_result_window_start_ts <= inference_result_window_end_ts" in str(
+        constraint.sqltext
+    )
+
+
 def assert_validation_error(call: Callable[[], object]) -> None:
     try:
         _ = call()
@@ -155,6 +168,33 @@ def test_inference_point_requires_explicit_score_timestamp_and_preview_provenanc
             {
                 **point.model_dump(),
                 "score_provenance": "deterministic_threshold_fixture",
+            },
+            strict=True,
+        )
+    )
+
+
+def test_inference_point_allows_zero_duration_live_windows() -> None:
+    point = InferencePoint.model_validate(
+        {
+            "window_start_ts": "2026-02-01T00:00:29",
+            "window_end_ts": "2026-02-01T00:00:29",
+            "score_ts": "2026-02-01T00:00:29",
+            "score": 0.5,
+            "threshold": 1.0,
+            "is_anomaly": False,
+            "model_version": "artifact-transformer-live-point-v1",
+            "score_provenance": "artifact_backed",
+        },
+        strict=True,
+    )
+
+    assert point.window_start_ts == point.window_end_ts
+    assert_validation_error(
+        lambda: InferencePoint.model_validate(
+            {
+                **point.model_dump(),
+                "window_start_ts": "2026-02-01T00:00:30",
             },
             strict=True,
         )

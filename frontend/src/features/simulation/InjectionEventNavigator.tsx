@@ -148,7 +148,7 @@ export function InjectionEventNavigator({
           </Stack>
         </Stack>
 
-        <Paper variant="outlined" sx={{ p: 3, backgroundColor: tokens.color.offlineSoft }}>
+        <Paper variant="outlined" sx={{ p: 3, backgroundColor: 'app.offlineSoft' }}>
           <Stack spacing={2}>
             <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
               <Typography variant="h3">Event {selectedIndex + 1} of {events.length}</Typography>

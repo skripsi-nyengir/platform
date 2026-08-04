@@ -102,3 +102,73 @@ export function buildTemporalSummary(input: TemporalChartInput): string {
     `${alertCount} detected alert${alertCount === 1 ? '' : 's'}.`,
   ].join(' ')
 }
+
+export interface ReconstructionSlicePoint {
+  x: Date
+  ts: string
+  actualTemperature: number | null
+  reconTemperature: number | null
+  actualHumidity: number | null
+  reconHumidity: number | null
+  isAnomaly: boolean
+}
+
+export function buildReconstructionSlice(
+  telemetry: readonly TelemetryPoint[],
+  inference: readonly InferencePoint[],
+  limit = 10,
+): ReconstructionSlicePoint[] {
+  const actualByTs = new Map<string, TelemetryPoint>()
+  for (const point of telemetry) {
+    actualByTs.set(point.ts, point)
+  }
+  return inference.slice(-limit).map((point) => {
+    const actual = actualByTs.get(point.score_ts)
+    return {
+      x: historicalDateTimeToDate(point.score_ts),
+      ts: point.score_ts,
+      actualTemperature: actual?.temperature_c ?? null,
+      reconTemperature: point.recon_temperature_c,
+      actualHumidity: actual?.relative_humidity_pct ?? null,
+      reconHumidity: point.recon_relative_humidity_pct,
+      isAnomaly: point.is_anomaly,
+    }
+  })
+}
+
+export interface ReconstructionBand {
+  baseline: (number | null)[]
+  error: (number | null)[]
+}
+
+export type ReconstructionChannel = 'temperature' | 'humidity'
+
+export function buildReconstructionBand(
+  slice: readonly ReconstructionSlicePoint[],
+  channel: ReconstructionChannel,
+): ReconstructionBand {
+  const baseline: (number | null)[] = []
+  const error: (number | null)[] = []
+
+  for (const point of slice) {
+    const actual = channel === 'temperature'
+      ? point.actualTemperature
+      : point.actualHumidity
+    const reconstructed = channel === 'temperature'
+      ? point.reconTemperature
+      : point.reconHumidity
+
+    baseline.push(
+      actual !== null && reconstructed !== null
+        ? Math.min(actual, reconstructed)
+        : null,
+    )
+    error.push(
+      actual !== null && reconstructed !== null
+        ? Math.abs(actual - reconstructed)
+        : null,
+    )
+  }
+
+  return { baseline, error }
+}

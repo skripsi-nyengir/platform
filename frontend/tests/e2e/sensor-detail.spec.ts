@@ -7,23 +7,37 @@ test('sensor detail uses B02 identity, WIB bounds, and API provenance', async ({
     'active-anomaly',
   )
   await expect(page.getByRole('combobox', { name: 'Sensor' })).toHaveValue(b02DeviceId)
-  await expect(page.getByRole('textbox', { name: 'From' })).toHaveValue('2026-02-01T00:00:00')
-  await expect(page.getByRole('textbox', { name: 'To' })).toHaveValue('2026-06-01T00:00:00')
-  await expect(page.getByRole('combobox', { name: 'Bucket' })).toHaveValue('1d')
-  await expect(page.getByText('120 bounded telemetry records')).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Range' })).toHaveValue('1h')
+  await expect(page.getByRole('textbox', { name: 'From' })).toHaveCount(0)
+  await expect(page.getByRole('textbox', { name: 'To' })).toHaveCount(0)
+  await expect(page.getByRole('combobox', { name: 'Bucket' })).toHaveCount(0)
+  await expect(page.getByText('12 bounded telemetry records')).toBeVisible()
   await expect(page.getByText(/View truncated/)).toHaveCount(0)
   await expect(page.getByText('Simulasi preview').first()).toBeVisible()
+  const temperatureReconstruction = page.getByRole('heading', {
+    name: 'Temperature reconstruction · last 153 windows',
+  })
+  const humidityReconstruction = page.getByRole('heading', {
+    name: 'RH reconstruction · last 153 windows',
+  })
+  await expect(temperatureReconstruction).toBeVisible()
+  await expect(humidityReconstruction).toBeVisible()
+  await expect(page.getByRole('heading', {
+    name: /reconstruction · last 153 windows/i,
+  })).toHaveText([
+    'Temperature reconstruction · last 153 windows',
+    'RH reconstruction · last 153 windows',
+  ])
   await expect(page.getByRole('region', { name: 'Related alert history' }))
     .toContainText('2026-06-01T00:00:05Z')
 })
 
-test('sensor detail discloses a truncated fine-bucket response', async ({ page }) => {
+test('sensor detail ignores the retired bucket query parameter', async ({ page }) => {
   await gotoScenario(page, `/sensors/${b02DeviceId}?bucket=15m`, 'normal')
 
-  await expect(page.getByText('2000 bounded telemetry records')).toBeVisible()
-  await expect(page.getByRole('note')).toContainText(
-    'View truncated. Pilih rentang lebih sempit atau bucket lebih kasar untuk melihat seluruh data.',
-  )
+  await expect(page.getByRole('combobox', { name: 'Range' })).toHaveValue('1h')
+  await expect(page.getByText('12 bounded telemetry records')).toBeVisible()
+  await expect(page.getByText(/View truncated/)).toHaveCount(0)
 })
 
 for (const retiredId of ['talpha-1', 'talpha-2', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6']) {

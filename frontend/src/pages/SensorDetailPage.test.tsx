@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { HttpResponse, http } from 'msw'
 import { queryClient } from '../app/queryClient'
@@ -24,8 +24,24 @@ describe('SensorDetailPage', () => {
     expect(screen.getByRole('textbox', { name: 'To' })).toHaveValue('2026-07-31T08:00:00')
     expect(await screen.findByText('Latest score: 0.58')).toBeVisible()
     expect(screen.getByText('Severity: info')).toBeVisible()
-    expect(screen.getByText('Live health: healthy')).toBeVisible()
+    const health = screen.getByRole('region', { name: 'Live telemetry health' })
+    expect(within(health).getByText('Healthy')).toBeVisible()
+    expect(within(health).getByRole('article', { name: 'Telemetry age' })).toBeVisible()
+    expect(within(health).getByRole('article', { name: 'Status-poll freshness' })).toBeVisible()
     expect(await screen.findByText(/bounded telemetry records/)).toBeVisible()
+    const reconstructionHeadings = screen.getAllByRole('heading', {
+      name: /reconstruction · last 153 windows/i,
+    })
+    expect(reconstructionHeadings.map((heading) => heading.textContent)).toEqual([
+      'Temperature reconstruction · last 153 windows',
+      'RH reconstruction · last 153 windows',
+    ])
+    expect(screen.getByRole('img', {
+      name: 'Temperature reconstruction chart for sensor B02',
+    })).toBeVisible()
+    expect(screen.getByRole('img', {
+      name: 'RH reconstruction chart for sensor B02',
+    })).toBeVisible()
   })
 
   it('lazily loads episode context and supports manual acknowledge then resolve', async () => {

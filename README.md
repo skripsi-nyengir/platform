@@ -1,5 +1,9 @@
 # Anomaly Detection Platform
 
+## Deployment
+
+- [CPU-only VPS deployment with Traefik](docs/cpu-vps-deployment.md)
+
 ## B02 v3 EDA operations
 
 The `/eda` surface is a B02 v3-only descriptive analysis subsystem, separate

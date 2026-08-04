@@ -28,9 +28,9 @@ export const InferencePointSchema = z
     band_half_relative_humidity_pct: z.number().nonnegative().nullable(),
   })
   .refine(
-    (value) => compareHistoricalDateTimes(value.window_start_ts, value.window_end_ts) < 0,
+    (value) => compareHistoricalDateTimes(value.window_start_ts, value.window_end_ts) <= 0,
     {
-      message: 'window_start_ts must be earlier than window_end_ts',
+      message: 'window_start_ts must not be later than window_end_ts',
       path: ['window_start_ts'],
     },
   )

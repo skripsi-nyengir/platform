@@ -37,6 +37,10 @@ class LiveLeaseLost(RuntimeError):
     pass
 
 
+class LiveWindowDesyncError(ValueError):
+    pass
+
+
 async def _database_now(connection: AsyncConnection) -> datetime:
     return cast(datetime, await connection.scalar(select(func.clock_timestamp())))
 
@@ -857,7 +861,7 @@ async def unprocessed_live_tail(
                         'telemetry'::text AS kind,
                         to_jsonb(telemetry) AS payload,
                         telemetry.received_ts AS order_ts,
-                        telemetry.telemetry_id AS order_id,
+                        telemetry.ingress_sequence AS order_seq,
                         0 AS kind_order,
                         0::bigint AS boundary_order
                     FROM live_telemetry AS telemetry
@@ -865,10 +869,21 @@ async def unprocessed_live_tail(
                       AND telemetry.processing_status = 'pending'
                       AND (
                           CAST(:after_received_ts AS timestamp) IS NULL
-                          OR ROW(telemetry.received_ts, telemetry.telemetry_id) >
+                          OR ROW(telemetry.received_ts, telemetry.ingress_sequence) >
                              ROW(
                                  CAST(:after_received_ts AS timestamp),
-                                 CAST(:after_telemetry_id AS uuid)
+                                 COALESCE(
+                                     (
+                                         SELECT anchor.ingress_sequence
+                                         FROM live_telemetry AS anchor
+                                         WHERE anchor.device_id = :device_id
+                                           AND anchor.received_ts =
+                                               CAST(:after_received_ts AS timestamp)
+                                           AND anchor.telemetry_id =
+                                               CAST(:after_telemetry_id AS uuid)
+                                     ),
+                                     -1
+                                 )
                              )
                       )
                     UNION ALL
@@ -876,10 +891,14 @@ async def unprocessed_live_tail(
                         'boundary'::text AS kind,
                         to_jsonb(boundary) AS payload,
                         boundary.after_received_ts AS order_ts,
-                        boundary.after_telemetry_id AS order_id,
+                        anchor.ingress_sequence AS order_seq,
                         1 AS kind_order,
                         boundary.boundary_id AS boundary_order
                     FROM live_processing_boundaries AS boundary
+                    LEFT JOIN live_telemetry AS anchor
+                        ON anchor.device_id = boundary.device_id
+                       AND anchor.received_ts = boundary.after_received_ts
+                       AND anchor.telemetry_id = boundary.after_telemetry_id
                     WHERE boundary.device_id = :device_id
                       AND (
                           CAST(:last_boundary_id AS bigint) IS NULL
@@ -890,7 +909,7 @@ async def unprocessed_live_tail(
                 SELECT kind, payload
                 FROM recovery_items
                 ORDER BY order_ts ASC NULLS FIRST,
-                         order_id ASC NULLS FIRST,
+                         order_seq ASC NULLS FIRST,
                          kind_order ASC,
                          boundary_order ASC
                 LIMIT :limit
@@ -949,7 +968,7 @@ async def processed_live_tail(
                 )
                 .order_by(
                     tables.live_telemetry.c.received_ts.desc(),
-                    tables.live_telemetry.c.telemetry_id.desc(),
+                    tables.live_telemetry.c.ingress_sequence.desc(),
                 )
                 .limit(limit)
             )
@@ -975,6 +994,26 @@ async def read_live_cursor(
     )
 
 
+async def _ingress_for_key(
+    connection: AsyncConnection,
+    *,
+    device_id: str,
+    telemetry_key: TelemetryKey | None,
+) -> int | None:
+    if telemetry_key is None:
+        return None
+    return cast(
+        int | None,
+        await connection.scalar(
+            select(tables.live_telemetry.c.ingress_sequence).where(
+                tables.live_telemetry.c.device_id == device_id,
+                tables.live_telemetry.c.received_ts == telemetry_key[0],
+                tables.live_telemetry.c.telemetry_id == telemetry_key[1],
+            )
+        ),
+    )
+
+
 async def _advance_cursor(
     connection: AsyncConnection,
     *,
@@ -984,6 +1023,9 @@ async def _advance_cursor(
     continuity_epoch: int,
     fencing_token: int,
 ) -> RowMapping:
+    new_ingress = await _ingress_for_key(
+        connection, device_id=device_id, telemetry_key=telemetry_key
+    )
     cursor = (
         (
             await connection.execute(
@@ -1004,6 +1046,7 @@ async def _advance_cursor(
                         device_id=device_id,
                         received_ts=telemetry_key[0] if telemetry_key else None,
                         telemetry_id=telemetry_key[1] if telemetry_key else None,
+                        ingress_sequence=new_ingress,
                         last_boundary_id=last_boundary_id,
                         continuity_epoch=continuity_epoch,
                         fencing_token=fencing_token,
@@ -1020,10 +1063,12 @@ async def _advance_cursor(
         if cursor["received_ts"] is not None
         else None
     )
+    current_ingress = cast(int | None, cursor["ingress_sequence"])
     if (
         telemetry_key is not None
         and current_key is not None
-        and telemetry_key < current_key
+        and (telemetry_key[0], new_ingress if new_ingress is not None else -1)
+        < (current_key[0], current_ingress if current_ingress is not None else -1)
     ):
         raise ValueError("live cursor cannot move backwards")
     current_boundary = cast(int | None, cursor["last_boundary_id"])
@@ -1041,6 +1086,9 @@ async def _advance_cursor(
                 .values(
                     received_ts=(telemetry_key or current_key or (None, None))[0],
                     telemetry_id=(telemetry_key or current_key or (None, None))[1],
+                    ingress_sequence=(
+                        new_ingress if telemetry_key is not None else current_ingress
+                    ),
                     last_boundary_id=(
                         last_boundary_id
                         if last_boundary_id is not None
@@ -1076,7 +1124,7 @@ async def _require_global_earliest_pending(
             )
             .order_by(
                 tables.live_telemetry.c.received_ts,
-                tables.live_telemetry.c.telemetry_id,
+                tables.live_telemetry.c.ingress_sequence,
             )
             .limit(1)
             .with_for_update()
@@ -1339,11 +1387,14 @@ async def publish_live_inference(
     episode_close_reason: EpisodeCloseReason | None = None,
     health_status: HealthStatus | None = None,
     health_detail_code: str | None = None,
+    recon_temperature_c: float | None = None,
+    recon_relative_humidity_pct: float | None = None,
 ) -> tuple[RowMapping, bool]:
     if len(source_keys) != 10 or len(set(source_keys)) != 10:
         raise ValueError("live inference requires exactly ten unique source keys")
-    if list(source_keys) != sorted(source_keys):
-        raise ValueError("live inference source keys must be in total order")
+    received_series = [key[0] for key in source_keys]
+    if received_series != sorted(received_series):
+        raise ValueError("live inference source keys must be in received_ts order")
     if (alert_values is None) != (alert_actor is None):
         raise ValueError("linked alert requires alert values and actor together")
     if live_episode_id is None and alert_values is not None:
@@ -1370,7 +1421,7 @@ async def publish_live_inference(
                     )
                     .order_by(
                         tables.live_telemetry.c.received_ts,
-                        tables.live_telemetry.c.telemetry_id,
+                        tables.live_telemetry.c.ingress_sequence,
                     )
                     .with_for_update()
                 )
@@ -1382,6 +1433,7 @@ async def publish_live_inference(
         ]
         if actual_keys != list(source_keys):
             raise ValueError("live inference sources are not all durable")
+        last_ingress = cast(int, sources[-1]["ingress_sequence"])
         activation_ids = {cast(int, row["activation_id"]) for row in sources}
         continuity_epochs = {cast(int, row["continuity_epoch"]) for row in sources}
         if len(activation_ids) != 1 or len(continuity_epochs) != 1:
@@ -1403,13 +1455,13 @@ async def publish_live_inference(
                         tables.live_telemetry.c.continuity_epoch == continuity_epoch,
                         tuple_(
                             tables.live_telemetry.c.received_ts,
-                            tables.live_telemetry.c.telemetry_id,
+                            tables.live_telemetry.c.ingress_sequence,
                         )
-                        <= source_keys[-1],
+                        <= (source_keys[-1][0], last_ingress),
                     )
                     .order_by(
                         tables.live_telemetry.c.received_ts.desc(),
-                        tables.live_telemetry.c.telemetry_id.desc(),
+                        tables.live_telemetry.c.ingress_sequence.desc(),
                     )
                     .limit(10)
                     .with_for_update()
@@ -1418,7 +1470,9 @@ async def publish_live_inference(
         )
         window.reverse()
         if window != list(source_keys):
-            raise ValueError("live inference requires a contiguous ten-row window")
+            raise LiveWindowDesyncError(
+                "live inference requires a contiguous ten-row window"
+            )
         pair = (
             (
                 await connection.execute(
@@ -1473,6 +1527,8 @@ async def publish_live_inference(
                         severity_at_score=severity_at_score,
                         model_version=pair["model_version"],
                         snapshot_corpus_id=pair["scaler_snapshot_corpus_id"],
+                        recon_temperature_c=recon_temperature_c,
+                        recon_relative_humidity_pct=recon_relative_humidity_pct,
                     )
                     .on_conflict_do_nothing(constraint="uq_live_inference_idempotency")
                     .returning(*tables.live_inference.c)
