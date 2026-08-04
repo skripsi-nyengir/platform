@@ -1,0 +1,765 @@
+Project anomaly_detection_platform {
+  database_type: 'PostgreSQL'
+  Note: 'Skema platform deteksi anomali — 42 tabel. Sumber: backend/anomaly_backend/tables.py. Kolom IDENTITY (Postgres): live_processing_boundaries.boundary_id, live_model_activations.activation_id, live_telemetry.ingress_sequence.'
+}
+
+Table devices {
+  device_id text [pk]
+  display_name text [not null]
+  source_device_uuid text
+  time_zone text
+  telemetry_kind text [not null]
+  is_active boolean [not null]
+  archived_at timestamptz
+}
+
+Table corpora {
+  corpus_id text [pk]
+  device_id text [not null, ref: > devices.device_id]
+  status text [not null]
+  archive_sha256 text [not null]
+  member_sha256 text
+  preprocessing_contract_version text [not null]
+  source_device_uuid text
+  time_zone text
+  interval_start timestamp
+  interval_end timestamp
+  filter_config jsonb [not null]
+  started_at timestamptz [not null]
+  completed_at timestamptz
+  accepted_count bigint [not null]
+  ignored_index_count bigint [not null]
+  rejection_counts jsonb [not null]
+
+  indexes {
+    (device_id, archive_sha256, preprocessing_contract_version) [unique]
+  }
+}
+
+Table injection_events {
+  event_id text [pk]
+  corpus_id text [not null, ref: > corpora.corpus_id]
+  device_id text [not null, ref: > devices.device_id]
+  family text [not null]
+  severity text [not null]
+  channel text [not null]
+  channel_index int [not null]
+  start_idx bigint [not null]
+  end_idx_exclusive bigint [not null]
+  start_ts timestamp [not null]
+  end_ts timestamp [not null]
+  segment_index int [not null]
+}
+
+Table published_corpora {
+  device_id text [pk, ref: > devices.device_id]
+  corpus_id text [not null, unique, ref: > corpora.corpus_id]
+  published_at timestamptz [not null]
+}
+
+Table preprocessing_snapshots {
+  corpus_id text [pk, ref: > corpora.corpus_id]
+  channels jsonb [not null]
+  window_size int [not null]
+  stride int [not null]
+  contract_status text [not null]
+  segment_metadata jsonb [not null]
+  split_boundaries jsonb [not null]
+  split_counts jsonb [not null]
+  scaler jsonb [not null]
+}
+
+Table telemetry {
+  device_id text [not null, ref: > devices.device_id]
+  ts timestamp [not null]
+  temperature_c double
+  relative_humidity_pct double
+  payload_hash text [not null]
+  source_index bigint [not null]
+  corpus_id text [not null, ref: > corpora.corpus_id]
+  corpus_index bigint [not null]
+  segment_id int [not null]
+  dataset_split text [not null]
+
+  indexes {
+    (device_id, ts) [pk]
+  }
+}
+
+Table eda_source_snapshots {
+  id uuid [pk]
+  dataset_id text [not null]
+  source_sha256 text [not null]
+  manifest_sha256 text [not null]
+  config_hash text [not null]
+  source_from_ts timestamp [not null]
+  source_to_ts timestamp [not null]
+  expected_row_count bigint [not null]
+  expected_channel_count int [not null]
+  importer_version text [not null]
+  status text [not null]
+  created_at timestamptz [not null]
+  completed_at timestamptz
+  manifest jsonb [not null]
+
+  indexes {
+    (dataset_id, source_sha256) [unique]
+    (id, source_sha256) [unique]
+  }
+}
+
+Table eda_raw_readings {
+  snapshot_id uuid [not null, ref: > eda_source_snapshots.id]
+  source_row_number bigint [not null]
+  device_id text [not null]
+  data_index int [not null]
+  value double [not null]
+  ts timestamp [not null]
+  is_connected boolean [not null]
+
+  indexes {
+    (snapshot_id, source_row_number, ts) [pk]
+  }
+}
+
+Table eda_jobs {
+  id uuid [pk]
+  logical_key text [not null]
+  snapshot_id uuid [not null]
+  source_sha256 text [not null]
+  from_ts timestamp [not null]
+  to_ts timestamp [not null]
+  period_kind text [not null]
+  algorithm_version text [not null]
+  config_hash text [not null]
+  status text [not null]
+  attempt_count int [not null]
+  max_attempts int [not null]
+  trigger_kind text [not null]
+  lease_owner text
+  lease_until timestamptz
+  terminal boolean [not null]
+  error_code text
+  error_detail text
+  created_at timestamptz [not null]
+  started_at timestamptz
+  completed_at timestamptz
+}
+
+Table eda_runs {
+  id uuid [pk]
+  logical_key text [not null, unique]
+  snapshot_id uuid [not null]
+  source_sha256 text [not null]
+  from_ts timestamp [not null]
+  to_ts timestamp [not null]
+  period_kind text [not null]
+  algorithm_version text [not null]
+  config_hash text [not null]
+  provenance jsonb [not null]
+  canonical_release boolean [not null]
+  completed_at timestamptz [not null]
+}
+
+Table eda_result_sections {
+  run_id uuid [not null, ref: > eda_runs.id]
+  section text [not null]
+  status text [not null]
+  reason_code text
+  reason_detail text
+  payload jsonb
+  payload_sha256 text
+  created_at timestamptz [not null]
+
+  indexes {
+    (run_id, section) [unique]
+  }
+}
+
+Table model_families {
+  model_key text [pk]
+  display_name text [not null]
+  is_public boolean [not null]
+}
+
+Table model_versions {
+  version text [pk]
+  model_key text [not null, ref: > model_families.model_key]
+  runtime_kind text [not null]
+  is_selectable boolean [not null]
+  adapter_key text [not null]
+  schema_version text [not null]
+  channels jsonb [not null]
+  window_size int [not null]
+  stride int [not null]
+  contract_status text [not null]
+  score_key text [not null]
+  score_semantics text [not null]
+  threshold double [not null]
+  threshold_policy jsonb [not null]
+  temporal_semantics text [not null]
+  source_commit text
+  source_config text
+  manifest_sha256 text
+  model_manifest_sha256 text
+  checkpoint_sha256 text
+  scaler_manifest_sha256 text
+  scaler_sha256 text
+  created_at timestamptz [not null]
+}
+
+Table model_activations {
+  activation_id text [pk]
+  command_id text [not null, unique]
+  payload_hash text [not null]
+  device_id text [not null, ref: > devices.device_id]
+  prior_model_version text [ref: > model_versions.version]
+  model_version text [not null, ref: > model_versions.version]
+  changed boolean [not null]
+  activated_at timestamptz [not null]
+  actor text [not null]
+}
+
+Table active_model_selections {
+  device_id text [pk, ref: > devices.device_id]
+  activation_id text [not null, unique, ref: > model_activations.activation_id]
+  model_version text [not null, ref: > model_versions.version]
+}
+
+Table replay_jobs {
+  job_id text [pk]
+  logical_job_hash text [not null]
+  device_id text [not null, ref: > devices.device_id]
+  corpus_id text [not null, ref: > corpora.corpus_id]
+  archive_sha256 text [not null]
+  preprocessing_contract_version text [not null]
+  activation_id text [not null, ref: > model_activations.activation_id]
+  model_version text [not null, ref: > model_versions.version]
+  score_provenance text [not null]
+  from_ts timestamp [not null]
+  to_ts timestamp [not null]
+  replay_range tsrange [not null, note: 'GENERATED tsrange(from_ts, to_ts, [) )']
+  status text [not null]
+  lease_owner text
+  lease_expires_at timestamptz
+  heartbeat_at timestamptz
+  attempt_count int [not null]
+  max_attempts int [not null]
+  next_corpus_index bigint [not null]
+  processed_count bigint [not null]
+  result_count bigint [not null]
+  episode_count bigint [not null]
+  submitted_at timestamptz [not null]
+  started_at timestamptz
+  completed_at timestamptz
+  error_code text
+  error_detail text
+}
+
+Table replay_commands {
+  command_id text [pk]
+  payload_hash text [not null]
+  job_id text [not null, ref: > replay_jobs.job_id]
+  accepted_at timestamptz [not null]
+}
+
+Table replay_result_staging {
+  job_id text [not null, ref: > replay_jobs.job_id]
+  score_ts timestamp [not null]
+  window_start_ts timestamp [not null]
+  window_end_ts timestamp [not null]
+  model_version text [not null]
+  score double [not null]
+  threshold double [not null]
+  is_anomaly boolean [not null]
+  score_provenance text [not null]
+  source_start_index bigint [not null]
+  source_end_index bigint [not null]
+  reading_count int [not null]
+  stride int [not null]
+  segment_id int [not null]
+  eligible_window_ordinal bigint [not null]
+  recon_temperature_c double
+  recon_relative_humidity_pct double
+  band_half_temperature_c double
+  band_half_relative_humidity_pct double
+
+  indexes {
+    (job_id, score_ts) [pk]
+  }
+}
+
+Table replay_episode_staging {
+  job_id text [not null, ref: > replay_jobs.job_id]
+  episode_ordinal int [not null]
+  segment_id int [not null]
+  episode_start_ts timestamp [not null]
+  episode_end_ts timestamp [not null]
+  last_score_ts timestamp [not null]
+  first_window_start_ts timestamp [not null]
+  first_window_end_ts timestamp [not null]
+  peak_score double [not null]
+  latest_score double [not null]
+  anomalous_window_count int [not null]
+  closure_reason text [not null]
+
+  indexes {
+    (job_id, episode_ordinal) [pk]
+  }
+}
+
+Table replay_episode_checkpoints {
+  job_id text [pk, ref: > replay_jobs.job_id]
+  state jsonb [not null]
+  updated_at timestamptz [not null]
+}
+
+Table post_inference_bin_staging {
+  job_id text [not null, ref: > replay_jobs.job_id]
+  segment_id int [not null]
+  bin_ordinal int [not null]
+  start_score_ts timestamp [not null]
+  end_score_ts timestamp [not null]
+  scored_timestamp_count int [not null]
+  is_alert boolean [not null]
+  candidate_alert_count int [not null]
+  first_alert_ts timestamp
+  last_alert_ts timestamp
+  peak_score double [not null]
+  latest_score double [not null]
+  threshold double [not null]
+
+  indexes {
+    (job_id, segment_id, bin_ordinal) [pk]
+  }
+}
+
+Table post_inference_bins {
+  device_id text [not null, ref: > devices.device_id]
+  model_version text [not null, ref: > model_versions.version]
+  score_provenance text [not null]
+  replay_job_id text [not null, ref: > replay_jobs.job_id]
+  segment_id int [not null]
+  bin_ordinal int [not null]
+  start_score_ts timestamp [not null]
+  end_score_ts timestamp [not null]
+  scored_timestamp_count int [not null]
+  is_alert boolean [not null]
+  candidate_alert_count int [not null]
+  first_alert_ts timestamp
+  last_alert_ts timestamp
+  peak_score double [not null]
+  latest_score double [not null]
+  threshold double [not null]
+  schema_version text [not null]
+  created_at timestamptz [not null]
+
+  indexes {
+    (device_id, model_version, score_provenance, replay_job_id, segment_id, bin_ordinal) [pk]
+  }
+}
+
+Table post_inference_bin_checkpoints {
+  job_id text [pk, ref: > replay_jobs.job_id]
+  state jsonb [not null]
+  updated_at timestamptz [not null]
+}
+
+Table worker_heartbeats {
+  worker_id text [pk]
+  started_at timestamptz [not null]
+  heartbeat_at timestamptz [not null]
+}
+
+Table inference_results {
+  device_id text [not null, ref: > devices.device_id]
+  corpus_id text [not null, ref: > corpora.corpus_id]
+  window_start_ts timestamp [not null]
+  window_end_ts timestamp [not null]
+  score_ts timestamp [not null]
+  model_version text [not null, ref: > model_versions.version]
+  score double [not null]
+  threshold double [not null]
+  is_anomaly boolean [not null]
+  score_provenance text [not null]
+  source_start_index bigint [not null]
+  source_end_index bigint [not null]
+  reading_count int [not null]
+  stride int [not null]
+  segment_id int [not null]
+  replay_job_id text [ref: > replay_jobs.job_id]
+  recon_temperature_c double
+  recon_relative_humidity_pct double
+  band_half_temperature_c double
+  band_half_relative_humidity_pct double
+
+  indexes {
+    (device_id, score_ts, model_version) [pk]
+  }
+}
+
+Table alerts {
+  alert_id text [pk]
+  device_id text [not null, ref: > devices.device_id]
+  detected_at timestamp
+  score double [not null]
+  threshold double [not null]
+  model_version text [not null, ref: > model_versions.version]
+  inference_result_window_start_ts timestamp [not null]
+  inference_result_window_end_ts timestamp [not null]
+  detection_basis text [not null]
+  corpus_id text [not null, ref: > corpora.corpus_id]
+  episode_start_ts timestamp [not null]
+  episode_end_ts timestamp [not null]
+  last_score_ts timestamp [not null]
+  created_at timestamptz
+  peak_score double [not null]
+  latest_score double [not null]
+  anomalous_window_count int [not null]
+  replay_job_id text [ref: > replay_jobs.job_id]
+  segment_id int [not null]
+  closure_reason text [not null]
+  live_episode_id uuid
+}
+
+Table alert_events {
+  event_id text [pk]
+  alert_id text [not null, ref: > alerts.alert_id]
+  event_ts timestamp
+  event_at timestamptz
+  time_domain text [not null]
+  event_type text [not null]
+  device_id text [not null, ref: > devices.device_id]
+  actor text [not null]
+  note text
+  inference_result_window_start_ts timestamp
+  inference_result_window_end_ts timestamp
+  inference_model_version text
+  detection_basis text [not null]
+}
+
+Table alert_commands {
+  command_id text [pk]
+  alert_id text [not null, ref: > alerts.alert_id]
+  action text [not null]
+  event_ts timestamp
+  accepted_at timestamptz
+  time_domain text [not null]
+  payload_hash text [not null]
+  note text
+  accepted_event_id text [ref: > alert_events.event_id]
+}
+
+Table live_model_pairs {
+  model_pair_id uuid [pk]
+  model_version text [not null]
+  checkpoint_identity text [not null]
+  scaler_snapshot_corpus_id text [not null]
+  model_manifest_sha256 text [not null]
+  checkpoint_sha256 text [not null]
+  scaler_manifest_sha256 text [not null]
+  scaler_sha256 text [not null]
+  threshold double [not null]
+  contract_status text [not null]
+  created_at_utc timestamptz [not null]
+
+  indexes {
+    (model_version, checkpoint_identity, scaler_snapshot_corpus_id) [unique]
+    (model_pair_id, model_version, scaler_snapshot_corpus_id) [unique]
+  }
+}
+
+Table live_writer_leases {
+  device_id text [pk, ref: > devices.device_id]
+  lease_owner text [not null]
+  lease_expires_at_utc timestamptz [not null]
+  fencing_token bigint [not null]
+  updated_at_utc timestamptz [not null]
+}
+
+Table live_model_activation_requests {
+  request_id uuid [pk]
+  device_id text [not null, ref: > devices.device_id]
+  model_pair_id uuid [not null, ref: > live_model_pairs.model_pair_id]
+  request_hash text [not null, unique]
+  requested_by text [not null]
+  requested_at_utc timestamptz [not null]
+
+  indexes {
+    (request_id, device_id, model_pair_id) [unique]
+  }
+}
+
+Table live_model_activations {
+  activation_event_id uuid [pk]
+  device_id text [not null, ref: > devices.device_id]
+  activation_id bigint [not null]
+  request_id uuid [not null, unique]
+  model_pair_id uuid [not null]
+  fencing_token bigint [not null]
+  activated_at_utc timestamptz [not null]
+
+  indexes {
+    (device_id, activation_id) [unique]
+    (device_id, activation_id, model_pair_id) [unique]
+    (activation_event_id, device_id, activation_id, model_pair_id) [unique]
+  }
+}
+
+Table live_model_selections {
+  device_id text [pk, ref: > devices.device_id]
+  activation_event_id uuid [not null]
+  model_pair_id uuid [not null]
+  activation_id bigint [not null]
+  selected_at_utc timestamptz [not null]
+}
+
+Table live_telemetry {
+  received_ts timestamp [not null]
+  telemetry_id uuid [not null]
+  device_id text [not null, ref: > devices.device_id]
+  received_at_utc timestamptz [not null]
+  temperature_c double [not null]
+  relative_humidity_pct double [not null]
+  ingress_sequence bigint [not null]
+  ingress_generation bigint [not null]
+  activation_id bigint [not null]
+  continuity_epoch bigint [not null]
+  segment_start_reason text
+  fencing_token bigint [not null]
+  processing_status text [not null]
+
+  indexes {
+    (received_ts, telemetry_id) [pk]
+    (received_ts, device_id, ingress_generation, ingress_sequence) [unique]
+    (received_ts, telemetry_id, device_id) [unique]
+  }
+}
+
+Table live_inference {
+  score_ts timestamp [not null]
+  inference_id uuid [not null]
+  device_id text [not null, ref: > devices.device_id]
+  window_start_ts timestamp [not null]
+  window_end_ts timestamp [not null]
+  score double [not null]
+  threshold double [not null]
+  is_anomaly boolean [not null]
+  severity_at_score text [not null]
+  model_pair_id uuid [not null]
+  activation_id bigint [not null]
+  continuity_epoch bigint [not null]
+  model_version text [not null]
+  snapshot_corpus_id text [not null]
+  ordered_source_fingerprint text [not null]
+  recon_temperature_c double
+  recon_relative_humidity_pct double
+
+  indexes {
+    (score_ts, inference_id) [pk]
+    (score_ts, device_id, model_pair_id, activation_id, continuity_epoch, ordered_source_fingerprint) [unique]
+    (score_ts, inference_id, device_id) [unique]
+  }
+}
+
+Table live_inference_sources {
+  score_ts timestamp [not null]
+  inference_id uuid [not null]
+  ordinal int [not null]
+  received_ts timestamp [not null]
+  telemetry_id uuid [not null]
+  device_id text [not null]
+
+  indexes {
+    (score_ts, inference_id, ordinal) [pk]
+  }
+}
+
+Table live_processing_boundaries {
+  boundary_id bigint [pk]
+  device_id text [not null, ref: > devices.device_id]
+  boundary_reason text [not null]
+  recorded_at_utc timestamptz [not null]
+  continuity_epoch bigint [not null]
+  fencing_token bigint [not null]
+  after_received_ts timestamp
+  after_telemetry_id uuid
+
+  indexes {
+    (boundary_id, device_id) [unique]
+    (device_id, continuity_epoch) [unique]
+  }
+}
+
+Table live_cursors {
+  device_id text [pk, ref: > devices.device_id]
+  received_ts timestamp
+  telemetry_id uuid
+  ingress_sequence bigint
+  last_boundary_id bigint
+  continuity_epoch bigint [not null]
+  fencing_token bigint [not null]
+  updated_at_utc timestamptz [not null]
+}
+
+Table live_health {
+  device_id text [pk, ref: > devices.device_id]
+  status text [not null]
+  detail_code text
+  fencing_token bigint [not null]
+  observed_at_utc timestamptz [not null]
+}
+
+Table live_alert_episodes {
+  live_episode_id uuid [pk]
+  alert_id text [not null, unique, ref: > alerts.alert_id]
+  device_id text [not null, ref: > devices.device_id]
+  model_pair_id uuid [not null]
+  activation_id bigint [not null]
+  continuity_epoch bigint [not null]
+  model_version text [not null]
+  snapshot_corpus_id text [not null]
+  started_score_ts timestamp [not null]
+  ended_score_ts timestamp
+  status text [not null]
+  close_reason text
+
+  indexes {
+    (alert_id, live_episode_id) [unique]
+    (live_episode_id, device_id, model_pair_id, activation_id, continuity_epoch, model_version, snapshot_corpus_id) [unique]
+  }
+}
+
+Table live_alert_episode_points {
+  live_episode_id uuid [not null]
+  score_ts timestamp [not null]
+  inference_id uuid [not null]
+  ordinal bigint [not null]
+  device_id text [not null]
+  model_pair_id uuid [not null]
+  activation_id bigint [not null]
+  continuity_epoch bigint [not null]
+  model_version text [not null]
+  snapshot_corpus_id text [not null]
+
+  indexes {
+    (live_episode_id, ordinal) [pk]
+    (live_episode_id, score_ts, inference_id) [unique]
+  }
+}
+
+Table model_evaluations {
+  version text [pk]
+  model text [not null]
+  track text [not null]
+  label text [not null]
+  score_key text [not null]
+  score_semantics text [not null]
+  evaluation_period text [not null]
+  validation_only boolean [not null]
+  test_evaluated boolean [not null]
+  n_val_windows int [not null]
+  threshold double [not null]
+  threshold_policy jsonb [not null]
+  has_labeled_ground_truth boolean [not null]
+  available_metrics jsonb [not null]
+  summary text [not null]
+  model_hash text
+  preprocessing_hash text
+  threshold_hash text
+  metrics jsonb [not null]
+  notes text
+  model_key text
+  report_source text [not null]
+  label_source text [not null]
+  evaluation_kind text [not null]
+  test_observed boolean [not null]
+  independent_final boolean [not null]
+  source_commit text
+  source_path text
+  source_sha256 text
+  is_public boolean [not null]
+}
+
+Ref: eda_jobs.(snapshot_id, source_sha256) > eda_source_snapshots.(id, source_sha256)
+Ref: eda_runs.(snapshot_id, source_sha256) > eda_source_snapshots.(id, source_sha256)
+Ref: alerts.(alert_id, live_episode_id) > live_alert_episodes.(alert_id, live_episode_id)
+Ref: live_model_pairs.(model_version, contract_status, model_manifest_sha256, checkpoint_sha256, scaler_manifest_sha256, scaler_sha256) > model_versions.(version, contract_status, model_manifest_sha256, checkpoint_sha256, scaler_manifest_sha256, scaler_sha256)
+Ref: live_model_pairs.(scaler_snapshot_corpus_id, contract_status) > preprocessing_snapshots.(corpus_id, contract_status)
+Ref: live_model_activations.(request_id, device_id, model_pair_id) > live_model_activation_requests.(request_id, device_id, model_pair_id)
+Ref: live_model_selections.(activation_event_id, device_id, activation_id, model_pair_id) > live_model_activations.(activation_event_id, device_id, activation_id, model_pair_id)
+Ref: live_telemetry.(device_id, activation_id) > live_model_activations.(device_id, activation_id)
+Ref: live_inference.(device_id, activation_id, model_pair_id) > live_model_activations.(device_id, activation_id, model_pair_id)
+Ref: live_inference.(model_pair_id, model_version, snapshot_corpus_id) > live_model_pairs.(model_pair_id, model_version, scaler_snapshot_corpus_id)
+Ref: live_inference_sources.(score_ts, inference_id, device_id) > live_inference.(score_ts, inference_id, device_id)
+Ref: live_inference_sources.(received_ts, telemetry_id, device_id) > live_telemetry.(received_ts, telemetry_id, device_id)
+Ref: live_processing_boundaries.(after_received_ts, after_telemetry_id, device_id) > live_telemetry.(received_ts, telemetry_id, device_id)
+Ref: live_cursors.(received_ts, telemetry_id, device_id) > live_telemetry.(received_ts, telemetry_id, device_id)
+Ref: live_cursors.(last_boundary_id, device_id) > live_processing_boundaries.(boundary_id, device_id)
+Ref: live_alert_episodes.(device_id, activation_id, model_pair_id) > live_model_activations.(device_id, activation_id, model_pair_id)
+Ref: live_alert_episodes.(model_pair_id, model_version, snapshot_corpus_id) > live_model_pairs.(model_pair_id, model_version, scaler_snapshot_corpus_id)
+Ref: live_alert_episode_points.(live_episode_id, device_id, model_pair_id, activation_id, continuity_epoch, model_version, snapshot_corpus_id) > live_alert_episodes.(live_episode_id, device_id, model_pair_id, activation_id, continuity_epoch, model_version, snapshot_corpus_id)
+Ref: live_alert_episode_points.(score_ts, inference_id, device_id, model_pair_id, activation_id, continuity_epoch, model_version, snapshot_corpus_id) > live_inference.(score_ts, inference_id, device_id, model_pair_id, activation_id, continuity_epoch, model_version, snapshot_corpus_id)
+
+TableGroup "Corpus / Data" {
+  devices
+  corpora
+  injection_events
+  published_corpora
+  preprocessing_snapshots
+  telemetry
+}
+
+TableGroup "EDA" {
+  eda_source_snapshots
+  eda_raw_readings
+  eda_jobs
+  eda_runs
+  eda_result_sections
+}
+
+TableGroup "Model / Replay" {
+  model_families
+  model_versions
+  model_activations
+  active_model_selections
+  replay_jobs
+  replay_commands
+  replay_result_staging
+  replay_episode_staging
+  replay_episode_checkpoints
+  worker_heartbeats
+  inference_results
+}
+
+TableGroup "Post-Inference" {
+  post_inference_bin_staging
+  post_inference_bins
+  post_inference_bin_checkpoints
+}
+
+TableGroup "Alerts" {
+  alerts
+  alert_events
+  alert_commands
+}
+
+TableGroup "Live Telemetry" {
+  live_model_pairs
+  live_writer_leases
+  live_model_activation_requests
+  live_model_activations
+  live_model_selections
+  live_telemetry
+  live_inference
+  live_inference_sources
+  live_processing_boundaries
+  live_cursors
+  live_health
+  live_alert_episodes
+  live_alert_episode_points
+}
+
+TableGroup "Evaluation" {
+  model_evaluations
+}

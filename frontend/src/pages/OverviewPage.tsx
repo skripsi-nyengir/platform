@@ -18,6 +18,7 @@ import { useDevicesQuery } from '../features/preview/queries'
 import { parseLiveUrlFilters, updateLiveUrlFilters } from '../features/filters/urlFilters'
 import { useLiveTelemetryData } from '../features/useLiveTelemetryData'
 import { StatusSnapshot } from '../features/systemHealth/StatusSnapshot'
+import { resolveStatusDisplayMeta } from '../features/systemHealth/displayMeta'
 
 const technicalTextSx = {
   fontFamily: tokens.font.data,
@@ -135,10 +136,9 @@ export function OverviewPage() {
       ) : (
         <StatusSnapshot
           snapshot={health.data}
-          displayedAt={health.dataUpdatedAt === 0
-            ? health.data.checked_at
-            : new Date(health.dataUpdatedAt).toISOString()}
-          pollAgeSeconds={0}
+          display={resolveStatusDisplayMeta(health.data, health.dataUpdatedAt, health.isRefetchError)}
+          density="compact"
+          onRetry={() => void health.refetch()}
         />
       )}
 

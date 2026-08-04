@@ -17,6 +17,7 @@ import { ActiveAlertsSection } from '../features/sensors/ActiveAlertsSection'
 import { RelatedAlertHistory } from '../features/sensors/RelatedAlertHistory'
 import { SensorHistoryPanel } from '../features/sensors/SensorHistoryPanel'
 import { StatusSnapshot } from '../features/systemHealth/StatusSnapshot'
+import { resolveStatusDisplayMeta } from '../features/systemHealth/displayMeta'
 import { useLiveTelemetryData } from '../features/useLiveTelemetryData'
 import { tokens } from '../theme/tokens'
 
@@ -141,10 +142,13 @@ export function SensorDetailPage() {
       ) : (
         <StatusSnapshot
           snapshot={live.health.data}
-          displayedAt={live.health.dataUpdatedAt === 0
-            ? live.health.data.checked_at
-            : new Date(live.health.dataUpdatedAt).toISOString()}
-          pollAgeSeconds={0}
+          display={resolveStatusDisplayMeta(
+            live.health.data,
+            live.health.dataUpdatedAt,
+            live.health.isRefetchError,
+          )}
+          density="compact"
+          onRetry={() => void live.health.refetch()}
         />
       )}
       <SensorHistoryPanel

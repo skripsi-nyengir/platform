@@ -23,7 +23,13 @@ describe('OverviewPage', () => {
     expect(within(sensor).getByRole('status', { name: 'Fresh telemetry' })).toBeVisible()
     expect(await within(sensor).findByText('1.31')).toBeVisible()
     expect(within(sensor).getByText('critical')).toBeVisible()
-    expect(await screen.findByText('Live health: healthy')).toBeVisible()
+    const health = await screen.findByRole('region', { name: 'Live telemetry health' })
+    expect(within(health).getByText('Healthy')).toBeVisible()
+    expect(within(health).getByRole('article', { name: 'Telemetry age' })).toBeVisible()
+    expect(within(health).getByRole('article', { name: 'Sensor freshness' })).toBeVisible()
+    expect(within(health).getByRole('article', { name: 'Connection state' })).toBeVisible()
+    expect(within(health).getByRole('article', { name: 'Status-poll freshness' })).toBeVisible()
+    expect(within(health).queryByText('Live telemetry is healthy.')).not.toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Episode context' })).toBeVisible()
     expect(screen.getByRole('region', { name: 'Episode context' })).toHaveTextContent(
       '10 source readings before the episode',

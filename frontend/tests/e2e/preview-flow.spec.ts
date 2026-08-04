@@ -1,6 +1,6 @@
-import { expect, gotoScenario, test } from './helpers'
+import { expect, expectVisibleFocus, gotoScenario, tabTo, test } from './helpers'
 
-test('shows five trained models in the two model-evaluation sections', async ({ page }) => {
+test('compares five trained models and exposes exact offline data by keyboard', async ({ page }) => {
   await gotoScenario(page, '/model-evaluation', 'active-anomaly')
 
   const registry = page.getByRole('region', {
@@ -11,8 +11,9 @@ test('shows five trained models in the two model-evaluation sections', async ({ 
   })
 
   await expect(registry.getByRole('article')).toHaveCount(5)
-  await expect(offline.getByRole('article')).toHaveCount(5)
-  await expect(page.getByRole('region')).toHaveCount(2)
+  await expect(
+    offline.getByRole('img', { name: 'Perbandingan precision recall dan F1 lima model' }),
+  ).toBeVisible()
 
   for (const name of [
     'Conv1D Autoencoder',
@@ -24,4 +25,25 @@ test('shows five trained models in the two model-evaluation sections', async ({ 
     await expect(registry.getByRole('heading', { name })).toBeVisible()
   }
 
+  const conv1d = offline.getByRole('button', { name: 'Conv1D', exact: true })
+  const gru = offline.getByRole('button', { name: 'GRU', exact: true })
+  await expect(conv1d).toBeVisible()
+  await expect(conv1d).toHaveAttribute('aria-pressed', 'true')
+  await expect(gru).toHaveAttribute('aria-pressed', 'false')
+  await tabTo(page, gru)
+  await expectVisibleFocus(gru)
+  await page.keyboard.press('Space')
+  await expect(gru).toHaveAttribute('aria-pressed', 'true')
+  await expect(conv1d).toHaveAttribute('aria-pressed', 'false')
+  await expect(offline.getByRole('heading', { name: 'Event-family hit rate · GRU' })).toBeVisible()
+
+  const exactDataTrigger = offline.getByRole('button', { name: 'Lihat data eksak' })
+  await exactDataTrigger.click()
+  const dialog = page.getByRole('dialog', { name: 'Data eksak evaluasi offline' })
+  const table = dialog.getByRole('table', { name: 'Data eksak precision recall dan F1' })
+  await expect(table.getByRole('row')).toHaveCount(6)
+  await expect(table.getByText('0.46153846153846156')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Tutup' }).click()
+  await expect(exactDataTrigger).toBeFocused()
+  await expect(page.getByText(/winner|pemenang|peringkat|model terbaik/i)).toHaveCount(0)
 })

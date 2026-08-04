@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="31.1.5">
+  <diagram name="Use Case">
+    <mxGraphModel dx="1000" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Use Case Diagram — Platform Deteksi Anomali" style="text;html=1;align=left;verticalAlign=middle;fontSize=18;fontStyle=1;fontColor=#17324D;" vertex="1" parent="1">
+          <mxGeometry x="200" y="16" width="640" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="bound" value="Sistem Deteksi Anomali" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fontSize=15;fontStyle=1;fillColor=none;strokeColor=#333333;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="200" y="60" width="840" height="720" as="geometry" />
+        </mxCell>
+        <mxCell id="aT" value="TALPHA&#xa;(Sensor)" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="150" width="40" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="aO" value="Teknisi&#xa;Operator" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="380" width="40" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="u1" value="Kirim Data Telemetry" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="250" y="150" width="180" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="u2" value="Proses Inferensi Anomali" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="500" y="150" width="180" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="u3" value="Bentuk Alert Anomali" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="500" y="290" width="180" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="u4" value="Lihat Data Telemetry" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="800" y="120" width="180" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="u5" value="Lihat Hasil Inferensi" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="800" y="250" width="180" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="u6" value="Lihat Alert &amp; Riwayat" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="800" y="470" width="180" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="u7" value="Tanggapi Alert&#xa;(Acknowledge / Resolve)" style="ellipse;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="800" y="600" width="180" height="66" as="geometry" />
+        </mxCell>
+        <mxCell id="eT1" value="" style="edgeStyle=none;html=1;endArrow=none;strokeColor=#333333;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="aT" target="u1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eO4" value="" style="edgeStyle=none;html=1;endArrow=none;strokeColor=#333333;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="aO" target="u4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eO5" value="" style="edgeStyle=none;html=1;endArrow=none;strokeColor=#333333;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="aO" target="u5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eO6" value="" style="edgeStyle=none;html=1;endArrow=none;strokeColor=#333333;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="aO" target="u6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eO7" value="" style="edgeStyle=none;html=1;endArrow=none;strokeColor=#333333;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="aO" target="u7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="inc12" value="&#171;include&#187;" style="edgeStyle=none;html=1;endArrow=open;dashed=1;strokeColor=#333333;fontSize=11;fontColor=#333333;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="u1" target="u2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ext32" value="&#171;extend&#187;" style="edgeStyle=none;html=1;endArrow=open;dashed=1;strokeColor=#333333;fontSize=11;fontColor=#333333;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="u3" target="u2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="ext76" value="&#171;extend&#187;" style="edgeStyle=none;html=1;endArrow=open;dashed=1;strokeColor=#333333;fontSize=11;fontColor=#333333;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="u7" target="u6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="leg" value="Keterangan" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;verticalAlign=top;fontStyle=1;fontSize=12;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="240" y="640" width="300" height="96" as="geometry" />
+        </mxCell>
+        <mxCell id="legs1" value="" style="ellipse;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="leg">
+          <mxGeometry x="12" y="34" width="34" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="legt1" value="Proses sistem otomatis (dipicu telemetry)" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="leg">
+          <mxGeometry x="54" y="32" width="240" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legs2" value="" style="ellipse;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="leg">
+          <mxGeometry x="12" y="64" width="34" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="legt2" value="Interaksi Teknisi Operator" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="leg">
+          <mxGeometry x="54" y="62" width="240" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="src" value="Sumber: implementasi platform deteksi anomali, Agustus 2026" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontColor=#5E6D79;" vertex="1" parent="1">
+          <mxGeometry x="200" y="798" width="500" height="20" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

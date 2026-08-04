@@ -891,23 +891,37 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
           { status: 503 },
         )
       }
-       const telemetry =
-         state.scenario === 'stale'
-           ? {
-               ...systemStatus.telemetry,
-               fresh_sensor_count: 0,
-               stale_sensor_count: 1,
-               offline_sensor_count: 0,
-             }
-           : state.scenario === 'offline'
-             ? {
-                 ...systemStatus.telemetry,
-                 fresh_sensor_count: 0,
-                 stale_sensor_count: 0,
-                 offline_sensor_count: 1,
-               }
-             : { ...systemStatus.telemetry }
-      return HttpResponse.json({ ...systemStatus, telemetry })
+      const staleReason = 'Check broker delivery because the latest valid reading is stale.'
+      const telemetry =
+        state.scenario === 'stale'
+          ? {
+              ...systemStatus.telemetry,
+              classification: 'degraded' as const,
+              reasons: [staleReason],
+              age_seconds: 601,
+              fresh_sensor_count: 0,
+              stale_sensor_count: 1,
+              offline_sensor_count: 0,
+            }
+          : state.scenario === 'offline'
+            ? {
+                ...systemStatus.telemetry,
+                fresh_sensor_count: 0,
+                stale_sensor_count: 0,
+                offline_sensor_count: 1,
+              }
+            : { ...systemStatus.telemetry }
+      const services = state.scenario === 'stale'
+        ? systemStatus.services.map((service) => service.name === 'live-subscriber'
+          ? { ...service, readiness: 'not_ready' as const, detail: staleReason }
+          : { ...service })
+        : systemStatus.services.map((service) => ({ ...service }))
+      return HttpResponse.json({
+        ...systemStatus,
+        overall_observation: state.scenario === 'stale' ? staleReason : systemStatus.overall_observation,
+        services,
+        telemetry,
+      })
     }),
 
     http.get('/health', () => HttpResponse.json(livenessResponse)),

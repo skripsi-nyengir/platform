@@ -6,8 +6,10 @@ import {
   ListItemIcon,
   ListItemText,
   SvgIcon,
+  Tooltip,
   Typography,
 } from '@mui/material'
+import { useEffect, useState } from 'react'
 import { Link as RouterLink, Outlet, useLocation } from 'react-router-dom'
 import { tokens } from '../theme/tokens'
 import { navigationItems, type NavigationItem } from './navigation'
@@ -23,16 +25,45 @@ const routeIconPaths: Record<NavigationItem['path'], string> = {
   '/system-health': 'M3 12h4l2-6 4 12 2-6h6v2h-4.5L13 22 9 10l-.5 4H3v-2Z',
 }
 
+export const SIDEBAR_COLLAPSED_STORAGE_KEY = 'adp-sidebar-collapsed'
+
+const collapseIconPath = 'M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59Z'
+const expandIconPath = 'm8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41Z'
+
+function readCollapsedSidebar(): boolean {
+  try {
+    return window.localStorage?.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function persistCollapsedSidebar(collapsed: boolean) {
+  try {
+    window.localStorage?.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed))
+  } catch {
+    // Storage may be unavailable in privacy-restricted browsing contexts.
+  }
+}
+
 export function AppShell() {
   const { pathname } = useLocation()
-  const sidebarWidth = { xs: tokens.size.sidebarCompact, sm: tokens.size.sidebar }
+  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && readCollapsedSidebar())
+  const sidebarWidth = { xs: tokens.size.sidebarCompact, sm: collapsed ? tokens.size.sidebarCompact : tokens.size.sidebar }
+  const collapseLabel = collapsed ? 'Expand sidebar' : 'Collapse sidebar'
+
+  useEffect(() => {
+    persistCollapsedSidebar(collapsed)
+  }, [collapsed])
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <Drawer
         variant="permanent"
+        data-sidebar-state={collapsed ? 'collapsed' : 'expanded'}
         sx={{
           boxSizing: 'border-box',
+          transition: (theme) => theme.transitions.create('width'),
           width: sidebarWidth,
           flexShrink: 0,
           '& .MuiDrawer-paper': {
@@ -40,22 +71,24 @@ export function AppShell() {
             borderRight: (theme) => `${tokens.size.rule}px solid ${theme.palette.app.sidebarDivider}`,
             display: 'flex',
             flexDirection: 'column',
+            overflowX: 'hidden',
+            transition: (theme) => theme.transitions.create('width'),
             width: sidebarWidth,
           },
         }}
       >
         <Box
           sx={{
-            px: { xs: 0, sm: 4 },
+            px: { xs: 0, sm: collapsed ? 0 : 4 },
             pb: 4,
             pt: 5,
-            textAlign: { xs: 'center', sm: 'left' },
+            textAlign: { xs: 'center', sm: collapsed ? 'center' : 'left' },
           }}
         >
           <Typography
             component="div"
             sx={{
-              display: { xs: 'block', sm: 'none' },
+              display: { xs: 'block', sm: collapsed ? 'block' : 'none' },
               fontSize: tokens.font.size.productTitle,
               fontWeight: 700,
               lineHeight: tokens.font.lineHeight.productTitle,
@@ -66,7 +99,7 @@ export function AppShell() {
           <Typography
             component="div"
             sx={{
-              display: { xs: 'none', sm: 'block' },
+              display: { xs: 'none', sm: collapsed ? 'none' : 'block' },
               fontSize: tokens.font.size.productTitle,
               fontWeight: 700,
               lineHeight: tokens.font.lineHeight.productTitle,
@@ -78,10 +111,33 @@ export function AppShell() {
             component="div"
             color="text.secondary"
             variant="caption"
-            sx={{ display: { xs: 'none', sm: 'block' }, mt: 0.5 }}
+            sx={{ display: { xs: 'none', sm: collapsed ? 'none' : 'block' }, mt: 0.5 }}
           >
             IoT sensor operations
           </Typography>
+        </Box>
+        <Box sx={{ display: { xs: 'none', sm: 'block' }, pb: 2 }}>
+          <Tooltip title={collapseLabel} placement="right">
+            <ListItemButton
+              component="button"
+              type="button"
+              aria-expanded={!collapsed}
+              aria-label={collapseLabel}
+              onClick={() => setCollapsed((value) => !value)}
+              sx={{
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                pl: collapsed ? 0 : 4,
+                pr: collapsed ? 0 : 4,
+              }}
+            >
+              <ListItemIcon sx={{ color: 'inherit', minWidth: collapsed ? 0 : 40 }}>
+                <SvgIcon fontSize="small">
+                  <path d={collapsed ? expandIconPath : collapseIconPath} />
+                </SvgIcon>
+              </ListItemIcon>
+              <ListItemText primary={collapseLabel} sx={{ display: collapsed ? 'none' : 'block' }} />
+            </ListItemButton>
+          </Tooltip>
         </Box>
         <Box component="nav" aria-label="Primary navigation" sx={{ flexGrow: 1, pb: 4 }}>
           <List sx={{ py: 0 }}>
@@ -99,24 +155,24 @@ export function AppShell() {
                   aria-current={selected ? 'page' : undefined}
                   className={selected ? 'active' : undefined}
                   sx={{
-                    justifyContent: { xs: 'center', sm: 'flex-start' },
-                    pl: { xs: 0, sm: 4 },
-                    pr: { xs: `${tokens.size.activeRule}px`, sm: 4 },
+                    justifyContent: { xs: 'center', sm: collapsed ? 'center' : 'flex-start' },
+                    pl: { xs: 0, sm: collapsed ? 0 : 4 },
+                    pr: { xs: `${tokens.size.activeRule}px`, sm: collapsed ? 0 : 4 },
                   }}
                 >
-                  <ListItemIcon sx={{ color: 'inherit', minWidth: { xs: 0, sm: 40 } }}>
+                  <ListItemIcon sx={{ color: 'inherit', minWidth: { xs: 0, sm: collapsed ? 0 : 40 } }}>
                     <SvgIcon fontSize="small">
                       <path d={routeIconPaths[item.path]} />
                     </SvgIcon>
                   </ListItemIcon>
-                  <ListItemText primary={item.label} sx={{ display: { xs: 'none', sm: 'block' } }} />
+                  <ListItemText primary={item.label} sx={{ display: { xs: 'none', sm: collapsed ? 'none' : 'block' } }} />
                 </ListItemButton>
               )
             })}
           </List>
         </Box>
         <Box component="footer" sx={{ mt: 'auto', pb: 4 }}>
-          <SidebarThemeToggle />
+          <SidebarThemeToggle compact={collapsed} />
         </Box>
       </Drawer>
       <Box
