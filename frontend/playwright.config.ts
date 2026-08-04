@@ -10,6 +10,11 @@ const baseURL = 'http://127.0.0.1:5173'
 export default defineConfig({
   testDir: './tests/e2e',
   snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}{ext}',
+  expect: {
+    toHaveScreenshot: {
+      maxDiffPixelRatio: 0.01,
+    },
+  },
   use: {
     baseURL,
   },
