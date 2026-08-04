@@ -11,9 +11,9 @@ import {
 test('failed status poll retains the snapshot and recovers through Retry', async ({ page }) => {
   await gotoScenario(page, '/system-health', 'normal')
 
-  const snapshot = page.getByRole('region', { name: 'Latest known system snapshot' })
+  const snapshot = page.getByRole('region', { name: 'Live telemetry health' })
   await expect(snapshot).toContainText('Status checked at (UTC): 2026-07-24T08:00:00Z')
-  await expect(snapshot).toContainText('Historical corpus latest timestamp: 2026-05-31T23:59:59')
+  await expect(snapshot).toContainText('Latest telemetry timestamp: 2026-07-31T07:59:59')
   await expect(snapshot).toContainText('Fresh sensors: 1; stale sensors: 0; offline sensors: 0')
   await expect(snapshot).toContainText('Asia/Jakarta (WIB)')
   const services = page.getByRole('table', { name: 'Preview component readiness' })

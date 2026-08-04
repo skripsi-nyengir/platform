@@ -5,6 +5,7 @@ import {
   type Page,
 } from '@playwright/test'
 import type { AppMockScenario } from '../../src/mocks/scenario'
+import { THEME_MODE_STORAGE_KEY } from '../../src/theme/theme'
 
 export const fixedNow = '2026-07-19T10:30:00Z'
 export const b02DeviceId = 'b02f3872-ruang-produksi'
@@ -107,6 +108,12 @@ export async function gotoScenario(
 ): Promise<void> {
   await page.goto(scenarioUrl(route, scenario))
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+}
+
+export async function seedThemeMode(page: Page, mode: 'light' | 'dark'): Promise<void> {
+  await page.addInitScript(({ key, value }) => {
+    window.localStorage.setItem(key, value)
+  }, { key: THEME_MODE_STORAGE_KEY, value: mode })
 }
 
 export async function setBrowserTime(page: Page, isoTimestamp: string): Promise<void> {

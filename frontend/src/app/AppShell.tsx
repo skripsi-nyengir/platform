@@ -11,6 +11,7 @@ import {
 import { Link as RouterLink, Outlet, useLocation } from 'react-router-dom'
 import { tokens } from '../theme/tokens'
 import { navigationItems, type NavigationItem } from './navigation'
+import { SidebarThemeToggle } from './SidebarThemeToggle'
 
 const routeIconPaths: Record<NavigationItem['path'], string> = {
   '/': 'M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z',
@@ -31,13 +32,14 @@ export function AppShell() {
       <Drawer
         variant="permanent"
         sx={{
-          backgroundColor: tokens.color.paper,
-          borderRight: `${tokens.size.rule}px solid ${tokens.color.ruleStrong}`,
           boxSizing: 'border-box',
           width: sidebarWidth,
           flexShrink: 0,
           '& .MuiDrawer-paper': {
             boxSizing: 'border-box',
+            borderRight: (theme) => `${tokens.size.rule}px solid ${theme.palette.app.sidebarDivider}`,
+            display: 'flex',
+            flexDirection: 'column',
             width: sidebarWidth,
           },
         }}
@@ -81,7 +83,7 @@ export function AppShell() {
             IoT sensor operations
           </Typography>
         </Box>
-        <Box component="nav" aria-label="Primary navigation" sx={{ pb: 4 }}>
+        <Box component="nav" aria-label="Primary navigation" sx={{ flexGrow: 1, pb: 4 }}>
           <List sx={{ py: 0 }}>
             {navigationItems.map((item) => {
               const selected = item.path === '/sensors/b02f3872-ruang-produksi'
@@ -112,6 +114,9 @@ export function AppShell() {
               )
             })}
           </List>
+        </Box>
+        <Box component="footer" sx={{ mt: 'auto', pb: 4 }}>
+          <SidebarThemeToggle />
         </Box>
       </Drawer>
       <Box

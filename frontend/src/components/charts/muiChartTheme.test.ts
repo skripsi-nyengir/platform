@@ -1,30 +1,38 @@
-import { pink } from '@mui/material/colors'
-import { createTheme } from '@mui/material/styles'
+import type { Theme } from '@mui/material/styles'
 import { describe, expect, it } from 'vitest'
+import { theme } from '../../theme/theme'
 import { formatChartNumber, getChartColors } from './muiChartTheme'
 
-describe('getChartColors', () => {
-  it('maps chart roles to the active semantic palette', () => {
-    const theme = createTheme({
-      palette: {
-        primary: { main: '#101010' },
-        success: { main: '#202020' },
-        warning: { main: '#303030' },
-        error: { main: '#404040' },
-        info: { main: '#505050' },
-        text: { secondary: '#606060' },
-      },
-    })
+function themeFor(scheme: 'light' | 'dark'): Theme {
+  const colorSystem = theme.colorSchemes[scheme]
+  if (colorSystem === undefined) throw new Error(`Missing ${scheme} color scheme`)
+  return { ...theme, ...colorSystem }
+}
 
-    expect(getChartColors(theme)).toEqual({
-      temperature: theme.palette.primary.main,
-      humidity: theme.palette.success.main,
-      anomalyScore: theme.palette.warning.main,
-      outlier: theme.palette.error.main,
-      threshold: theme.palette.text.secondary,
-      normalPoint: theme.palette.info.main,
-      reconstructionError: pink[300],
+describe('getChartColors', () => {
+  it('maps chart roles to distinct active light and dark semantic palettes', () => {
+    const darkColors = getChartColors(themeFor('dark'))
+    const lightColors = getChartColors(themeFor('light'))
+
+    expect(darkColors).toEqual({
+      temperature: '#4C8DFF',
+      humidity: '#4EC7A5',
+      anomalyScore: '#F2B84B',
+      outlier: '#FF6B6B',
+      threshold: '#9BA8B4',
+      normalPoint: '#9AA7B2',
+      reconstructionError: '#F06292',
     })
+    expect(lightColors).toEqual({
+      temperature: '#2563EB',
+      humidity: '#147D64',
+      anomalyScore: '#9A6700',
+      outlier: '#C9374C',
+      threshold: '#52606D',
+      normalPoint: '#52606D',
+      reconstructionError: '#AD1457',
+    })
+    expect(lightColors).not.toEqual(darkColors)
   })
 })
 

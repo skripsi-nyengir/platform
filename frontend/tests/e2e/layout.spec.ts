@@ -1,4 +1,14 @@
-import { b02DeviceId, b02From, b02To, expect, gotoScenario, test } from './helpers'
+import {
+  b02DeviceId,
+  b02From,
+  b02To,
+  expect,
+  expectVisibleFocus,
+  gotoScenario,
+  seedThemeMode,
+  tabTo,
+  test,
+} from './helpers'
 
 const canonicalEdaRoute = '/eda?mode=precompute&period_kind=monthly&run=run-b02-canonical-v3'
 const edaPanelHeadings = [
@@ -34,6 +44,7 @@ const routes = [
   '/alerts',
   '/eda',
   '/model-evaluation',
+  '/simulation',
   '/system-health',
 ] as const
 
@@ -90,4 +101,33 @@ test('alert action remains reachable at responsive width', async ({ page }, test
     expect(box.x).toBeGreaterThanOrEqual(0)
     expect(box.x + box.width).toBeLessThanOrEqual(390)
   }
+})
+
+test('compact theme toggle remains visible, labelled, focusable, and contained', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-1280')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await seedThemeMode(page, 'dark')
+  await gotoScenario(page, '/', 'active-anomaly')
+
+  const toggle = page.getByRole('button', { name: 'Switch to light theme' })
+  await expect(toggle).toBeVisible()
+  await expect(toggle).toBeEnabled()
+  await expect(page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('button')).toHaveCount(0)
+  await expect(page.locator('footer').getByRole('button', { name: 'Switch to light theme' })).toBeVisible()
+  const box = await toggle.boundingBox()
+  expect(box).not.toBeNull()
+  if (box !== null) {
+    expect(box.width).toBeGreaterThanOrEqual(44)
+    expect(box.height).toBeGreaterThanOrEqual(44)
+    expect(box.x).toBeGreaterThanOrEqual(0)
+    expect(box.x + box.width).toBeLessThanOrEqual(72)
+  }
+
+  await toggle.hover()
+  await expect(page.getByRole('tooltip', { name: 'Switch to light theme' })).toBeVisible()
+  await tabTo(page, toggle)
+  await expectVisibleFocus(toggle)
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('button', { name: 'Switch to dark theme' })).toBeFocused()
+  await expectNoHorizontalOverflow(page)
 })
