@@ -40,7 +40,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ inputs.release_tag }}
-        run: gh release download "$RELEASE_TAG" --pattern release-manifest.json
+        run: gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern release-manifest.json
       - name: Run forced production operation
         env:
           DEPLOY_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
