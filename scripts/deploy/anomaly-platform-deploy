@@ -71,7 +71,6 @@ preflight() {
   command -v docker >/dev/null
   command -v jq >/dev/null
   command -v curl >/dev/null
-  command -v pg_restore >/dev/null
   docker compose version >/dev/null
   docker network inspect reverse_proxy >/dev/null
   docker ps --filter label=traefik.enable=true --format '{{.ID}}' | grep -q . \
@@ -100,9 +99,17 @@ backup_database() {
   backup="$backup_directory/database-$(date -u +%Y%m%dT%H%M%S-%NZ).dump"
   # Expansion is intentionally performed inside the database container.
   # shellcheck disable=SC2016
-  compose exec -T db sh -eu -c \
-    'exec pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >"$backup"
-  pg_restore --list "$backup" >/dev/null
+  if ! compose exec -T db sh -eu -c \
+    'exec pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >"$backup"; then
+    rm -f -- "$backup"
+    fail "database backup creation failed"
+    return 1
+  fi
+  if ! compose exec -T db pg_restore --list <"$backup" >/dev/null; then
+    rm -f -- "$backup"
+    fail "database backup verification failed"
+    return 1
+  fi
   mapfile -t backups < <(find "$backup_directory" -maxdepth 1 -type f -name 'database-*.dump' -printf '%T@ %p\n' | sort -rn | cut -d' ' -f2-)
   if ((${#backups[@]} > 7)); then
     rm -- "${backups[@]:7}"
@@ -168,7 +175,9 @@ deploy() {
   preflight
   load_manifest_images "$incoming"
   pull_images "$incoming"
-  backup_database
+  if ! backup_database; then
+    return 1
+  fi
   if ! compose run --rm migrate \
     || ! compose run --rm seed \
     || ! compose run --rm live-model-bootstrap \

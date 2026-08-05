@@ -6,7 +6,7 @@ if [[ $EUID -ne 0 ]]; then
   exit 77
 fi
 
-for command in docker jq curl pg_restore flock sudo visudo sshd; do
+for command in docker jq curl flock sudo visudo sshd; do
   command -v "$command" >/dev/null || {
     echo "required command is missing: $command" >&2
     exit 69
