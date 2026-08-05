@@ -142,6 +142,9 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          # The organization blocks pull requests created by GitHub Actions.
+          # Maintainers open the generated release branch as a PR instead.
+          skip-github-pull-request: true
 
   publish-images:
     if: needs.release.outputs.release_created == 'true'
