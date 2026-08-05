@@ -7,27 +7,27 @@ from typing import cast
 
 from pydantic import ValidationError
 
-from anomaly_backend.contracts import OfflineEvaluationItem, OfflineEvaluationsResponse
+from anomaly_backend.contracts import OfflineEvaluationsResponse
 
 FIXTURE_PATH = "fixtures/offline_eval/offline_evaluations.json"
-FIXTURE_SHA256 = "d530329696f947e37c63760ba026dd0df3736cafacd213b7d02a08a573fb5861"
+FIXTURE_SHA256 = "a20fab915755ebbe744cbacb0cb9e4f5f3d6cd1f17bc60321747dcf54274d8e2"
 
 
 class OfflineEvaluationsIntegrityError(ValueError):
     pass
 
 
-def normalize_offline_evaluations(payload: object) -> list[OfflineEvaluationItem]:
+def normalize_offline_evaluations(payload: object) -> OfflineEvaluationsResponse:
     try:
         response = OfflineEvaluationsResponse.model_validate(payload, strict=True)
     except ValidationError as error:
         raise OfflineEvaluationsIntegrityError(
             "offline evaluations fixture has an invalid shape"
         ) from error
-    return response.items
+    return response
 
 
-def load_offline_evaluations() -> list[OfflineEvaluationItem]:
+def load_offline_evaluations() -> OfflineEvaluationsResponse:
     payload = resources.files("anomaly_backend").joinpath(FIXTURE_PATH).read_bytes()
     if hashlib.sha256(payload).hexdigest() != FIXTURE_SHA256:
         raise OfflineEvaluationsIntegrityError(

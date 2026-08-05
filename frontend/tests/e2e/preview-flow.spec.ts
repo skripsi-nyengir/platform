@@ -7,12 +7,14 @@ test('compares five trained models and exposes exact offline data by keyboard', 
     name: 'Model terdaftar (metrik dilaporkan dari training)',
   })
   const offline = page.getByRole('region', {
-    name: 'Evaluasi offline (test-set injected berlabel)',
+    name: 'Evaluasi Step 7 (validation-injected berlabel)',
   })
 
   await expect(registry.getByRole('article')).toHaveCount(5)
   await expect(
-    offline.getByRole('img', { name: 'Perbandingan precision recall dan F1 lima model' }),
+    offline.getByRole('img', {
+      name: 'Perbandingan precision recall dan F1 lima model pada bin evaluasi',
+    }),
   ).toBeVisible()
 
   for (const name of [
@@ -35,14 +37,19 @@ test('compares five trained models and exposes exact offline data by keyboard', 
   await page.keyboard.press('Space')
   await expect(gru).toHaveAttribute('aria-pressed', 'true')
   await expect(conv1d).toHaveAttribute('aria-pressed', 'false')
-  await expect(offline.getByRole('heading', { name: 'Event-family hit rate · GRU' })).toBeVisible()
+  await expect(
+    offline.getByRole('heading', { name: 'Tiga scope evaluasi · GRU' }),
+  ).toBeVisible()
+  await expect(offline.getByRole('table', { name: 'Metrik tiga scope GRU' })).toBeVisible()
 
   const exactDataTrigger = offline.getByRole('button', { name: 'Lihat data eksak' })
   await exactDataTrigger.click()
-  const dialog = page.getByRole('dialog', { name: 'Data eksak evaluasi offline' })
-  const table = dialog.getByRole('table', { name: 'Data eksak precision recall dan F1' })
+  const dialog = page.getByRole('dialog', { name: 'Data eksak evaluasi Step 7' })
+  const table = dialog.getByRole('table', {
+    name: 'Data eksak precision recall F1 dan confusion matrix',
+  })
   await expect(table.getByRole('row')).toHaveCount(6)
-  await expect(table.getByText('0.46153846153846156')).toBeVisible()
+  await expect(table.getByText('0.7319884726224783')).toBeVisible()
   await dialog.getByRole('button', { name: 'Tutup' }).click()
   await expect(exactDataTrigger).toBeFocused()
   await expect(page.getByText(/winner|pemenang|peringkat|model terbaik/i)).toHaveCount(0)

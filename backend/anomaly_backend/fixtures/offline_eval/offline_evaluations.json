@@ -1,218 +1,384 @@
 {
+  "evaluation": {
+    "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
+    "evaluation_split": "val_injected",
+    "test_consumed": false,
+    "primary_scope": "non_overlapping_evaluation_bins",
+    "primary_metric": "f1",
+    "n_points_total": 105425,
+    "n_points_evaluated": 105408,
+    "n_model_windows": 105327,
+    "n_positive_windows": 12392,
+    "n_events": 207,
+    "evaluation_bin_size_points": 51,
+    "n_evaluation_bins": 2071,
+    "n_skipped_bins": 6
+  },
   "items": [
     {
       "model_family": "conv1d",
       "model_sha256": "85c901e8fed463207a44151adc14772d3660384ae88daf9fcc53431e6acc39c9",
-      "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
-      "forward_validation": {
-        "recon_max_abs_diff": 0.0,
-        "score_rel_error": 0.0,
-        "passed": true
-      },
       "threshold": {
-        "value": 0.00022889401589054614,
-        "policy": "clean_val_quantile",
-        "alpha": 0.01,
-        "comparison": "strict_gt"
+        "value": 0.0003201981883103135,
+        "method": "clean_percentile_99_5",
+        "percentile": 99.5,
+        "calibration_split": "clean_validation",
+        "comparison": "strict_gt",
+        "score_unit": "timestamp",
+        "uses_anomaly_labels": false,
+        "clean_alert_rate": 0.005009107468123861
       },
-      "n_val_windows": 105327,
-      "n_test_windows": 105598,
-      "n_events": 210,
-      "n_positive_windows": 12432,
-      "metrics": {
-        "window_precision": 0.8214382265477156,
-        "window_recall": 0.4888191763191763,
-        "window_f1": 0.6129097327281897,
-        "event_hit_rate": 0.9238095238095239,
-        "event_hit_by_family": {
-          "bias": 1.0,
-          "data_loss": 0.9615384615384616,
-          "drift": 1.0,
-          "erratic": 1.0,
-          "garbage": 0.96875,
-          "spike": 1.0,
-          "stuck": 0.5172413793103449
+      "scopes": {
+        "timestamp": {
+          "accuracy": 0.9290281572556163,
+          "precision": 0.7199942503952853,
+          "recall": 0.47514703092392335,
+          "f1": 0.5724898565632321,
+          "tn": 92918,
+          "fp": 1948,
+          "fn": 5533,
+          "tp": 5009,
+          "n_evaluated": 105408
         },
-        "clean_test_fpr": 0.01296426068675543,
-        "composite_fc1": 0.7875649752878094,
-        "alert_rate": 0.07005814504062577
+        "overlapping_model_windows": {
+          "accuracy": 0.9272266370446325,
+          "precision": 0.7605556168007938,
+          "recall": 0.5567301484828922,
+          "f1": 0.6428737827889857,
+          "tn": 90763,
+          "fp": 2172,
+          "fn": 5493,
+          "tp": 6899,
+          "n_evaluated": 105327
+        },
+        "non_overlapping_evaluation_bins": {
+          "accuracy": 0.9169483341380975,
+          "precision": 0.828169014084507,
+          "recall": 0.725925925925926,
+          "f1": 0.7736842105263158,
+          "tn": 1605,
+          "fp": 61,
+          "fn": 111,
+          "tp": 294,
+          "n_evaluated": 2071
+        }
+      },
+      "point_auc": {
+        "roc": 0.793323510973309,
+        "pr_trapezoidal": 0.5783279994006357,
+        "pr_definition": "trapezoidal_precision_recall_auc",
+        "score_unit": "timestamp"
       },
       "provenance": {
-        "forward": "strict-loaded window-10 checkpoint; platform forward validated against self-regenerated Dandy step8 clean-val reconstruction because the shipped validation_reconstruction.npz is stale window-30",
-        "torch_version": "2.13.0+cu130",
-        "computed_at": "2026-07-30T13:40:37.121438Z"
+        "metric_authority": "executed_step7_notebook_output",
+        "step5_notebook": {
+          "filename": "conv1d_autoencoder_b02f3872_ruang_produksi_v3_march07_step5.ipynb",
+          "sha256": "782c8d9906fe9a6c45e32a1e624e4dabc8c1ce9cc33915608ecd4ba21afb5dbf"
+        },
+        "step7_notebook": {
+          "filename": "conv1d_autoencoder_b02f3872_ruang_produksi_v3_march07_step7.ipynb",
+          "sha256": "b14aa0b399936b0ce289771a35c0db72d911fcf42cff346776c8d4fbbf16f918"
+        },
+        "artifact_checks": [
+          {
+            "filename": "conv1d_step5_artifacts.zip",
+            "sha256": "6698d40f2476343801ab64285ddd9e900e47a2857aa5c090beaf69eda1a30bbf",
+            "role": "step5_model_identity",
+            "consistency": "matched",
+            "note": "Model checkpoint identity and configuration match the Step 5 notebook output."
+          }
+        ]
       }
     },
     {
       "model_family": "gru",
       "model_sha256": "0506d1da27d92a259e62c32ce43db7fd19dfa8ad679c08c6d67bf727653a2caa",
-      "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
-      "forward_validation": {
-        "recon_max_abs_diff": 0.00035750865936279297,
-        "score_rel_error": 0.0038041777269998424,
-        "passed": true
-      },
       "threshold": {
-        "value": 0.0004142577527090907,
-        "policy": "clean_val_quantile",
-        "alpha": 0.01,
-        "comparison": "strict_gt"
+        "value": 0.0005618056084495022,
+        "method": "clean_percentile_99_5",
+        "percentile": 99.5,
+        "calibration_split": "clean_validation",
+        "comparison": "strict_gt",
+        "score_unit": "timestamp",
+        "uses_anomaly_labels": false,
+        "clean_alert_rate": 0.005009107468123861
       },
-      "n_val_windows": 105327,
-      "n_test_windows": 105598,
-      "n_events": 210,
-      "n_positive_windows": 12432,
-      "metrics": {
-        "window_precision": 0.79149876511114,
-        "window_recall": 0.4897844272844273,
-        "window_f1": 0.6051180124223603,
-        "event_hit_rate": 0.9619047619047619,
-        "event_hit_by_family": {
-          "bias": 1.0,
-          "data_loss": 1.0,
-          "drift": 1.0,
-          "erratic": 1.0,
-          "garbage": 1.0,
-          "spike": 1.0,
-          "stuck": 0.7241379310344828
+      "scopes": {
+        "timestamp": {
+          "accuracy": 0.9292558439587129,
+          "precision": 0.7180828502756963,
+          "recall": 0.4817871371656232,
+          "f1": 0.5766676128299745,
+          "tn": 92872,
+          "fp": 1994,
+          "fn": 5463,
+          "tp": 5079,
+          "n_evaluated": 105408
         },
-        "clean_test_fpr": 0.01575787420216292,
-        "composite_fc1": 0.7813478880368127,
-        "alert_rate": 0.07285175855603326
+        "overlapping_model_windows": {
+          "accuracy": 0.9282899921197794,
+          "precision": 0.7591858596679164,
+          "recall": 0.5719012265978051,
+          "f1": 0.6523680213559166,
+          "tn": 90687,
+          "fp": 2248,
+          "fn": 5305,
+          "tp": 7087,
+          "n_evaluated": 105327
+        },
+        "non_overlapping_evaluation_bins": {
+          "accuracy": 0.9237083534524384,
+          "precision": 0.8365122615803815,
+          "recall": 0.7580246913580246,
+          "f1": 0.7953367875647669,
+          "tn": 1606,
+          "fp": 60,
+          "fn": 98,
+          "tp": 307,
+          "n_evaluated": 2071
+        }
+      },
+      "point_auc": {
+        "roc": 0.7799894501562625,
+        "pr_trapezoidal": 0.5734345366372323,
+        "pr_definition": "trapezoidal_precision_recall_auc",
+        "score_unit": "timestamp"
       },
       "provenance": {
-        "forward": "strict-loaded window-10 checkpoint; platform forward validated against shipped window-10 validation_reconstruction.npz",
-        "torch_version": "2.13.0+cu130",
-        "computed_at": "2026-07-30T13:40:37.121438Z"
+        "metric_authority": "executed_step7_notebook_output",
+        "step5_notebook": {
+          "filename": "gru_autoencoder_b02f3872_ruang_produksi_v3_march07_step5.ipynb",
+          "sha256": "ab827505d106df33614ac6f6f3a064a8b99df31e2557a5ce38407e75e734c788"
+        },
+        "step7_notebook": {
+          "filename": "gru_autoencoder_b02f3872_ruang_produksi_v3_march07_step7.ipynb",
+          "sha256": "0b6c47870bc202a9a32bd2fd0e2477c2f985dcc186e3d3aecfdd3a69a309baf3"
+        },
+        "artifact_checks": []
       }
     },
     {
       "model_family": "lstm",
       "model_sha256": "0dde621c1fe4117fd57602a94c30bd764e900108ceea3675fba6295e9500cccb",
-      "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
-      "forward_validation": {
-        "recon_max_abs_diff": 0.0,
-        "score_rel_error": 0.0,
-        "passed": true
-      },
       "threshold": {
-        "value": 0.0006605043890886009,
-        "policy": "clean_val_quantile",
-        "alpha": 0.01,
-        "comparison": "strict_gt"
+        "value": 0.0009487349475675721,
+        "method": "clean_percentile_99_5",
+        "percentile": 99.5,
+        "calibration_split": "clean_validation",
+        "comparison": "strict_gt",
+        "score_unit": "timestamp",
+        "uses_anomaly_labels": false,
+        "clean_alert_rate": 0.005009107468123861
       },
-      "n_val_windows": 105327,
-      "n_test_windows": 105598,
-      "n_events": 210,
-      "n_positive_windows": 12432,
-      "metrics": {
-        "window_precision": 0.8256740196078431,
-        "window_recall": 0.43355855855855857,
-        "window_f1": 0.5685654008438819,
-        "event_hit_rate": 0.8571428571428571,
-        "event_hit_by_family": {
-          "bias": 0.896551724137931,
-          "data_loss": 0.9230769230769231,
-          "drift": 1.0,
-          "erratic": 0.9696969696969697,
-          "garbage": 0.90625,
-          "spike": 1.0,
-          "stuck": 0.27586206896551724
+      "scopes": {
+        "timestamp": {
+          "accuracy": 0.9281648451730419,
+          "precision": 0.7487437185929648,
+          "recall": 0.42401821286283436,
+          "f1": 0.5414244186046512,
+          "tn": 93366,
+          "fp": 1500,
+          "fn": 6072,
+          "tp": 4470,
+          "n_evaluated": 105408
         },
-        "clean_test_fpr": 0.01100399628780848,
-        "composite_fc1": 0.750121584092303,
-        "alert_rate": 0.06181935263925453
+        "overlapping_model_windows": {
+          "accuracy": 0.9246536975324465,
+          "precision": 0.7895762932154926,
+          "recall": 0.4902356358941252,
+          "f1": 0.6048989345813004,
+          "tn": 91316,
+          "fp": 1619,
+          "fn": 6317,
+          "tp": 6075,
+          "n_evaluated": 105327
+        },
+        "non_overlapping_evaluation_bins": {
+          "accuracy": 0.9101883148237566,
+          "precision": 0.8788927335640139,
+          "recall": 0.6271604938271605,
+          "f1": 0.7319884726224783,
+          "tn": 1631,
+          "fp": 35,
+          "fn": 151,
+          "tp": 254,
+          "n_evaluated": 2071
+        }
+      },
+      "point_auc": {
+        "roc": 0.818779816368048,
+        "pr_trapezoidal": 0.5798428116286538,
+        "pr_definition": "trapezoidal_precision_recall_auc",
+        "score_unit": "timestamp"
       },
       "provenance": {
-        "forward": "strict-loaded window-10 checkpoint; platform forward validated against self-regenerated Dandy step8 clean-val reconstruction because the shipped validation_reconstruction.npz is stale window-30",
-        "torch_version": "2.13.0+cu130",
-        "computed_at": "2026-07-30T13:40:37.121438Z"
+        "metric_authority": "executed_step7_notebook_output",
+        "step5_notebook": {
+          "filename": "lstm_autoencoder_b02f3872_ruang_produksi_v3_march07_step5.ipynb",
+          "sha256": "17cc1f584a5445c2b986517fd391419c56270ca9ff295df40e46fc2c57bc3ef6"
+        },
+        "step7_notebook": {
+          "filename": "lstm_autoencoder_b02f3872_ruang_produksi_v3_march07_step7.ipynb",
+          "sha256": "70c44870d914617e125997c4defeb360ca813de342c5a8dbf7519af1881a5469"
+        },
+        "artifact_checks": [
+          {
+            "filename": "lstm_step5_artifacts.zip",
+            "sha256": "b05bd9adb10fcc0d6d4eeb5e992fdc5f3f9507b03495067896b7436dd5e0dc27",
+            "role": "step5_model_identity",
+            "consistency": "matched",
+            "note": "Model checkpoint identity and configuration match the Step 5 notebook output."
+          }
+        ]
       }
     },
     {
       "model_family": "rnn",
       "model_sha256": "c801a284c95c16ce9031a24f774d941c314bc0758e7b20d593af64fb630f0ebd",
-      "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
-      "forward_validation": {
-        "recon_max_abs_diff": 0.0007295012474060059,
-        "score_rel_error": 0.010280641562283898,
-        "passed": true
-      },
       "threshold": {
-        "value": 0.00032651066430844367,
-        "policy": "clean_val_quantile",
-        "alpha": 0.01,
-        "comparison": "strict_gt"
+        "value": 0.0005023972923204374,
+        "method": "clean_percentile_99_5",
+        "percentile": 99.5,
+        "calibration_split": "clean_validation",
+        "comparison": "strict_gt",
+        "score_unit": "timestamp",
+        "uses_anomaly_labels": false,
+        "clean_alert_rate": 0.005009107468123861
       },
-      "n_val_windows": 105327,
-      "n_test_windows": 105598,
-      "n_events": 210,
-      "n_positive_windows": 12432,
-      "metrics": {
-        "window_precision": 0.7770475227502528,
-        "window_recall": 0.4945302445302445,
-        "window_f1": 0.6044042469524185,
-        "event_hit_rate": 0.9380952380952381,
-        "event_hit_by_family": {
-          "bias": 1.0,
-          "data_loss": 1.0,
-          "drift": 1.0,
-          "erratic": 1.0,
-          "garbage": 0.96875,
-          "spike": 1.0,
-          "stuck": 0.5862068965517241
+      "scopes": {
+        "timestamp": {
+          "accuracy": 0.9293791742562234,
+          "precision": 0.7268599882835384,
+          "recall": 0.4707835325365206,
+          "f1": 0.5714450201496835,
+          "tn": 93001,
+          "fp": 1865,
+          "fn": 5579,
+          "tp": 4963,
+          "n_evaluated": 105408
         },
-        "clean_test_fpr": 0.01702683762950056,
-        "composite_fc1": 0.7683915518424699,
-        "alert_rate": 0.07492566147086119
+        "overlapping_model_windows": {
+          "accuracy": 0.9282520151528099,
+          "precision": 0.7737515570150606,
+          "recall": 0.5514041316978696,
+          "f1": 0.6439240446685199,
+          "tn": 90937,
+          "fp": 1998,
+          "fn": 5559,
+          "tp": 6833,
+          "n_evaluated": 105327
+        },
+        "non_overlapping_evaluation_bins": {
+          "accuracy": 0.9193626267503622,
+          "precision": 0.85,
+          "recall": 0.7135802469135802,
+          "f1": 0.7758389261744967,
+          "tn": 1615,
+          "fp": 51,
+          "fn": 116,
+          "tp": 289,
+          "n_evaluated": 2071
+        }
+      },
+      "point_auc": {
+        "roc": 0.830416714497966,
+        "pr_trapezoidal": 0.6009934335125744,
+        "pr_definition": "trapezoidal_precision_recall_auc",
+        "score_unit": "timestamp"
       },
       "provenance": {
-        "forward": "strict-loaded window-10 checkpoint; platform forward validated against shipped window-10 validation_reconstruction.npz",
-        "torch_version": "2.13.0+cu130",
-        "computed_at": "2026-07-30T13:40:37.121438Z"
+        "metric_authority": "executed_step7_notebook_output",
+        "step5_notebook": {
+          "filename": "rnn_autoencoder_b02f3872_ruang_produksi_v3_march07_step5.ipynb",
+          "sha256": "8e45fd2f21e4ecc8bd3bf7e4cf8dcc3ab8e70427cabbd82c91f3b5995172ce7a"
+        },
+        "step7_notebook": {
+          "filename": "rnn_autoencoder_b02f3872_ruang_produksi_v3_march07_step7.ipynb",
+          "sha256": "e7a5e21c67e9906bdc2b1843b6753c10fd56fd84f466255f538b02397afe4925"
+        },
+        "artifact_checks": []
       }
     },
     {
       "model_family": "transformer",
       "model_sha256": "364b0c73be1054b05a33924615d53ee1ebcb12af4bbb7d4efc0c1a144af3e015",
-      "dataset_reference": "b02f3872_ruang_produksi_v3_march07",
-      "forward_validation": {
-        "recon_max_abs_diff": 0.0,
-        "score_rel_error": 0.0,
-        "passed": true
-      },
       "threshold": {
-        "value": 0.000215801308513619,
-        "policy": "clean_val_quantile",
-        "alpha": 0.01,
-        "comparison": "strict_gt"
+        "value": 0.00026567234380490805,
+        "method": "clean_percentile_99_5",
+        "percentile": 99.5,
+        "calibration_split": "clean_validation",
+        "comparison": "strict_gt",
+        "score_unit": "timestamp",
+        "uses_anomaly_labels": false,
+        "clean_alert_rate": 0.005009107468123861
       },
-      "n_val_windows": 105327,
-      "n_test_windows": 105598,
-      "n_events": 210,
-      "n_positive_windows": 12432,
-      "metrics": {
-        "window_precision": 0.8898741418764302,
-        "window_recall": 0.5004826254826255,
-        "window_f1": 0.640650741350906,
-        "event_hit_rate": 0.9523809523809523,
-        "event_hit_by_family": {
-          "bias": 1.0,
-          "data_loss": 1.0,
-          "drift": 1.0,
-          "erratic": 1.0,
-          "garbage": 0.96875,
-          "spike": 1.0,
-          "stuck": 0.6896551724137931
+      "scopes": {
+        "timestamp": {
+          "accuracy": 0.9290945658773527,
+          "precision": 0.6989107883817427,
+          "recall": 0.5112881806108898,
+          "f1": 0.5905554946860961,
+          "tn": 92544,
+          "fp": 2322,
+          "fn": 5152,
+          "tp": 5390,
+          "n_evaluated": 105408
         },
-        "clean_test_fpr": 0.0076611299456429095,
-        "composite_fc1": 0.8236994483324391,
-        "alert_rate": 0.06621337525331919
+        "overlapping_model_windows": {
+          "accuracy": 0.9289356005582614,
+          "precision": 0.7389229720518065,
+          "recall": 0.6123305358295674,
+          "f1": 0.6696968359736993,
+          "tn": 90254,
+          "fp": 2681,
+          "fn": 4804,
+          "tp": 7588,
+          "n_evaluated": 105327
+        },
+        "non_overlapping_evaluation_bins": {
+          "accuracy": 0.9256397875422501,
+          "precision": 0.8114143920595533,
+          "recall": 0.8074074074074075,
+          "f1": 0.8094059405940595,
+          "tn": 1590,
+          "fp": 76,
+          "fn": 78,
+          "tp": 327,
+          "n_evaluated": 2071
+        }
+      },
+      "point_auc": {
+        "roc": 0.803074512018856,
+        "pr_trapezoidal": 0.5954529614576256,
+        "pr_definition": "trapezoidal_precision_recall_auc",
+        "score_unit": "timestamp"
       },
       "provenance": {
-        "forward": "strict-loaded window-10 checkpoint; platform forward validated against self-regenerated Dandy step8 clean-val reconstruction because the shipped validation_reconstruction.npz is stale window-30",
-        "torch_version": "2.13.0+cu130",
-        "computed_at": "2026-07-30T13:40:37.121438Z"
+        "metric_authority": "executed_step7_notebook_output",
+        "step5_notebook": {
+          "filename": "transformer_autoencoder_b02f3872_ruang_produksi_v3_march07_step5.ipynb",
+          "sha256": "eb199b32d5264c8b94ba394502b429353c2ca5e1fca5dc7b6c1b048e98d6bd43"
+        },
+        "step7_notebook": {
+          "filename": "transformer_autoencoder_b02f3872_ruang_produksi_v3_march07_step7.ipynb",
+          "sha256": "b0a48d96f920d9178b1cbb1849a0c68d206b66046de7234ed1f4cebbda0894f1"
+        },
+        "artifact_checks": [
+          {
+            "filename": "transformer_step5_artifacts.zip",
+            "sha256": "a7ae8937e9ef97403f63d32cc9be17adc6301d4daa9e5668beb5834c5a99351c",
+            "role": "step5_model_identity",
+            "consistency": "matched",
+            "note": "Model checkpoint identity and configuration match the Step 5 notebook output."
+          },
+          {
+            "filename": "transformer_step7_artifacts.zip",
+            "sha256": "f65c7128f55bdddcbd37d0d63ecde8caa59ba0338997b70d472dee48f6892da8",
+            "role": "step7_metric_cross_check",
+            "consistency": "conflict",
+            "note": "The archive contains a stale selected_operating_threshold.json that conflicts with the executed notebook and its later p99.5 scoring tables; notebook output is authoritative."
+          }
+        ]
       }
     }
   ]

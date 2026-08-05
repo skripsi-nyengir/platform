@@ -98,7 +98,7 @@ test('model evaluation cards, selector, chart, and dialog stay contained at 390p
   expect(new Set(selectorBoxes.map((box) => box?.y)).size).toBeGreaterThan(1)
 
   const chart = page.getByRole('img', {
-    name: 'Perbandingan precision recall dan F1 lima model',
+    name: 'Perbandingan precision recall dan F1 lima model pada bin evaluasi',
   })
   await chart.scrollIntoViewIfNeeded()
   const chartBox = await chart.boundingBox()
@@ -106,7 +106,7 @@ test('model evaluation cards, selector, chart, and dialog stay contained at 390p
   if (chartBox !== null) expect(chartBox.x + chartBox.width).toBeLessThanOrEqual(390)
 
   await page.getByRole('button', { name: 'Lihat data eksak' }).click()
-  await expect(page.getByRole('dialog', { name: 'Data eksak evaluasi offline' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Data eksak evaluasi Step 7' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
 

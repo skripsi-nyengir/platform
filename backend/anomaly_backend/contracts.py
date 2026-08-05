@@ -756,52 +756,126 @@ class ModelRegistryResponse(StrictModel):
     items: list[ModelRegistryItem] = Field(min_length=5, max_length=5)
 
 
-class OfflineEvaluationForwardValidation(StrictModel):
-    recon_max_abs_diff: float | None
-    score_rel_error: float | None
-    passed: bool
-
-
 class OfflineEvaluationThreshold(StrictModel):
-    value: float
-    policy: Literal["clean_val_quantile"]
-    alpha: float
+    value: Annotated[float, Field(ge=0)]
+    method: Literal["clean_percentile_99_5"]
+    percentile: Annotated[float, Field(ge=99.5, le=99.5)]
+    calibration_split: Literal["clean_validation"]
     comparison: Literal["strict_gt"]
+    score_unit: Literal["timestamp"]
+    uses_anomaly_labels: Literal[False]
+    clean_alert_rate: Annotated[float, Field(ge=0, le=1)]
 
 
-class OfflineEvaluationMetrics(StrictModel):
-    window_precision: float
-    window_recall: float
-    window_f1: float
-    event_hit_rate: float
-    event_hit_by_family: dict[str, float] = Field(min_length=1)
-    clean_test_fpr: float
-    composite_fc1: float
-    alert_rate: float
+class OfflineEvaluationScopeMetrics(StrictModel):
+    accuracy: Annotated[float, Field(ge=0, le=1)]
+    precision: Annotated[float, Field(ge=0, le=1)]
+    recall: Annotated[float, Field(ge=0, le=1)]
+    f1: Annotated[float, Field(ge=0, le=1)]
+    tn: Annotated[int, Field(ge=0)]
+    fp: Annotated[int, Field(ge=0)]
+    fn: Annotated[int, Field(ge=0)]
+    tp: Annotated[int, Field(ge=0)]
+    n_evaluated: Annotated[int, Field(gt=0)]
+
+    @model_validator(mode="after")
+    def validate_confusion_metrics(self) -> OfflineEvaluationScopeMetrics:
+        if self.tn + self.fp + self.fn + self.tp != self.n_evaluated:
+            raise ValueError("scope confusion counts must sum to n_evaluated")
+
+        accuracy = (self.tn + self.tp) / self.n_evaluated
+        precision = self.tp / (self.tp + self.fp) if self.tp + self.fp else 0.0
+        recall = self.tp / (self.tp + self.fn) if self.tp + self.fn else 0.0
+        f1 = (
+            (2 * self.tp) / (2 * self.tp + self.fp + self.fn)
+            if 2 * self.tp + self.fp + self.fn
+            else 0.0
+        )
+        for name, expected in (
+            ("accuracy", accuracy),
+            ("precision", precision),
+            ("recall", recall),
+            ("f1", f1),
+        ):
+            if abs(getattr(self, name) - expected) > 1e-12:
+                raise ValueError(f"scope {name} must match confusion counts")
+        return self
+
+
+class OfflineEvaluationScopes(StrictModel):
+    timestamp: OfflineEvaluationScopeMetrics
+    overlapping_model_windows: OfflineEvaluationScopeMetrics
+    non_overlapping_evaluation_bins: OfflineEvaluationScopeMetrics
+
+
+class OfflineEvaluationPointAuc(StrictModel):
+    roc: Annotated[float, Field(ge=0, le=1)]
+    pr_trapezoidal: Annotated[float, Field(ge=0, le=1)]
+    pr_definition: Literal["trapezoidal_precision_recall_auc"]
+    score_unit: Literal["timestamp"]
+
+
+class OfflineEvaluationSourceFile(StrictModel):
+    filename: NonEmptyString
+    sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+
+class OfflineEvaluationArtifactCheck(OfflineEvaluationSourceFile):
+    role: Literal["step5_model_identity", "step7_metric_cross_check"]
+    consistency: Literal["matched", "conflict"]
+    note: NonEmptyString
 
 
 class OfflineEvaluationProvenance(StrictModel):
-    forward: NonEmptyString
-    torch_version: NonEmptyString
-    computed_at: NonEmptyString
+    metric_authority: Literal["executed_step7_notebook_output"]
+    step5_notebook: OfflineEvaluationSourceFile
+    step7_notebook: OfflineEvaluationSourceFile
+    artifact_checks: list[OfflineEvaluationArtifactCheck] = Field(max_length=3)
+
+
+class OfflineEvaluationContext(StrictModel):
+    dataset_reference: Literal["b02f3872_ruang_produksi_v3_march07"]
+    evaluation_split: Literal["val_injected"]
+    test_consumed: Literal[False]
+    primary_scope: Literal["non_overlapping_evaluation_bins"]
+    primary_metric: Literal["f1"]
+    n_points_total: Annotated[int, Field(gt=0)]
+    n_points_evaluated: Annotated[int, Field(gt=0)]
+    n_model_windows: Annotated[int, Field(gt=0)]
+    n_positive_windows: Annotated[int, Field(gt=0)]
+    n_events: Annotated[int, Field(gt=0)]
+    evaluation_bin_size_points: Annotated[int, Field(gt=0)]
+    n_evaluation_bins: Annotated[int, Field(gt=0)]
+    n_skipped_bins: Annotated[int, Field(ge=0)]
+
+    @model_validator(mode="after")
+    def validate_counts(self) -> OfflineEvaluationContext:
+        if self.n_points_evaluated > self.n_points_total:
+            raise ValueError("evaluated points cannot exceed total points")
+        if self.n_positive_windows > self.n_model_windows:
+            raise ValueError("positive windows cannot exceed model windows")
+        return self
 
 
 class OfflineEvaluationItem(StrictModel):
     model_family: Literal["conv1d", "gru", "lstm", "rnn", "transformer"]
     model_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-    dataset_reference: Literal["b02f3872_ruang_produksi_v3_march07"]
-    forward_validation: OfflineEvaluationForwardValidation
     threshold: OfflineEvaluationThreshold
-    n_val_windows: Annotated[int, Field(ge=0)]
-    n_test_windows: Annotated[int, Field(ge=0)]
-    n_events: Annotated[int, Field(ge=0)]
-    n_positive_windows: Annotated[int, Field(ge=0)]
-    metrics: OfflineEvaluationMetrics
+    scopes: OfflineEvaluationScopes
+    point_auc: OfflineEvaluationPointAuc
     provenance: OfflineEvaluationProvenance
 
 
 class OfflineEvaluationsResponse(StrictModel):
+    evaluation: OfflineEvaluationContext
     items: list[OfflineEvaluationItem] = Field(min_length=5, max_length=5)
+
+    @model_validator(mode="after")
+    def validate_model_order(self) -> OfflineEvaluationsResponse:
+        expected = ["conv1d", "gru", "lstm", "rnn", "transformer"]
+        if [item.model_family for item in self.items] != expected:
+            raise ValueError("offline evaluations must contain the five models in order")
+        return self
 
 
 class ValidationTrackFields(StrictModel):
