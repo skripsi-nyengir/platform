@@ -10,6 +10,6 @@ export const navigationItems: readonly NavigationItem[] = [
   { path: '/alerts', label: 'Alerts', group: 'operations' },
   // ponytail: EDA route/page kept for direct-URL access but hidden from the sidebar (out of thesis scope).
   { path: '/model-evaluation', label: 'Model Evaluation', group: 'analysis' },
-  { path: '/simulation', label: 'Simulation', group: 'analysis' },
+  // Simulation stays available by direct URL but is intentionally hidden from the sidebar.
   { path: '/system-health', label: 'System Health', group: 'system' },
 ]

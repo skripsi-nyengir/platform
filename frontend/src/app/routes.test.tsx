@@ -10,6 +10,10 @@ describe('B02 routes', () => {
       .toBe('/sensors/b02f3872-ruang-produksi')
   })
 
+  it('keeps simulation out of the primary navigation', () => {
+    expect(navigationItems.some((item) => item.path === '/simulation')).toBe(false)
+  })
+
   it('renders the B02 sensor detail route', async () => {
     renderApp('/sensors/b02f3872-ruang-produksi')
     expect(await screen.findByRole('heading', { name: 'Sensor Detail & History' })).toBeVisible()
