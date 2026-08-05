@@ -8,4 +8,4 @@ router = APIRouter()
 
 @router.get("/api/offline-evaluations", response_model=OfflineEvaluationsResponse)
 async def offline_evaluations() -> OfflineEvaluationsResponse:
-    return OfflineEvaluationsResponse(items=load_offline_evaluations())
+    return load_offline_evaluations()

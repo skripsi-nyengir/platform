@@ -31,7 +31,7 @@ Manifest sumber yang diverifikasi berisi tepat 28 endpoint, terdiri atas 22 `GET
 | 17 | `GET` | `/api/model-evaluations` | `list_model_evaluations` | `backend/anomaly_backend/routes/evaluations.py` | Membaca daftar evaluasi model. |
 | 18 | `GET` | `/api/model-evaluations/{version:path}` | `model_evaluation` | `backend/anomaly_backend/routes/evaluations.py` | Membaca evaluasi suatu versi model. |
 | 19 | `GET` | `/api/model-registry` | `model_registry` | `backend/anomaly_backend/routes/model_registry.py` | Membaca registry model. |
-| 20 | `GET` | `/api/offline-evaluations` | `offline_evaluations` | `backend/anomaly_backend/routes/offline_evaluations.py` | Membaca evaluasi offline. |
+| 20 | `GET` | `/api/offline-evaluations` | `offline_evaluations` | `backend/anomaly_backend/routes/offline_evaluations.py` | Membaca evaluasi Step 7 pada split `val_injected` beserta tiga scope dan provenance notebook. |
 | 21 | `GET` | `/api/simulation/models` | `simulation_models` | `backend/anomaly_backend/routes/simulation.py` | Membaca model simulasi. |
 | 22 | `POST` | `/api/simulation/active-model` | `set_active_model` | `backend/anomaly_backend/routes/simulation.py` | Menetapkan model simulasi aktif. |
 | 23 | `GET` | `/api/simulation/metrics` | `simulation_metrics` | `backend/anomaly_backend/routes/simulation.py` | Membaca metrik simulasi. |
