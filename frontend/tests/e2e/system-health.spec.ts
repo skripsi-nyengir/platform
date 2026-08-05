@@ -25,8 +25,9 @@ test('failed status poll retains the snapshot and recovers through Retry', async
   await expect(evidence).toContainText('2026-07-31T07:59:59')
   const services = currentDashboard.getByRole('region', { name: 'Service status' })
   await expect(services).toBeVisible()
-  await expect(services.getByRole('article')).toHaveCount(7)
-  await expect(services.getByRole('heading', { name: 'Original artifact readiness' })).toBeVisible()
+  await expect(services.getByRole('article')).toHaveCount(5)
+  await expect(services.getByRole('heading', { name: 'Telemetry import' })).toHaveCount(0)
+  await expect(services.getByRole('heading', { name: 'Original artifact readiness' })).toHaveCount(0)
 
   await setBrowserTime(page, '2026-07-19T10:31:00Z')
   await disableAppQueryRetries(page)

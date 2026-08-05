@@ -103,37 +103,10 @@ async def system_status(
     revision = await current_migration_revision(connection)
     observation = await telemetry_observation(connection)
     database_ready = database_healthy and _revision_is_compatible(revision)
-    published_count = int(
-        await connection.scalar(
-            select(func.count()).select_from(tables.published_corpora)
-        )
-        or 0
-    )
-    import_status = await connection.scalar(
-        select(tables.corpora.c.status)
-        .join(
-            tables.published_corpora,
-            tables.published_corpora.c.corpus_id
-            == tables.corpora.c.corpus_id,
-        )
-        .where(
-            tables.published_corpora.c.device_id
-            == "b02f3872-ruang-produksi"
-        )
-    )
     worker_heartbeat = await connection.scalar(
         select(func.max(tables.worker_heartbeats.c.heartbeat_at))
     )
     active_version = observation["active_model_version"]
-    ready_artifacts = int(
-        await connection.scalar(
-            select(func.count()).select_from(tables.model_versions).where(
-                tables.model_versions.c.runtime_kind == "artifact",
-                tables.model_versions.c.is_selectable,
-            )
-        )
-        or 0
-    )
     latest_ts = cast(datetime | None, observation["latest_ts"])
     age_seconds = cast(float | None, observation["age_seconds"])
     configuration_valid = cast(bool, observation["configuration_valid"])
@@ -182,7 +155,23 @@ async def system_status(
         if lease_active
         else "disconnected"
     )
-    subscriber_ready = classification == "healthy"
+    subscriber_ready = (
+        configuration_valid
+        and lease_active
+        and health_status == "healthy"
+        and not scoring_stalled
+    )
+    subscriber_detail = (
+        "Live subscriber lease, broker connection, and model are ready"
+        if subscriber_ready
+        else "Activate a verified live model and scaler bundle."
+        if not configuration_valid
+        else "Start the live subscriber or restore its database lease."
+        if not lease_active
+        else "Restore the live subscriber health dependency."
+        if health_status != "healthy"
+        else f"Live scoring is stalled with {durable_backlog} queued readings."
+    )
     return SystemStatusResponse(
         request_id=new_request_id(),
         checked_at=checked_at,
@@ -218,24 +207,7 @@ async def system_status(
                 liveness="alive" if lease_active else "not_alive",
                 readiness="ready" if subscriber_ready else "not_ready",
                 checked_at=checked_at,
-                detail=(
-                    "Live subscriber lease, telemetry, and model are ready"
-                    if subscriber_ready
-                    else reasons[0]
-                    if reasons
-                    else "Live subscriber is not ready"
-                ),
-            ),
-            SystemServiceStatus(
-                name="telemetry-import",
-                liveness="alive" if published_count else "unknown",
-                readiness="ready" if import_status == "published" else "not_ready",
-                checked_at=checked_at,
-                detail=(
-                    "Corpus telemetri nyata telah dipublikasikan"
-                    if import_status == "published"
-                    else "Import telemetri nyata belum siap"
-                ),
+                detail=subscriber_detail,
             ),
             SystemServiceStatus(
                 name="preview-worker",
@@ -257,16 +229,6 @@ async def system_status(
                     f"{active_version} dipilih untuk replay berikutnya"
                     if active_version is not None
                     else "Belum ada model yang dipilih untuk replay"
-                ),
-            ),
-            SystemServiceStatus(
-                name="artifact-readiness",
-                liveness="unknown",
-                readiness="ready" if ready_artifacts == 7 else "not_ready",
-                checked_at=checked_at,
-                detail=(
-                    f"{ready_artifacts}/7 artifact asli siap; "
-                    "skor preview tetap berlabel simulasi"
                 ),
             ),
         ],
@@ -344,9 +306,7 @@ async def system_status(
         ),
         diagnostics={
             "preview_score_provenance": "simulated_preview",
-            "published_corpus_count": published_count,
             "selected_model_version": active_version,
-            "ready_artifact_family_count": ready_artifacts,
             "live_health_status": health_status,
         },
     )

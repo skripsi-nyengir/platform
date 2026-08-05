@@ -33,15 +33,15 @@ function renderDashboard(snapshot: SystemStatusResponse, retained = false) {
 }
 
 describe('SystemHealthPage', () => {
-  it('renders the route-specific dashboard with seven canonical services in API order', async () => {
+  it('renders the route-specific dashboard with five runtime services in API order', async () => {
     renderApp('/system-health')
 
     const health = await screen.findByRole('region', { name: 'Live telemetry health' })
     expect(within(health).getByText('Healthy')).toBeVisible()
     expect(screen.getByText('Live telemetry is healthy.')).toBeVisible()
     const readiness = screen.getByRole('group', { name: 'Service readiness counts' })
-    expect(within(readiness).getByText('Ready 6')).toBeVisible()
-    expect(within(readiness).getByText('Not ready 1')).toBeVisible()
+    expect(within(readiness).getByText('Ready 5')).toBeVisible()
+    expect(within(readiness).getByText('Not ready 0')).toBeVisible()
     expect(within(readiness).getByText('Unknown 0')).toBeVisible()
 
     const cards = screen.getByTestId('service-status-grid').querySelectorAll('[data-service-name]')
@@ -49,11 +49,11 @@ describe('SystemHealthPage', () => {
       'api',
       'database',
       'live-subscriber',
-      'telemetry-import',
       'preview-worker',
       'active-selection',
-      'artifact-readiness',
     ])
+    expect(screen.queryByRole('heading', { name: 'Telemetry import' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Original artifact readiness' })).not.toBeInTheDocument()
   })
 
   it.each([

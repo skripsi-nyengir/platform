@@ -911,15 +911,10 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
                 offline_sensor_count: 1,
               }
             : { ...systemStatus.telemetry }
-      const services = state.scenario === 'stale'
-        ? systemStatus.services.map((service) => service.name === 'live-subscriber'
-          ? { ...service, readiness: 'not_ready' as const, detail: staleReason }
-          : { ...service })
-        : systemStatus.services.map((service) => ({ ...service }))
       return HttpResponse.json({
         ...systemStatus,
         overall_observation: state.scenario === 'stale' ? staleReason : systemStatus.overall_observation,
-        services,
+        services: systemStatus.services.map((service) => ({ ...service })),
         telemetry,
       })
     }),

@@ -12,6 +12,7 @@ from fastapi import APIRouter
 from httpx import Response
 from sqlalchemy import func, insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncConnection
 import pytest
 
 from anomaly_backend import tables
@@ -877,8 +878,49 @@ async def test_system_status_is_actionable_fresh_and_redacted(
     assert 0 <= telemetry["age_seconds"] < 30
     assert telemetry["active_model_version"] == live_api_fixture["model_version"]
     assert telemetry["artifact_hashes"] == live_api_fixture["hashes"]
-    assert "live-subscriber" in {service["name"] for service in body["services"]}
+    assert [service["name"] for service in body["services"]] == [
+        "api",
+        "database",
+        "live-subscriber",
+        "preview-worker",
+        "active-selection",
+    ]
     rendered = response.text
     assert cast(str, live_api_fixture["secret"]) not in rendered
     for forbidden in ("broker_host", "password", "username", "ca_file"):
         assert forbidden not in rendered
+
+
+@pytest.mark.anyio
+async def test_system_status_keeps_subscriber_ready_when_only_telemetry_is_stale(
+    client_factory: ClientFactory,
+    live_api_fixture: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system_module = import_module("anomaly_backend.routes.system")
+    original_observation = system_module.telemetry_observation
+
+    async def stale_observation(connection: AsyncConnection) -> dict[str, object]:
+        observation = await original_observation(connection)
+        return {**observation, "age_seconds": 601.0}
+
+    monkeypatch.setattr(system_module, "telemetry_observation", stale_observation)
+    async with client_factory(_router("anomaly_backend.routes.system")) as (
+        _,
+        client,
+    ):
+        response = await client.get("/api/system/status")
+
+    body = _payload(response)
+    services = {service["name"]: service for service in body["services"]}
+    assert response.status_code == 200
+    assert body["telemetry"]["classification"] == "degraded"
+    assert body["telemetry"]["active_model_version"] == live_api_fixture["model_version"]
+    assert body["telemetry"]["reasons"] == [
+        "Check broker delivery because the latest valid reading is stale."
+    ]
+    assert services["live-subscriber"]["liveness"] == "alive"
+    assert services["live-subscriber"]["readiness"] == "ready"
+    assert services["live-subscriber"]["detail"] == (
+        "Live subscriber lease, broker connection, and model are ready"
+    )

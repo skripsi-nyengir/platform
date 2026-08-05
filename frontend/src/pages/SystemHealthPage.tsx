@@ -12,10 +12,7 @@ export function SystemHealthPage() {
       <Stack spacing={0.5}>
         <Typography variant="h1">System Health</Typography>
         <Typography color="text.secondary" variant="body2" sx={{ maxWidth: '68ch' }}>
-          Status komponen preview replay untuk B02F3872.
-        </Typography>
-        <Typography color="text.secondary" variant="body2" sx={{ maxWidth: '68ch' }}>
-          Simulasi preview dipisahkan dari kesiapan artifact asli.
+          Status layanan runtime dan aliran live telemetry untuk B02F3872.
         </Typography>
       </Stack>
 

@@ -48,7 +48,18 @@ args=" $* "
 if [[ $args == *" ps --filter label=traefik.enable=true "* ]]; then echo traefik; exit 0; fi
 if [[ $args == *" compose version "* || $args == *" network inspect reverse_proxy "* || $args == *" compose "*" config "* ]]; then exit 0; fi
 if [[ $args == *" ps -q db "* ]]; then [[ ${FAKE_DB_EXISTS:-0} == 1 ]] && echo db-container; exit 0; fi
-if [[ $args == *" exec -T db "* ]]; then printf 'fake custom dump'; exit 0; fi
+if [[ $args == *" exec -T db sh -eu -c "*"pg_dump -Fc"* ]]; then printf 'fake custom dump'; exit 0; fi
+if [[ $args == *" exec -T db pg_restore --list "* ]]; then
+  dump=$(cat)
+  [[ $dump == 'fake custom dump' ]] || exit 65
+  [[ ${FAKE_DB_VERIFY_MODE:-success} == success ]] || exit 86
+  printf 'verified\n' >"$FAKE_DB_VERIFY_FILE"
+  exit 0
+fi
+if [[ $args == *" run --rm "* ]]; then
+  printf 'compose mutation\n' >>"$FAKE_MUTATION_FILE"
+  exit 0
+fi
 if [[ $args == *" up -d "* ]]; then
   count=0
   [[ -f ${FAKE_START_COUNT_FILE:-/nonexistent} ]] && read -r count <"$FAKE_START_COUNT_FILE"
@@ -72,19 +83,17 @@ case $url in
   */api/system/status) printf '{"telemetry":{"classification":"healthy"}}' ;;
 esac
 EOF
-  cat >"$fake_bin/pg_dump" <<'EOF'
-#!/bin/sh
-printf 'fake custom dump'
-EOF
   cat >"$fake_bin/pg_restore" <<'EOF'
 #!/bin/sh
-test -s "$2"
+echo 'host pg_restore must not be called' >&2
+exit 86
 EOF
   chmod +x "$fake_bin"/*
   export PATH="$fake_bin:/usr/bin:/bin"
   export ANOMALY_DEPLOY_TESTING=1 ANOMALY_STATE_DIR="$state_dir"
   export ANOMALY_HEALTH_TIMEOUT=1 FAKE_START_COUNT_FILE="$case_dir/start-count"
-  unset FAKE_DB_EXISTS FAKE_HEALTH_MODE
+  export FAKE_DB_VERIFY_FILE="$case_dir/db-verify" FAKE_MUTATION_FILE="$case_dir/mutations"
+  unset FAKE_DB_EXISTS FAKE_DB_VERIFY_MODE FAKE_HEALTH_MODE
 }
 
 run_deploy() {
@@ -110,8 +119,19 @@ for index in {1..8}; do
   touch -d "$index minutes ago" "$state_dir/backups/database-old-$index.dump"
 done
 make_manifest v0.2.0 2 | run_deploy
+[[ -s $FAKE_DB_VERIFY_FILE ]] || fail "database backup was not verified inside the database container"
 backup_count=$(find "$state_dir/backups" -name 'database-*.dump' | wc -l)
 [[ $backup_count -eq 7 ]] || fail "backup rotation retained $backup_count files"
+
+setup_case backup_verification_failure
+export FAKE_DB_EXISTS=1 FAKE_DB_VERIFY_MODE=fail
+if make_manifest v0.2.0 2 | run_deploy >"$case_dir/output" 2>&1; then fail "unverified backup accepted"; fi
+grep -q 'database backup verification failed' "$case_dir/output" || fail "backup verification failure was not reported"
+[[ ! -e $FAKE_MUTATION_FILE ]] || fail "deployment mutated services after backup verification failed"
+[[ ! -e $state_dir/manifests/current.json ]] || fail "failed backup changed current manifest"
+if find "$state_dir/backups" -name 'database-*.dump' -print -quit | grep -q .; then
+  fail "unverified database backup was retained"
+fi
 
 setup_case rollback
 make_manifest v0.1.0 1 >"$state_dir/manifests/current.json"
