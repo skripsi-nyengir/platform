@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/skripsi-nyengir/platform/compare/v0.1.1...v0.1.2) (2026-08-05)
+
+
+### Bug Fixes
+
+* production health and backup deployment ([fc9ad6c](https://github.com/skripsi-nyengir/platform/commit/fc9ad6cc65eca83f119c6f41ad857fb3004276a5))
+
 ## [0.1.1](https://github.com/skripsi-nyengir/platform/compare/v0.1.0...v0.1.1) (2026-08-05)
 
 
