@@ -31,14 +31,7 @@ export const systemStatus = Object.freeze({
       liveness: 'alive',
       readiness: 'ready',
       checked_at: checkedAt,
-      detail: 'Live subscriber lease, telemetry, and model are ready',
-    },
-    {
-      name: 'telemetry-import',
-      liveness: 'alive',
-      readiness: 'ready',
-      checked_at: checkedAt,
-      detail: 'Corpus telemetri nyata telah dipublikasikan',
+      detail: 'Live subscriber lease, broker connection, and model are ready',
     },
     {
       name: 'preview-worker',
@@ -53,13 +46,6 @@ export const systemStatus = Object.freeze({
       readiness: 'ready',
       checked_at: checkedAt,
       detail: 'preview-lstm-ae-v1 dipilih untuk replay berikutnya',
-    },
-    {
-      name: 'artifact-readiness',
-      liveness: 'unknown',
-      readiness: 'not_ready',
-      checked_at: checkedAt,
-      detail: '0/7 artifact asli siap; skor preview tetap berlabel simulasi',
     },
   ],
   telemetry: {
@@ -95,7 +81,7 @@ export const systemStatus = Object.freeze({
     stale_sensor_count: 0,
     offline_sensor_count: 0,
   },
-  diagnostics: { score_provenance: 'simulated_preview', artifact_ready_count: 0 },
+  diagnostics: { score_provenance: 'simulated_preview' },
 } satisfies SystemStatusResponse)
 
 export const livenessResponse = Object.freeze({

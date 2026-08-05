@@ -17,10 +17,8 @@ const serviceLabels: Readonly<Record<string, string>> = Object.freeze({
   api: 'API',
   database: 'Database',
   'live-subscriber': 'Live telemetry subscriber',
-  'telemetry-import': 'Telemetry import',
   'preview-worker': 'Preview worker',
   'active-selection': 'Active model selection',
-  'artifact-readiness': 'Original artifact readiness',
 })
 
 const livenessLabels: Readonly<Record<LivenessState, string>> = Object.freeze({

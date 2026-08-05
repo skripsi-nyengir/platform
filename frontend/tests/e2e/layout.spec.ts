@@ -121,11 +121,14 @@ test('system health evidence and service cards stay contained at 390px', async (
   await expect(telemetryHealth.getByText('Degraded', { exact: true })).toBeVisible()
   await expect(dashboard.getByText('10m 1s')).toBeVisible()
   await expect(dashboard.getByText('Ready 5')).toBeVisible()
-  await expect(dashboard.getByText('Not ready 2')).toBeVisible()
+  await expect(dashboard.getByText('Not ready 0')).toBeVisible()
   const evidence = dashboard.getByRole('region', { name: 'Snapshot evidence' })
   await expect(evidence).toContainText('Latest telemetry (Asia/Jakarta, WIB)')
   const services = dashboard.getByRole('region', { name: 'Service status' })
-  await expect(services.getByRole('article')).toHaveCount(7)
+  await expect(services.getByRole('article')).toHaveCount(5)
+  await expect(services.locator('[data-service-name="live-subscriber"]')).toContainText('Readiness: Ready')
+  await expect(services.getByRole('heading', { name: 'Telemetry import' })).toHaveCount(0)
+  await expect(services.getByRole('heading', { name: 'Original artifact readiness' })).toHaveCount(0)
   await expectNoHorizontalOverflow(page)
 
   const cardBoxes = await Promise.all(
@@ -174,7 +177,7 @@ test('system health service grid uses three desktop and two tablet columns', asy
   const cards = page
     .getByRole('region', { name: 'Service status' })
     .getByRole('article')
-  await expect(cards).toHaveCount(7)
+  await expect(cards).toHaveCount(5)
   const desktopBoxes = await Promise.all(
     (await cards.all()).slice(0, 4).map((card) => card.boundingBox()),
   )
