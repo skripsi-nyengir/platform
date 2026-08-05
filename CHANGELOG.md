@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/skripsi-nyengir/platform/compare/v0.1.0...v0.1.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **ci:** repair production deployment gates ([65f88ba](https://github.com/skripsi-nyengir/platform/commit/65f88ba6bccb0ecaa9dab4eb7c006f1673de23de))
+* **ci:** repair production deployment gates ([029859c](https://github.com/skripsi-nyengir/platform/commit/029859c370e3aee8fd53ba1566b364dd239be5a3))
+
 ## 0.1.0 (2026-08-04)
 
 
