@@ -45,6 +45,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     "sqlalchemy==2.0.51" \
     "numpy==2.4.6" \
     "paho-mqtt==2.1.0"
+# Slack alert delivery runs from this image rather than a fourth one, which would add
+# an entry to the release manifest and ripple into the deploy script and CI workflow.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --disable-pip-version-check \
+    "matplotlib==3.11.0" \
+    "httpx==0.28.1"
 COPY anomaly_backend ./anomaly_backend
 COPY anomaly_worker ./anomaly_worker
 CMD ["python", "-m", "anomaly_worker.service"]

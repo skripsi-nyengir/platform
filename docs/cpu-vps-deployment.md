@@ -115,6 +115,36 @@ failure can be told apart from an operator's own sign-in problem.
 which is also the way out of a lockout: five failed attempts lock an account for
 fifteen minutes.
 
+## Enable Slack alert notifications
+
+The notifier posts a message with two charts — reconstruction error against threshold,
+and temperature with relative humidity — when an episode opens, when it escalates to
+critical, and when it closes.
+
+Attaching an image requires a **bot token**; an incoming webhook accepts a message
+payload only and cannot upload a file. In the Slack app configuration add the
+`files:write` scope under **OAuth & Permissions**, install the app to the workspace,
+copy the `xoxb-` token, and invite the bot to the destination channel. Take the
+channel id from the channel's **View channel details**.
+
+Then set in `.env`:
+
+```sh
+NOTIFICATIONS_ENABLED=true
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_CHANNEL_ID=C0123456789
+```
+
+The notifier reads only what the live pipeline has already committed, so telemetry
+never waits on Slack. If Slack is unreachable the rows accumulate in
+`alert_notifications` as `pending`, retry up to `NOTIFIER_MAX_ATTEMPTS`, and then
+retire as `failed` with the reason in `last_error`; nothing in the ingest path stalls.
+
+`NOTIFIER_MAX_EPISODE_AGE_MINUTES` bounds how far back the notifier will look. Leave
+it at the default unless you want a restart after long downtime to announce older
+episodes. While `NOTIFICATIONS_ENABLED` is false the service stays up and idle rather
+than restarting in a loop.
+
 ## Configure GitHub and activate deployment
 
 With GitHub CLI authenticated as a repository administrator, run:

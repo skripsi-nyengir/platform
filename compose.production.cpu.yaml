@@ -19,6 +19,10 @@ services:
     build: !reset null
     image: ${WORKER_IMAGE:?WORKER_IMAGE must be an immutable GHCR digest}
 
+  notifier:
+    build: !reset null
+    image: ${WORKER_IMAGE:?WORKER_IMAGE must be an immutable GHCR digest}
+
   live-subscriber:
     build: !reset null
     image: ${WORKER_IMAGE:?WORKER_IMAGE must be an immutable GHCR digest}

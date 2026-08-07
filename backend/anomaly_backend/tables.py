@@ -1739,3 +1739,57 @@ user_sessions = Table(
 )
 Index("ix_user_sessions_expires_at", user_sessions.c.expires_at)
 Index("ix_user_sessions_user_id", user_sessions.c.user_id)
+
+# Outbox for Slack delivery. The notifier fills this from stored episode state rather
+# than from events, so the live ingest path never waits on an outbound request. The
+# unique (live_episode_id, kind) is what makes the whole loop safe to repeat: a
+# notification that already exists is never queued or sent twice.
+alert_notifications = Table(
+    "alert_notifications",
+    metadata,
+    Column(
+        "notification_id",
+        UUID(as_uuid=True),
+        server_default=text("gen_random_uuid()"),
+        primary_key=True,
+    ),
+    Column(
+        "live_episode_id",
+        UUID(as_uuid=True),
+        ForeignKey("live_alert_episodes.live_episode_id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("kind", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("attempts", Integer, nullable=False, server_default=text("0")),
+    Column("lease_expires_at", DateTime(timezone=True)),
+    Column("last_error", Text),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("sent_at", DateTime(timezone=True)),
+    CheckConstraint(
+        "kind IN ('opened', 'escalated', 'closed')",
+        name="ck_alert_notifications_kind",
+    ),
+    CheckConstraint(
+        "status IN ('pending', 'sent', 'failed')",
+        name="ck_alert_notifications_status",
+    ),
+    CheckConstraint(
+        "attempts >= 0",
+        name="ck_alert_notifications_attempts_non_negative",
+    ),
+    CheckConstraint(
+        "(status = 'sent') = (sent_at IS NOT NULL)",
+        name="ck_alert_notifications_sent_at_matches_status",
+    ),
+    UniqueConstraint(
+        "live_episode_id",
+        "kind",
+        name="uq_alert_notifications_episode_kind",
+    ),
+)
+Index(
+    "ix_alert_notifications_pending",
+    alert_notifications.c.created_at,
+    postgresql_where=alert_notifications.c.status == "pending",
+)

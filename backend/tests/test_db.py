@@ -158,6 +158,7 @@ def test_database_engine_is_async_core_owned() -> None:
         "active_model_selections",
         "alert_events",
         "alert_commands",
+        "alert_notifications",
         "alerts",
         "corpora",
         "devices",
@@ -213,7 +214,7 @@ def test_database_health_and_revision_use_injected_connection() -> None:
                 assert await database_is_healthy(connection)
                 assert (
                     await current_migration_revision(connection)
-                    == "20260807_0016"
+                    == "20260808_0017"
                 )
         finally:
             await engine.dispose()
@@ -239,6 +240,7 @@ def test_compose_defines_expected_services_and_public_nginx() -> None:
         "import",
         "eda-import",
         "sim-import",
+        "notifier",
         "nginx",
     }
     assert "timescale/timescaledb:2.28.3-pg17" in compose
@@ -546,6 +548,14 @@ def test_environment_example_documents_runtime_and_ingress_settings() -> None:
         "MQTT_CLIENT_ID",
         "MODEL_ARTIFACTS_DIR",
         "LIVE_MODEL_BUNDLE_ID",
+        "NOTIFICATIONS_ENABLED",
+        "SLACK_BOT_TOKEN",
+        "SLACK_CHANNEL_ID",
+        "NOTIFIER_POLL_SECONDS",
+        "NOTIFIER_LEASE_SECONDS",
+        "NOTIFIER_MAX_ATTEMPTS",
+        "NOTIFIER_CHART_MARGIN_MINUTES",
+        "NOTIFIER_MAX_EPISODE_AGE_MINUTES",
         "AUTH_COOKIE_SECURE",
         "AUTH_SESSION_TTL_SECONDS",
         "AUTH_MAX_FAILED_ATTEMPTS",
@@ -611,6 +621,10 @@ def test_direct_dependencies_are_exactly_pinned() -> None:
         "ruptures==1.1.10",
         "scikit-learn==1.9.0",
         "seaborn==0.13.2",
+    ]
+    assert pyproject["project"]["optional-dependencies"]["notifier"] == [
+        "matplotlib==3.11.0",
+        "httpx==0.28.1",
     ]
 
 

@@ -467,7 +467,7 @@ def test_fresh_database_reaches_live_telemetry_head() -> None:
                 async with engine.connect() as connection:
                     assert (
                         await current_migration_revision(connection)
-                    == "20260807_0016"
+                    == "20260808_0017"
                     )
                     dimensions = (
                         text(
@@ -695,7 +695,7 @@ def test_fresh_database_reaches_live_telemetry_head() -> None:
                 async with engine.connect() as connection:
                     assert (
                         await current_migration_revision(connection)
-                    == "20260807_0016"
+                    == "20260808_0017"
                     )
                     assert await connection.scalar(
                         text("SELECT to_regclass('public.live_telemetry')")
@@ -769,7 +769,7 @@ def test_live_state_trigger_repair_is_forward_only() -> None:
                     assert updated.rowcount == 1
                     assert (
                         await current_migration_revision(connection)
-                        == "20260807_0016"
+                        == "20260808_0017"
                     )
             finally:
                 await engine.dispose()
@@ -788,7 +788,7 @@ def test_live_state_trigger_repair_is_forward_only() -> None:
                 async with engine.connect() as connection:
                     assert (
                         await current_migration_revision(connection)
-                        == "20260807_0016"
+                        == "20260808_0017"
                     )
             finally:
                 await engine.dispose()
