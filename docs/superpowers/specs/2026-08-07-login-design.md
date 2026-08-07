@@ -205,7 +205,8 @@ commit.
 
 | Location | Change |
 |---|---|
-| Claim limits (§3.4) | Separate authentication from security claims: authentication exists and is tested, but no broad security-resistance claim is made |
+| §3.3.1 functional requirements | The numbered list of ten functions gains an eleventh: restricting platform access to authenticated users. The closing prose of item 10 discusses functions 5–10 and has to absorb the addition |
+| §3.3.2 item 8, claim limits | Separate authentication from security claims: authentication exists and is tested, but no broad security-resistance claim is made |
 | §3.5.1.6 database design | Accept `users` and `user_sessions`; the data dictionary gains two tables |
 | `alert_events.actor` description | Clarify that a user entity now exists but `actor` **remains** a free-text attribute with no relation, so the two statements do not read as contradictory |
 | Table 4.10 | Add an **Authentication** row with technical evidence |
