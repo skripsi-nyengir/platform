@@ -135,7 +135,7 @@ environment_value() {
 # session to read it. Health and readiness stay open for Traefik and Docker.
 verify_application() {
   local host deadline health readiness status classification
-  local username password jar
+  local username password
   host=$(environment_value APP_HOST)
   [[ -n $host && $host =~ ^[A-Za-z0-9.-]+$ ]] || fail "APP_HOST is missing or invalid"
   username=$(environment_value AUTH_VERIFY_USERNAME)
@@ -147,26 +147,26 @@ verify_application() {
     return 1
   fi
 
-  jar=$(mktemp "$state_dir/tmp/verify-session.XXXXXX")
-  # The path is baked into the trap: a RETURN trap runs after the local is gone, and
-  # under `set -u` referencing it there aborts the script.
-  trap "rm -f -- '$jar'" RETURN
+  # Deliberately not local: a RETURN trap runs after the function's locals are gone,
+  # and the trap body has to stay single-quoted so it resolves when signalled.
+  verify_cookie_jar=$(mktemp "$state_dir/tmp/verify-session.XXXXXX")
+  trap 'rm -f -- "$verify_cookie_jar"' RETURN
 
   deadline=$((SECONDS + health_timeout))
   while ((SECONDS < deadline)); do
     health=$(curl --fail --silent --show-error --max-time 5 "https://$host/health" 2>/dev/null || true)
     readiness=$(curl --fail --silent --show-error --max-time 5 "https://$host/ready" 2>/dev/null || true)
-    : >"$jar"
+    : >"$verify_cookie_jar"
     curl --fail --silent --show-error --max-time 5 \
-      --cookie-jar "$jar" \
+      --cookie-jar "$verify_cookie_jar" \
       --header 'content-type: application/json' \
       --data "$(jq -nc --arg u "$username" --arg p "$password" \
         '{username: $u, password: $p}')" \
       "https://$host/api/auth/login" >/dev/null 2>&1 || true
     status=$(curl --fail --silent --show-error --max-time 5 \
-      --cookie "$jar" "https://$host/api/system/status" 2>/dev/null || true)
+      --cookie "$verify_cookie_jar" "https://$host/api/system/status" 2>/dev/null || true)
     curl --fail --silent --show-error --max-time 5 \
-      --cookie "$jar" --request POST \
+      --cookie "$verify_cookie_jar" --request POST \
       "https://$host/api/auth/logout" >/dev/null 2>&1 || true
     if jq -e '.status == "alive"' <<<"$health" >/dev/null 2>&1 \
       && jq -e '.status == "ready"' <<<"$readiness" >/dev/null 2>&1 \
