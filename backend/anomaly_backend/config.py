@@ -4,6 +4,20 @@ from dataclasses import dataclass
 from sqlalchemy import URL
 
 
+def _boolean_environ(variable: str, default: bool) -> bool:
+    # A misspelt value must not silently resolve to False; dropping the Secure cookie
+    # attribute because of a typo would be invisible until it mattered.
+    raw = os.environ.get(variable)
+    if raw is None:
+        return default
+    normalised = raw.strip().lower()
+    if normalised in {"true", "1", "yes"}:
+        return True
+    if normalised in {"false", "0", "no"}:
+        return False
+    raise ValueError(f"{variable} must be a boolean value")
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     postgres_host: str
@@ -15,6 +29,10 @@ class Settings:
     eda_worker_heartbeat_seconds: int = 30
     eda_worker_max_attempts: int = 3
     eda_worker_compute_timeout_seconds: int = 1_800
+    auth_cookie_secure: bool = True
+    auth_session_ttl_seconds: int = 43_200
+    auth_max_failed_attempts: int = 5
+    auth_lockout_seconds: int = 900
 
     def __post_init__(self) -> None:
         worker_values = {
@@ -27,6 +45,13 @@ class Settings:
             raise ValueError("EDA worker settings must be positive integers")
         if self.eda_worker_heartbeat_seconds >= self.eda_worker_lease_seconds:
             raise ValueError("EDA worker heartbeat must be shorter than its lease")
+        auth_values = {
+            "session TTL": self.auth_session_ttl_seconds,
+            "max failed attempts": self.auth_max_failed_attempts,
+            "lockout": self.auth_lockout_seconds,
+        }
+        if any(value < 1 for value in auth_values.values()):
+            raise ValueError("Authentication settings must be positive integers")
 
     @classmethod
     def from_environ(cls) -> "Settings":
@@ -48,6 +73,14 @@ class Settings:
             eda_worker_compute_timeout_seconds=int(
                 os.environ.get("EDA_WORKER_COMPUTE_TIMEOUT_SECONDS", "1800")
             ),
+            auth_cookie_secure=_boolean_environ("AUTH_COOKIE_SECURE", True),
+            auth_session_ttl_seconds=int(
+                os.environ.get("AUTH_SESSION_TTL_SECONDS", "43200")
+            ),
+            auth_max_failed_attempts=int(
+                os.environ.get("AUTH_MAX_FAILED_ATTEMPTS", "5")
+            ),
+            auth_lockout_seconds=int(os.environ.get("AUTH_LOCKOUT_SECONDS", "900")),
         )
 
     @property

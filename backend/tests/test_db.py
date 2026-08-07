@@ -76,6 +76,59 @@ def test_settings_read_only_the_five_postgres_variables() -> None:
     assert not hasattr(settings, "sync_database_url")
 
 
+def test_auth_settings_default_to_a_secure_cookie_and_a_twelve_hour_session() -> None:
+    with patch.dict(os.environ, DATABASE_ENV, clear=True):
+        settings = Settings.from_environ()
+
+    assert settings.auth_cookie_secure is True
+    assert settings.auth_session_ttl_seconds == 43_200
+    assert settings.auth_max_failed_attempts == 5
+    assert settings.auth_lockout_seconds == 900
+
+
+def test_auth_settings_read_their_environment_overrides() -> None:
+    overrides = {
+        "AUTH_COOKIE_SECURE": "false",
+        "AUTH_SESSION_TTL_SECONDS": "600",
+        "AUTH_MAX_FAILED_ATTEMPTS": "3",
+        "AUTH_LOCKOUT_SECONDS": "60",
+    }
+    with patch.dict(os.environ, {**DATABASE_ENV, **overrides}, clear=True):
+        settings = Settings.from_environ()
+
+    assert settings.auth_cookie_secure is False
+    assert settings.auth_session_ttl_seconds == 600
+    assert settings.auth_max_failed_attempts == 3
+    assert settings.auth_lockout_seconds == 60
+
+
+def test_a_misspelt_cookie_secure_value_is_refused() -> None:
+    # Silently treating a typo as False would drop the Secure attribute unnoticed.
+    with patch.dict(
+        os.environ, {**DATABASE_ENV, "AUTH_COOKIE_SECURE": "ture"}, clear=True
+    ):
+        try:
+            _ = Settings.from_environ()
+        except ValueError as error:
+            assert "AUTH_COOKIE_SECURE" in str(error)
+        else:
+            raise AssertionError("expected a misspelt boolean to fail")
+
+
+def test_non_positive_auth_settings_are_refused() -> None:
+    for variable in (
+        "AUTH_SESSION_TTL_SECONDS",
+        "AUTH_MAX_FAILED_ATTEMPTS",
+        "AUTH_LOCKOUT_SECONDS",
+    ):
+        with patch.dict(os.environ, {**DATABASE_ENV, variable: "0"}, clear=True):
+            try:
+                _ = Settings.from_environ()
+            except ValueError:
+                continue
+            raise AssertionError(f"expected {variable}=0 to fail")
+
+
 def test_settings_require_every_postgres_variable() -> None:
     for missing in DATABASE_ENV:
         values = {key: value for key, value in DATABASE_ENV.items() if key != missing}
