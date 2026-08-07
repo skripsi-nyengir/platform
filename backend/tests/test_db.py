@@ -286,8 +286,15 @@ def test_compose_enforces_the_database_seed_api_nginx_dependency_chain() -> None
     assert "urllib.request" in services["api"]
     assert "http://127.0.0.1:8000/health" in services["api"]
     assert "      api:\n        condition: service_healthy" in services["nginx"]
-    for name in ("migrate", "seed", "api", "eda-cli"):
+    for name in ("migrate", "seed", "eda-cli"):
         assert _environment_keys(services[name]) == set(DATABASE_ENV)
+    # Only the API serves requests, so only the API is configured for sessions.
+    assert _environment_keys(services["api"]) == set(DATABASE_ENV) | {
+        "AUTH_COOKIE_SECURE",
+        "AUTH_SESSION_TTL_SECONDS",
+        "AUTH_MAX_FAILED_ATTEMPTS",
+        "AUTH_LOCKOUT_SECONDS",
+    }
     assert _environment_keys(services["worker"]) == set(DATABASE_ENV) | {
         "MODEL_ARTIFACTS_PATH",
         "NVIDIA_VISIBLE_DEVICES",
@@ -539,6 +546,12 @@ def test_environment_example_documents_runtime_and_ingress_settings() -> None:
         "MQTT_CLIENT_ID",
         "MODEL_ARTIFACTS_DIR",
         "LIVE_MODEL_BUNDLE_ID",
+        "AUTH_COOKIE_SECURE",
+        "AUTH_SESSION_TTL_SECONDS",
+        "AUTH_MAX_FAILED_ATTEMPTS",
+        "AUTH_LOCKOUT_SECONDS",
+        "AUTH_VERIFY_USERNAME",
+        "AUTH_VERIFY_PASSWORD",
     }
     assert "./REPLACE_WITH_B02_V3_SOURCE/sensor_data_long.csv" in environment_example
     assert "<verify-from-eda-worker>" in environment_example

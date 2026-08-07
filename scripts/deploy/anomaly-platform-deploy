@@ -126,15 +126,48 @@ stop_application() {
   compose stop api worker live-subscriber nginx || true
 }
 
+environment_value() {
+  awk -F= -v key="$1" '$1 == key {print substr($0, index($0, "=") + 1); exit}' \
+    "$environment_file"
+}
+
+# /api/system/status sits behind the session guard, so verification has to hold a
+# session to read it. Health and readiness stay open for Traefik and Docker.
 verify_application() {
   local host deadline health readiness status classification
-  host=$(awk -F= '$1 == "APP_HOST" {print substr($0, index($0, "=") + 1); exit}' "$environment_file")
+  local username password jar
+  host=$(environment_value APP_HOST)
   [[ -n $host && $host =~ ^[A-Za-z0-9.-]+$ ]] || fail "APP_HOST is missing or invalid"
+  username=$(environment_value AUTH_VERIFY_USERNAME)
+  password=$(environment_value AUTH_VERIFY_PASSWORD)
+  # Refusing outright rather than skipping the telemetry check: a deployment that
+  # silently stopped verifying its own data path is worse than one that fails loudly.
+  if [[ -z $username || -z $password ]]; then
+    fail "AUTH_VERIFY_USERNAME and AUTH_VERIFY_PASSWORD are required to verify a release"
+    return 1
+  fi
+
+  jar=$(mktemp "$state_dir/tmp/verify-session.XXXXXX")
+  # The path is baked into the trap: a RETURN trap runs after the local is gone, and
+  # under `set -u` referencing it there aborts the script.
+  trap "rm -f -- '$jar'" RETURN
+
   deadline=$((SECONDS + health_timeout))
   while ((SECONDS < deadline)); do
     health=$(curl --fail --silent --show-error --max-time 5 "https://$host/health" 2>/dev/null || true)
     readiness=$(curl --fail --silent --show-error --max-time 5 "https://$host/ready" 2>/dev/null || true)
-    status=$(curl --fail --silent --show-error --max-time 5 "https://$host/api/system/status" 2>/dev/null || true)
+    : >"$jar"
+    curl --fail --silent --show-error --max-time 5 \
+      --cookie-jar "$jar" \
+      --header 'content-type: application/json' \
+      --data "$(jq -nc --arg u "$username" --arg p "$password" \
+        '{username: $u, password: $p}')" \
+      "https://$host/api/auth/login" >/dev/null 2>&1 || true
+    status=$(curl --fail --silent --show-error --max-time 5 \
+      --cookie "$jar" "https://$host/api/system/status" 2>/dev/null || true)
+    curl --fail --silent --show-error --max-time 5 \
+      --cookie "$jar" --request POST \
+      "https://$host/api/auth/logout" >/dev/null 2>&1 || true
     if jq -e '.status == "alive"' <<<"$health" >/dev/null 2>&1 \
       && jq -e '.status == "ready"' <<<"$readiness" >/dev/null 2>&1 \
       && jq -e '.telemetry.classification != "failed"' <<<"$status" >/dev/null 2>&1 \
