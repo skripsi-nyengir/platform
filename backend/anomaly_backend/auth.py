@@ -16,6 +16,8 @@ from anomaly_backend.passwords import DUMMY_HASH, hash_password, verify_password
 
 _TOKEN_BYTES = 32
 
+SESSION_COOKIE = "adp_session"
+
 
 @dataclass(frozen=True, slots=True)
 class AuthenticatedUser:

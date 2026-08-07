@@ -1079,6 +1079,22 @@ class ReadinessResponse(StrictModel):
     dependencies: list[ReadinessDependency] = Field(max_length=500)
 
 
+class LoginRequest(StrictModel):
+    username: Annotated[str, Field(min_length=1, max_length=200)]
+    password: Annotated[str, Field(min_length=1, max_length=1024)]
+
+
+class SessionResponse(StrictModel):
+    request_id: str
+    username: str
+    display_name: str
+    expires_at: OperationalInstant
+
+
+class LogoutResponse(StrictModel):
+    request_id: str
+
+
 class DeviceItem(StrictModel):
     device_id: SensorId
     display_name: Literal["TALPHA Ruang Produksi"]

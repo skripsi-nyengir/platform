@@ -4,10 +4,12 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from anomaly_backend.auth_middleware import install_session_guard
 from anomaly_backend.config import Settings
 from anomaly_backend.db import create_database_engine
 from anomaly_backend.problems import install_problem_handlers
 from anomaly_backend.routes.alerts import router as alerts_router
+from anomaly_backend.routes.auth import router as auth_router
 from anomaly_backend.routes.eda import router as eda_router
 from anomaly_backend.routes.evaluations import router as evaluations_router
 from anomaly_backend.routes.inference import router as inference_router
@@ -33,10 +35,13 @@ def create_app(engine: AsyncEngine, *routers: APIRouter) -> FastAPI:
     install_problem_handlers(app)
     for router in routers:
         app.include_router(router)
+    # Installed last so it wraps every router, including any added by a caller.
+    install_session_guard(app)
     return app
 
 
 _PRODUCTION_ROUTERS = (
+    auth_router,
     preview_router,
     telemetry_router,
     inference_router,

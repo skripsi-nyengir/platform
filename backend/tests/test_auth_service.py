@@ -31,13 +31,30 @@ async def connection() -> AsyncGenerator[AsyncConnection]:
     engine = create_database_engine(Settings.from_environ())
     try:
         async with engine.connect() as active:
-            _ = await active.execute(delete(tables.users))
+            # Scoped to this module's account: the shared conftest test operator owns
+            # the session cookie every other test file depends on.
+            _ = await active.execute(
+                delete(tables.users).where(tables.users.c.username == "operator")
+            )
             await active.commit()
             yield active
-            _ = await active.execute(delete(tables.users))
+            # Scoped to this module's account: the shared conftest test operator owns
+            # the session cookie every other test file depends on.
+            _ = await active.execute(
+                delete(tables.users).where(tables.users.c.username == "operator")
+            )
             await active.commit()
     finally:
         await engine.dispose()
+
+
+async def _stored_sessions(connection: AsyncConnection, user_id: str) -> list[str]:
+    rows = await connection.scalars(
+        select(tables.user_sessions.c.session_id).where(
+            tables.user_sessions.c.user_id == user_id
+        )
+    )
+    return list(rows)
 
 
 async def _seed_operator(connection: AsyncConnection) -> str:
@@ -57,7 +74,14 @@ async def test_upsert_creates_then_resets_without_duplicating(
     )
 
     assert (again, created) == (user_id, False)
-    assert await connection.scalar(select(tables.users.c.display_name)) == "Renamed"
+    assert (
+        await connection.scalar(
+            select(tables.users.c.display_name).where(
+                tables.users.c.user_id == user_id
+            )
+        )
+        == "Renamed"
+    )
     assert not await authenticate(
         connection, "operator", PASSWORD, now=NOW, **LOCKOUT_POLICY
     )
@@ -188,10 +212,10 @@ async def test_sessions_store_a_digest_rather_than_the_token(
         connection, user_id, ttl_seconds=3600, now=NOW
     )
 
-    stored = (await connection.scalars(select(tables.user_sessions.c.session_id))).all()
+    stored = await _stored_sessions(connection, user_id)
 
     assert expires_at == NOW + timedelta(seconds=3600)
-    assert list(stored) == [session_digest(token)]
+    assert stored == [session_digest(token)]
     assert token not in stored
 
 
@@ -240,6 +264,6 @@ async def test_a_new_login_collects_expired_sessions(
     later = NOW + timedelta(seconds=120)
     fresh, _ = await create_session(connection, user_id, ttl_seconds=3600, now=later)
 
-    stored = (await connection.scalars(select(tables.user_sessions.c.session_id))).all()
-    assert list(stored) == [session_digest(fresh)]
+    stored = await _stored_sessions(connection, user_id)
+    assert stored == [session_digest(fresh)]
     assert session_digest(stale) not in stored
