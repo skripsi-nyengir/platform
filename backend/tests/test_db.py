@@ -143,6 +143,8 @@ def test_database_engine_is_async_core_owned() -> None:
         "replay_jobs",
         "replay_result_staging",
         "telemetry",
+        "user_sessions",
+        "users",
         "worker_heartbeats",
     }
     assert engine.url.drivername == "postgresql+psycopg"
@@ -158,7 +160,7 @@ def test_database_health_and_revision_use_injected_connection() -> None:
                 assert await database_is_healthy(connection)
                 assert (
                     await current_migration_revision(connection)
-                    == "20260804_0015"
+                    == "20260807_0016"
                 )
         finally:
             await engine.dispose()
