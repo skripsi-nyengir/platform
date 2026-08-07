@@ -1,4 +1,5 @@
 import { ThemeProvider } from '@mui/material/styles'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -35,16 +36,21 @@ class MemoryStorage implements Storage {
 }
 
 function renderShell() {
+  // The sidebar footer now holds a sign-out action, so the shell needs a query
+  // client even when the test only exercises collapse behaviour.
+  const queryClient = new QueryClient()
   return render(
-    <ThemeProvider theme={theme} defaultMode="dark" noSsr>
-      <MemoryRouter initialEntries={['/']}>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route index element={<div>Overview content</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
-    </ThemeProvider>,
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider theme={theme} defaultMode="dark" noSsr>
+        <MemoryRouter initialEntries={['/']}>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route index element={<div>Overview content</div>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </ThemeProvider>
+    </QueryClientProvider>,
   )
 }
 

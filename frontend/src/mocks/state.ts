@@ -10,11 +10,25 @@ export interface MockApiState {
   simActiveModelVersion: string
   replayJobs: Map<string, ReplayJob>
   edaRequestCounts: Map<string, number>
+  signedIn: boolean
 }
 
 function scenarioSeedEvents(scenario: AppMockScenario): AlertEvent[] {
   if (scenario !== 'active-anomaly') return []
   return activeAlertSeedEvents.map((event) => Object.freeze(structuredClone(event)))
+}
+
+// Every route now sits behind the session guard. Starting signed in keeps existing
+// page tests exercising their routes instead of all landing on the login form; the
+// auth scenarios opt out explicitly.
+const signedOutScenarios = new Set<AppMockScenario>([
+  'unauthenticated',
+  'login-invalid',
+  'login-locked',
+])
+
+function scenarioStartsSignedIn(scenario: AppMockScenario): boolean {
+  return !signedOutScenarios.has(scenario)
 }
 
 export const mockState: MockApiState = {
@@ -24,6 +38,7 @@ export const mockState: MockApiState = {
   simActiveModelVersion: 'artifact-lstm-ae-v3',
   replayJobs: new Map<string, ReplayJob>(),
   edaRequestCounts: new Map<string, number>(),
+  signedIn: true,
 }
 
 export function resetMockState(scenario: AppMockScenario = 'normal'): void {
@@ -33,6 +48,7 @@ export function resetMockState(scenario: AppMockScenario = 'normal'): void {
   mockState.simActiveModelVersion = 'artifact-lstm-ae-v3'
   mockState.replayJobs.clear()
   mockState.edaRequestCounts.clear()
+  mockState.signedIn = scenarioStartsSignedIn(scenario)
 }
 
 export function setMockScenario(scenario: AppMockScenario): void {

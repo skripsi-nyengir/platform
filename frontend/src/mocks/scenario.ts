@@ -7,6 +7,9 @@ export type MockScenario =
   | 'empty'
   | 'timeout'
   | 'server-error'
+  | 'unauthenticated'
+  | 'login-invalid'
+  | 'login-locked'
 
 const edaScenarios = [
   'eda-latest-fallback',
@@ -34,6 +37,9 @@ export function scenarioFromSearch(search: string): AppMockScenario {
     value === 'empty' ||
     value === 'timeout' ||
     value === 'server-error' ||
+    value === 'unauthenticated' ||
+    value === 'login-invalid' ||
+    value === 'login-locked' ||
     edaScenarios.some((scenario) => scenario === value)
       ? value as AppMockScenario
       : 'normal'
