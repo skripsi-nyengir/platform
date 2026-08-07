@@ -37,6 +37,8 @@ MQTT_TOPIC=telemetry/test
 MQTT_CLIENT_ID=test
 MODEL_ARTIFACTS_DIR=/models
 LIVE_MODEL_BUNDLE_ID=test
+AUTH_VERIFY_USERNAME=deploy-verifier
+AUTH_VERIFY_PASSWORD=deploy-verifier-password
 EOF
   cp "$repository_root/compose.cpu.yaml" "$state_dir/compose.cpu.yaml"
   cp "$repository_root/compose.production.cpu.yaml" "$state_dir/compose.production.cpu.yaml"
@@ -77,10 +79,21 @@ if [[ ${FAKE_HEALTH_MODE:-success} == fail ]] || [[ ${FAKE_HEALTH_MODE:-success}
   exit 22
 fi
 url=${*: -1}
+args=" $* "
 case $url in
   */health) printf '{"status":"alive"}' ;;
   */ready) printf '{"status":"ready"}' ;;
-  */api/system/status) printf '{"telemetry":{"classification":"healthy"}}' ;;
+  */api/auth/login)
+    printf 'login\n' >>"${FAKE_LOGIN_FILE:-/dev/null}"
+    printf '{"username":"deploy-verifier"}'
+    ;;
+  */api/auth/logout) printf '{"request_id":"req"}' ;;
+  */api/system/status)
+    # Stands in for the session guard: without a cookie the real endpoint answers
+    # 401 and curl --fail exits non-zero.
+    [[ $args == *" --cookie "* ]] || exit 22
+    printf '{"telemetry":{"classification":"healthy"}}'
+    ;;
 esac
 EOF
   cat >"$fake_bin/pg_restore" <<'EOF'
@@ -93,6 +106,7 @@ EOF
   export ANOMALY_DEPLOY_TESTING=1 ANOMALY_STATE_DIR="$state_dir"
   export ANOMALY_HEALTH_TIMEOUT=1 FAKE_START_COUNT_FILE="$case_dir/start-count"
   export FAKE_DB_VERIFY_FILE="$case_dir/db-verify" FAKE_MUTATION_FILE="$case_dir/mutations"
+  export FAKE_LOGIN_FILE="$case_dir/logins"
   unset FAKE_DB_EXISTS FAKE_DB_VERIFY_MODE FAKE_HEALTH_MODE
 }
 
@@ -103,6 +117,16 @@ run_deploy() {
 setup_case valid
 make_manifest v0.1.0 1 | run_deploy
 jq -e '.release == "v0.1.0"' "$state_dir/manifests/current.json" >/dev/null || fail "valid deploy"
+
+setup_case verify_authenticates
+make_manifest v0.1.0 1 | run_deploy
+[[ -s "$case_dir/logins" ]] || fail "release verification did not sign in"
+
+setup_case verify_requires_credentials
+sed -i '/^AUTH_VERIFY_/d' "$state_dir/shared/.env"
+if make_manifest v0.1.0 1 | run_deploy >/dev/null 2>&1; then
+  fail "release verified without verification credentials"
+fi
 
 setup_case invalid
 if printf '{"schema":2}\n' | run_deploy >/dev/null 2>&1; then fail "invalid manifest accepted"; fi

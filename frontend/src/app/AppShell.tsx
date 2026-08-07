@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { Link as RouterLink, Outlet, useLocation } from 'react-router-dom'
 import { tokens } from '../theme/tokens'
 import { navigationItems, type NavigationItem } from './navigation'
+import { SidebarLogoutButton } from './SidebarLogoutButton'
 import { SidebarThemeToggle } from './SidebarThemeToggle'
 
 const routeIconPaths: Record<NavigationItem['path'], string> = {
@@ -173,6 +174,7 @@ export function AppShell() {
         </Box>
         <Box component="footer" sx={{ mt: 'auto', pb: 4 }}>
           <SidebarThemeToggle compact={collapsed} />
+          <SidebarLogoutButton compact={collapsed} />
         </Box>
       </Drawer>
       <Box

@@ -27,7 +27,7 @@ from anomaly_backend.problems import DependencyFailure, new_request_id
 from anomaly_backend.sql.system import telemetry_observation
 
 
-_MINIMUM_REVISION = "20260804_0015"
+_MINIMUM_REVISION = "20260808_0017"
 _REVISION_PATTERN = re.compile(r"^\d{8}_(\d{4})$")
 _STALL_BACKLOG_THRESHOLD = 100
 

@@ -84,9 +84,66 @@ Create `.env` from `.env.example` and replace every placeholder. In particular:
   committed.
 - `INFERENCE_CPU_THREADS=1` is the conservative default. Increase it only after
   measuring backlog and host contention.
+- `AUTH_COOKIE_SECURE=true` in production. It may only be relaxed for local http
+  development, where a Secure cookie is discarded by the browser.
+- `AUTH_VERIFY_USERNAME` and `AUTH_VERIFY_PASSWORD` name the account the deployer
+  signs in as while verifying a release. Without them `deploy` refuses to run
+  rather than skipping the telemetry check.
 
 The production Compose overlay forces MQTT TLS, the CA mount, and
 `LIVE_RUNTIME_MODE=production`; they cannot be relaxed by `.env`.
+
+## Create the login accounts
+
+Every `/api` path except `/health` and `/ready` requires a session cookie, and the
+platform exposes no registration endpoint. Accounts exist only because they were
+created here:
+
+```sh
+docker compose -f compose.cpu.yaml -f compose.production.cpu.yaml \
+  run --rm api python -m anomaly_backend.auth_cli create-user operator
+```
+
+The command prompts for the password, or reads it from stdin when piped. It never
+takes the password as an argument, so it stays out of shell history and out of
+`ps`. Passwords must be at least 12 characters.
+
+Create a second account for `AUTH_VERIFY_USERNAME` so a deployment verification
+failure can be told apart from an operator's own sign-in problem.
+
+`set-password` replaces a password and revokes that account's existing sessions,
+which is also the way out of a lockout: five failed attempts lock an account for
+fifteen minutes.
+
+## Enable Slack alert notifications
+
+The notifier posts a message with two charts — reconstruction error against threshold,
+and temperature with relative humidity — when an episode opens, when it escalates to
+critical, and when it closes.
+
+Attaching an image requires a **bot token**; an incoming webhook accepts a message
+payload only and cannot upload a file. In the Slack app configuration add the
+`files:write` scope under **OAuth & Permissions**, install the app to the workspace,
+copy the `xoxb-` token, and invite the bot to the destination channel. Take the
+channel id from the channel's **View channel details**.
+
+Then set in `.env`:
+
+```sh
+NOTIFICATIONS_ENABLED=true
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_CHANNEL_ID=C0123456789
+```
+
+The notifier reads only what the live pipeline has already committed, so telemetry
+never waits on Slack. If Slack is unreachable the rows accumulate in
+`alert_notifications` as `pending`, retry up to `NOTIFIER_MAX_ATTEMPTS`, and then
+retire as `failed` with the reason in `last_error`; nothing in the ingest path stalls.
+
+`NOTIFIER_MAX_EPISODE_AGE_MINUTES` bounds how far back the notifier will look. Leave
+it at the default unless you want a restart after long downtime to announce older
+episodes. While `NOTIFICATIONS_ENABLED` is false the service stays up and idle rather
+than restarting in a loop.
 
 ## Configure GitHub and activate deployment
 
@@ -159,13 +216,23 @@ After DNS and ACME have converged, verify the public path and the live runtime:
 ```sh
 curl -fsS "https://anomaly.mytekna.io/health"
 curl -fsS "https://anomaly.mytekna.io/ready"
-curl -fsS "https://anomaly.mytekna.io/api/system/status"
+
+# /api paths need a session. Reaching one without a cookie must answer 401.
+curl -si "https://anomaly.mytekna.io/api/system/status" | head -1
+curl -fsS -c /tmp/session -H 'content-type: application/json' \
+  -d '{"username":"operator","password":"..."}' \
+  "https://anomaly.mytekna.io/api/auth/login" >/dev/null
+curl -fsS -b /tmp/session "https://anomaly.mytekna.io/api/system/status"
+curl -fsS -b /tmp/session -X POST "https://anomaly.mytekna.io/api/auth/logout"
+rm -f /tmp/session
+
 docker compose -f compose.cpu.yaml logs --tail 200 worker live-subscriber
 docker stats --no-stream
 ```
 
 Acceptance requires the manifest's three exact digests, successful migration,
-seed and bootstrap, valid backup inventory, HTTPS health/readiness, telemetry
-without `failed` or `retrying`, and recorded `current`/`previous` manifests.
+seed and bootstrap, valid backup inventory, HTTPS health/readiness, an
+unauthenticated `/api` request answering 401, telemetry without `failed` or
+`retrying`, and recorded `current`/`previous` manifests.
 Readiness accepts a newer compatible linear Alembic revision, but rejects a
 missing, malformed, branched, or older revision.

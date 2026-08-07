@@ -1,6 +1,8 @@
 import { Navigate, createBrowserRouter, createMemoryRouter } from 'react-router-dom'
+import { RequireSession } from '../features/auth/RequireSession'
 import { AlertsPage } from '../pages/AlertsPage'
 import { EdaPage } from '../pages/EdaPage'
+import { LoginPage } from '../pages/LoginPage'
 import { ModelEvaluationPage } from '../pages/ModelEvaluationPage'
 import { OverviewPage } from '../pages/OverviewPage'
 import { SensorDetailPage } from '../pages/SensorDetailPage'
@@ -9,8 +11,15 @@ import { SystemHealthPage } from '../pages/SystemHealthPage'
 import { AppShell } from './AppShell'
 
 const routes = [
+  // Outside the shell: the sidebar and its queries have nothing to show without a
+  // session, and rendering them behind the login form would fire doomed requests.
+  { path: '/login', element: <LoginPage /> },
   {
-    element: <AppShell />,
+    element: (
+      <RequireSession>
+        <AppShell />
+      </RequireSession>
+    ),
     children: [
       { path: '/', element: <OverviewPage /> },
       { path: '/sensors/:sensorId', element: <SensorDetailPage /> },

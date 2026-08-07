@@ -314,8 +314,74 @@ async function mutateAlert(
   return HttpResponse.json(response)
 }
 
+function unauthenticated(request: Request) {
+  return problem(
+    401,
+    'req_unauthenticated',
+    'Authentication required',
+    'Authentication is required',
+    new URL(request.url).pathname,
+  )
+}
+
+function authHandlers(state: MockApiState): HttpHandler[] {
+  return [
+    http.get('/api/auth/session', ({ request }) => {
+      if (!state.signedIn) return unauthenticated(request)
+      return HttpResponse.json({
+        request_id: 'req_session',
+        username: 'operator',
+        display_name: 'Operator',
+        expires_at: '2026-08-08T00:00:00Z',
+      })
+    }),
+
+    http.post('/api/auth/login', ({ request }) => {
+      if (state.scenario === 'login-locked') {
+        return problem(
+          429,
+          'req_locked',
+          'Too many attempts',
+          'Too many failed sign-in attempts; try again later',
+          new URL(request.url).pathname,
+        )
+      }
+      if (state.scenario === 'login-invalid') {
+        return problem(
+          401,
+          'req_rejected',
+          'Authentication required',
+          'Username or password is incorrect',
+          new URL(request.url).pathname,
+        )
+      }
+      state.signedIn = true
+      return HttpResponse.json({
+        request_id: 'req_login',
+        username: 'operator',
+        display_name: 'Operator',
+        expires_at: '2026-08-08T00:00:00Z',
+      })
+    }),
+
+    http.post('/api/auth/logout', () => {
+      state.signedIn = false
+      return HttpResponse.json({ request_id: 'req_logout' })
+    }),
+  ]
+}
+
 export function createHandlers(state: MockApiState): HttpHandler[] {
   return [
+    ...authHandlers(state),
+
+    // Mirrors the backend's fail-closed middleware: with no session every API path
+    // answers 401, not just the auth endpoints. Returning nothing when signed in
+    // hands the request to the real handler below.
+    http.all('/api/*', ({ request }) =>
+      state.signedIn ? undefined : unauthenticated(request),
+    ),
+
     http.get('/api/simulation/models', () =>
       HttpResponse.json(simulationModelsResponse(state.simActiveModelVersion)),
     ),

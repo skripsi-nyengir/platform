@@ -76,6 +76,59 @@ def test_settings_read_only_the_five_postgres_variables() -> None:
     assert not hasattr(settings, "sync_database_url")
 
 
+def test_auth_settings_default_to_a_secure_cookie_and_a_twelve_hour_session() -> None:
+    with patch.dict(os.environ, DATABASE_ENV, clear=True):
+        settings = Settings.from_environ()
+
+    assert settings.auth_cookie_secure is True
+    assert settings.auth_session_ttl_seconds == 43_200
+    assert settings.auth_max_failed_attempts == 5
+    assert settings.auth_lockout_seconds == 900
+
+
+def test_auth_settings_read_their_environment_overrides() -> None:
+    overrides = {
+        "AUTH_COOKIE_SECURE": "false",
+        "AUTH_SESSION_TTL_SECONDS": "600",
+        "AUTH_MAX_FAILED_ATTEMPTS": "3",
+        "AUTH_LOCKOUT_SECONDS": "60",
+    }
+    with patch.dict(os.environ, {**DATABASE_ENV, **overrides}, clear=True):
+        settings = Settings.from_environ()
+
+    assert settings.auth_cookie_secure is False
+    assert settings.auth_session_ttl_seconds == 600
+    assert settings.auth_max_failed_attempts == 3
+    assert settings.auth_lockout_seconds == 60
+
+
+def test_a_misspelt_cookie_secure_value_is_refused() -> None:
+    # Silently treating a typo as False would drop the Secure attribute unnoticed.
+    with patch.dict(
+        os.environ, {**DATABASE_ENV, "AUTH_COOKIE_SECURE": "ture"}, clear=True
+    ):
+        try:
+            _ = Settings.from_environ()
+        except ValueError as error:
+            assert "AUTH_COOKIE_SECURE" in str(error)
+        else:
+            raise AssertionError("expected a misspelt boolean to fail")
+
+
+def test_non_positive_auth_settings_are_refused() -> None:
+    for variable in (
+        "AUTH_SESSION_TTL_SECONDS",
+        "AUTH_MAX_FAILED_ATTEMPTS",
+        "AUTH_LOCKOUT_SECONDS",
+    ):
+        with patch.dict(os.environ, {**DATABASE_ENV, variable: "0"}, clear=True):
+            try:
+                _ = Settings.from_environ()
+            except ValueError:
+                continue
+            raise AssertionError(f"expected {variable}=0 to fail")
+
+
 def test_settings_require_every_postgres_variable() -> None:
     for missing in DATABASE_ENV:
         values = {key: value for key, value in DATABASE_ENV.items() if key != missing}
@@ -105,6 +158,7 @@ def test_database_engine_is_async_core_owned() -> None:
         "active_model_selections",
         "alert_events",
         "alert_commands",
+        "alert_notifications",
         "alerts",
         "corpora",
         "devices",
@@ -143,6 +197,8 @@ def test_database_engine_is_async_core_owned() -> None:
         "replay_jobs",
         "replay_result_staging",
         "telemetry",
+        "user_sessions",
+        "users",
         "worker_heartbeats",
     }
     assert engine.url.drivername == "postgresql+psycopg"
@@ -158,7 +214,7 @@ def test_database_health_and_revision_use_injected_connection() -> None:
                 assert await database_is_healthy(connection)
                 assert (
                     await current_migration_revision(connection)
-                    == "20260804_0015"
+                    == "20260808_0017"
                 )
         finally:
             await engine.dispose()
@@ -184,6 +240,7 @@ def test_compose_defines_expected_services_and_public_nginx() -> None:
         "import",
         "eda-import",
         "sim-import",
+        "notifier",
         "nginx",
     }
     assert "timescale/timescaledb:2.28.3-pg17" in compose
@@ -231,8 +288,15 @@ def test_compose_enforces_the_database_seed_api_nginx_dependency_chain() -> None
     assert "urllib.request" in services["api"]
     assert "http://127.0.0.1:8000/health" in services["api"]
     assert "      api:\n        condition: service_healthy" in services["nginx"]
-    for name in ("migrate", "seed", "api", "eda-cli"):
+    for name in ("migrate", "seed", "eda-cli"):
         assert _environment_keys(services[name]) == set(DATABASE_ENV)
+    # Only the API serves requests, so only the API is configured for sessions.
+    assert _environment_keys(services["api"]) == set(DATABASE_ENV) | {
+        "AUTH_COOKIE_SECURE",
+        "AUTH_SESSION_TTL_SECONDS",
+        "AUTH_MAX_FAILED_ATTEMPTS",
+        "AUTH_LOCKOUT_SECONDS",
+    }
     assert _environment_keys(services["worker"]) == set(DATABASE_ENV) | {
         "MODEL_ARTIFACTS_PATH",
         "NVIDIA_VISIBLE_DEVICES",
@@ -484,6 +548,20 @@ def test_environment_example_documents_runtime_and_ingress_settings() -> None:
         "MQTT_CLIENT_ID",
         "MODEL_ARTIFACTS_DIR",
         "LIVE_MODEL_BUNDLE_ID",
+        "NOTIFICATIONS_ENABLED",
+        "SLACK_BOT_TOKEN",
+        "SLACK_CHANNEL_ID",
+        "NOTIFIER_POLL_SECONDS",
+        "NOTIFIER_LEASE_SECONDS",
+        "NOTIFIER_MAX_ATTEMPTS",
+        "NOTIFIER_CHART_MARGIN_MINUTES",
+        "NOTIFIER_MAX_EPISODE_AGE_MINUTES",
+        "AUTH_COOKIE_SECURE",
+        "AUTH_SESSION_TTL_SECONDS",
+        "AUTH_MAX_FAILED_ATTEMPTS",
+        "AUTH_LOCKOUT_SECONDS",
+        "AUTH_VERIFY_USERNAME",
+        "AUTH_VERIFY_PASSWORD",
     }
     assert "./REPLACE_WITH_B02_V3_SOURCE/sensor_data_long.csv" in environment_example
     assert "<verify-from-eda-worker>" in environment_example
@@ -543,6 +621,10 @@ def test_direct_dependencies_are_exactly_pinned() -> None:
         "ruptures==1.1.10",
         "scikit-learn==1.9.0",
         "seaborn==0.13.2",
+    ]
+    assert pyproject["project"]["optional-dependencies"]["notifier"] == [
+        "matplotlib==3.11.0",
+        "httpx==0.28.1",
     ]
 
 

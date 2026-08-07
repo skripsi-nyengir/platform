@@ -59,6 +59,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-true}
+      AUTH_SESSION_TTL_SECONDS: ${AUTH_SESSION_TTL_SECONDS:-43200}
+      AUTH_MAX_FAILED_ATTEMPTS: ${AUTH_MAX_FAILED_ATTEMPTS:-5}
+      AUTH_LOCKOUT_SECONDS: ${AUTH_LOCKOUT_SECONDS:-900}
     depends_on:
       seed:
         condition: service_completed_successfully
@@ -275,6 +279,38 @@ services:
         condition: service_completed_successfully
     networks:
       - backend
+
+  notifier:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: worker
+    command: ["python", "-m", "anomaly_worker.notifier_service"]
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-false}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_CHANNEL_ID: ${SLACK_CHANNEL_ID:-}
+      NOTIFIER_POLL_SECONDS: ${NOTIFIER_POLL_SECONDS:-15}
+      NOTIFIER_LEASE_SECONDS: ${NOTIFIER_LEASE_SECONDS:-120}
+      NOTIFIER_MAX_ATTEMPTS: ${NOTIFIER_MAX_ATTEMPTS:-5}
+      NOTIFIER_CHART_MARGIN_MINUTES: ${NOTIFIER_CHART_MARGIN_MINUTES:-15}
+      NOTIFIER_MAX_EPISODE_AGE_MINUTES: ${NOTIFIER_MAX_EPISODE_AGE_MINUTES:-60}
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      seed:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - backend
+      - public
 
   nginx:
     build:

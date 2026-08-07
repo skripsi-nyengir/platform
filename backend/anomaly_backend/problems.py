@@ -21,16 +21,30 @@ class ProblemException(Exception):
         self,
         detail: str,
         errors: dict[str, list[str]] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(detail)
         self.detail: str = detail
         self.errors: dict[str, list[str]] | None = errors
+        self.headers: dict[str, str] | None = headers
 
 
 class InvalidQuery(ProblemException):
     status: int = 422
     title: str = "Invalid query"
     slug: str = "invalid-query"
+
+
+class Unauthenticated(ProblemException):
+    status: int = 401
+    title: str = "Authentication required"
+    slug: str = "unauthenticated"
+
+
+class TooManyAttempts(ProblemException):
+    status: int = 429
+    title: str = "Too many attempts"
+    slug: str = "too-many-attempts"
 
 
 class NotFound(ProblemException):
@@ -64,7 +78,7 @@ def _validation_errors(errors: Iterable[ErrorDetails]) -> dict[str, list[str]]:
     return grouped
 
 
-def _problem_response(
+def problem_response(
     request: Request,
     *,
     status: int,
@@ -72,7 +86,13 @@ def _problem_response(
     slug: str,
     detail: str,
     errors: dict[str, list[str]] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
+    """Build an RFC7807 response.
+
+    Public because middleware runs outside the exception handlers installed below and
+    would otherwise have to invent a second error shape.
+    """
     fields: dict[str, object] = {
         "type": f"https://example.invalid/problems/{slug}",
         "title": title,
@@ -88,6 +108,7 @@ def _problem_response(
         status_code=status,
         content=payload.model_dump(mode="json"),
         media_type="application/problem+json",
+        headers=headers,
     )
 
 
@@ -105,7 +126,7 @@ async def _request_validation_handler(
             and any(error.get("type") == "value_error" for error in errors)
         )
     )
-    return _problem_response(
+    return problem_response(
         request,
         status=400 if body_error and not contract_body_error else 422,
         title=(
@@ -130,20 +151,21 @@ async def _request_validation_handler(
 async def _domain_problem_handler(
     request: Request, exception: ProblemException
 ) -> JSONResponse:
-    return _problem_response(
+    return problem_response(
         request,
         status=exception.status,
         title=exception.title,
         slug=exception.slug,
         detail=exception.detail,
         errors=exception.errors,
+        headers=exception.headers,
     )
 
 
 async def _http_problem_handler(
     request: Request, exception: StarletteHTTPException
 ) -> JSONResponse:
-    return _problem_response(
+    return problem_response(
         request,
         status=exception.status_code,
         title={404: "Not found", 405: "Method not allowed"}.get(
@@ -160,7 +182,7 @@ async def _unavailable_handler(
     request: Request, exception: Exception
 ) -> JSONResponse:
     _ = exception
-    return _problem_response(
+    return problem_response(
         request,
         status=503,
         title="Service unavailable",

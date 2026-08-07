@@ -150,8 +150,10 @@ def test_fixture_shape_validation_rejects_incomplete_architecture() -> None:
         _ = normalize_reported_models(payload)
 
 
-def test_model_registry_endpoint_returns_reported_models() -> None:
-    with TestClient(app) as client:
+def test_model_registry_endpoint_returns_reported_models(
+    session_cookies: dict[str, str],
+) -> None:
+    with TestClient(app, cookies=session_cookies) as client:
         response = cast(
             Response,
             client.get(  # pyright: ignore[reportUnknownMemberType]

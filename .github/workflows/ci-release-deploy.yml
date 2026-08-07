@@ -49,7 +49,7 @@ jobs:
         run: |
           . ../.github/ci-tools.lock
           python -m pip install --disable-pip-version-check "torch==2.13.0" --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install --disable-pip-version-check -e '.[test]' "ruff==$RUFF_VERSION" "pyright==$PYRIGHT_VERSION"
+          python -m pip install --disable-pip-version-check -e '.[test,notifier]' "ruff==$RUFF_VERSION" "pyright==$PYRIGHT_VERSION"
       - name: Ruff
         run: . .github/ci-tools.lock && ruff check backend
       - name: Pyright
