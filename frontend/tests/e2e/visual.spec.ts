@@ -4,6 +4,7 @@ import {
   b02To,
   expect,
   gotoScenario,
+  scenarioUrl,
   seedThemeMode,
   test,
 } from './helpers'
@@ -88,6 +89,24 @@ for (const { route, scenario, snapshot } of lightRoutes) {
       caret: 'hide',
       fullPage: true,
       timeout: 15_000,
+    })
+  })
+}
+
+// The login form lives outside the shell and starts from a deliberate 401, so it
+// cannot ride the route tables above.
+for (const mode of ['dark', 'light'] as const) {
+  test(`/login ${mode} visual`, async ({ page, httpErrorGuard }) => {
+    httpErrorGuard.allow(401)
+    await seedThemeMode(page, mode)
+    await page.goto(scenarioUrl('/', 'unauthenticated'))
+    await expect(page.getByLabel(/nama pengguna/i)).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    await page.evaluate(() => document.fonts.ready)
+    await expect(page).toHaveScreenshot(`login-${mode}.png`, {
+      animations: 'disabled',
+      caret: 'hide',
+      fullPage: true,
     })
   })
 }
