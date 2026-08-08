@@ -47,6 +47,18 @@ class TooManyAttempts(ProblemException):
     slug: str = "too-many-attempts"
 
 
+class InvalidSlackConfiguration(ProblemException):
+    status: int = 422
+    title: str = "Invalid Slack configuration"
+    slug: str = "invalid-slack-configuration"
+
+
+class SlackRateLimited(ProblemException):
+    status: int = 429
+    title: str = "Slack rate limit exceeded"
+    slug: str = "slack-rate-limited"
+
+
 class NotFound(ProblemException):
     status: int = 404
     title: str = "Not found"

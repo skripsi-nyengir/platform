@@ -119,11 +119,11 @@ backup_database() {
 
 start_application() {
   compose up -d --no-build --no-deps --force-recreate \
-    api worker live-subscriber nginx
+    api worker live-subscriber notifier nginx
 }
 
 stop_application() {
-  compose stop api worker live-subscriber nginx || true
+  compose stop api worker live-subscriber notifier nginx || true
 }
 
 environment_value() {

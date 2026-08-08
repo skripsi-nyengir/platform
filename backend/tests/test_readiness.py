@@ -11,8 +11,9 @@ from conftest import ClientFactory
     ("revision", "compatible"),
     [
         ("20260807_0016", False),
-        ("20260808_0017", True),
-        ("20260809_0018", True),
+        ("20260808_0017", False),
+        ("20260808_0018", True),
+        ("20260809_0019", True),
         ("not-a-revision", False),
         (None, False),
     ],
@@ -33,8 +34,9 @@ def test_branched_migration_history_is_rejected() -> None:
     ("revision", "status_code"),
     [
         ("20260807_0016", 503),
-        ("20260808_0017", 200),
-        ("20260809_0018", 200),
+        ("20260808_0017", 503),
+        ("20260808_0018", 200),
+        ("20260809_0019", 200),
         ("malformed", 503),
         (None, 503),
     ],
@@ -59,4 +61,4 @@ async def test_readiness_accepts_equal_or_newer_linear_revision(
     if status_code == 200:
         body = response.json()
         assert body["database_revision"] == revision
-        assert body["minimum_database_revision"] == "20260808_0017"
+        assert body["minimum_database_revision"] == "20260808_0018"

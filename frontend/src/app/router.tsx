@@ -7,6 +7,7 @@ import { ModelEvaluationPage } from '../pages/ModelEvaluationPage'
 import { OverviewPage } from '../pages/OverviewPage'
 import { SensorDetailPage } from '../pages/SensorDetailPage'
 import { SimulationPage } from '../pages/SimulationPage'
+import { SlackSettingsPage } from '../pages/SlackSettingsPage'
 import { SystemHealthPage } from '../pages/SystemHealthPage'
 import { AppShell } from './AppShell'
 
@@ -28,6 +29,7 @@ const routes = [
       { path: '/model-evaluation', element: <ModelEvaluationPage /> },
       { path: '/simulation', element: <SimulationPage /> },
       { path: '/system-health', element: <SystemHealthPage /> },
+      { path: '/settings/slack', element: <SlackSettingsPage /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },

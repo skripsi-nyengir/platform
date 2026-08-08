@@ -1740,6 +1740,36 @@ user_sessions = Table(
 Index("ix_user_sessions_expires_at", user_sessions.c.expires_at)
 Index("ix_user_sessions_user_id", user_sessions.c.user_id)
 
+# The application owns exactly one Slack configuration. Credentials intentionally
+# remain plaintext because both the API test action and the notifier need the token;
+# database and backup access must therefore be treated as credential access.
+slack_settings = Table(
+    "slack_settings",
+    metadata,
+    Column("singleton", Boolean, primary_key=True, server_default=text("true")),
+    Column("enabled", Boolean, nullable=False, server_default=text("false")),
+    Column("bot_token", Text),
+    Column("channel_id", Text),
+    Column(
+        "updated_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    ),
+    Column(
+        "updated_by_user_id",
+        Text,
+        ForeignKey("users.user_id", ondelete="SET NULL"),
+    ),
+    CheckConstraint("singleton", name="ck_slack_settings_singleton"),
+    CheckConstraint(
+        "NOT enabled OR ("
+        "bot_token IS NOT NULL AND length(btrim(bot_token)) > 0 AND "
+        "channel_id IS NOT NULL AND length(btrim(channel_id)) > 0)",
+        name="ck_slack_settings_enabled_credentials",
+    ),
+)
+
 # Outbox for Slack delivery. The notifier fills this from stored episode state rather
 # than from events, so the live ingest path never waits on an outbound request. The
 # unique (live_episode_id, kind) is what makes the whole loop safe to repeat: a

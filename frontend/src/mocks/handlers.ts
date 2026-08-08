@@ -85,6 +85,10 @@ import {
   SimulationMetricsQuerySchema,
   type SetSimActiveModelResponse,
 } from '../contracts/simulation'
+import {
+  TestSlackSettingsRequestSchema,
+  UpdateSlackSettingsRequestSchema,
+} from '../contracts/slackSettings'
 import type { LatestTelemetrySensor, TelemetryPoint } from '../contracts/telemetry'
 import { previewDevice, replayJob } from './fixtures/preview'
 import {
@@ -381,6 +385,55 @@ export function createHandlers(state: MockApiState): HttpHandler[] {
     http.all('/api/*', ({ request }) =>
       state.signedIn ? undefined : unauthenticated(request),
     ),
+
+    http.get('/api/settings/slack', () =>
+      HttpResponse.json(structuredClone(state.slackSettings)),
+    ),
+
+    http.put('/api/settings/slack', async ({ request }) => {
+      const parsed = UpdateSlackSettingsRequestSchema.safeParse(await request.json())
+      if (!parsed.success) {
+        return problem(422, 'req_slack_invalid', 'Invalid Slack settings', 'Slack settings failed validation', request.url)
+      }
+      const body = parsed.data
+      const configured = body.bot_token === undefined
+        ? state.slackSettings.bot_token_configured
+        : body.bot_token !== null
+      if (body.enabled && (body.channel_id === null || !configured)) {
+        return problem(
+          422,
+          'req_slack_incomplete',
+          'Slack settings incomplete',
+          'Enabled notifications require a channel and bot token',
+          request.url,
+        )
+      }
+      state.slackSettings = {
+        request_id: 'req_slack_settings_saved',
+        enabled: body.enabled,
+        channel_id: body.channel_id,
+        bot_token_configured: configured,
+        updated_at: '2026-08-08T01:04:00Z',
+        updated_by_username: 'operator',
+      }
+      return HttpResponse.json(structuredClone(state.slackSettings))
+    }),
+
+    http.post('/api/settings/slack/test', async ({ request }) => {
+      const parsed = TestSlackSettingsRequestSchema.safeParse(await request.json())
+      if (!parsed.success) {
+        return problem(422, 'req_slack_test_invalid', 'Invalid Slack test', 'A channel and valid token are required', request.url)
+      }
+      if (parsed.data.bot_token === undefined && !state.slackSettings.bot_token_configured) {
+        return problem(422, 'req_slack_test_token', 'Slack token required', 'Enter a bot token before sending a test', request.url)
+      }
+      state.slackTestRequests.push(parsed.data)
+      return HttpResponse.json({
+        request_id: 'req_slack_test',
+        status: 'sent',
+        sent_at: '2026-08-08T01:03:00Z',
+      })
+    }),
 
     http.get('/api/simulation/models', () =>
       HttpResponse.json(simulationModelsResponse(state.simActiveModelVersion)),

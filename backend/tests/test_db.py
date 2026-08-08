@@ -196,6 +196,7 @@ def test_database_engine_is_async_core_owned() -> None:
         "replay_episode_staging",
         "replay_jobs",
         "replay_result_staging",
+        "slack_settings",
         "telemetry",
         "user_sessions",
         "users",
@@ -214,7 +215,7 @@ def test_database_health_and_revision_use_injected_connection() -> None:
                 assert await database_is_healthy(connection)
                 assert (
                     await current_migration_revision(connection)
-                    == "20260808_0017"
+                    == "20260808_0018"
                 )
         finally:
             await engine.dispose()
@@ -361,6 +362,13 @@ def test_compose_enforces_the_database_seed_api_nginx_dependency_chain() -> None
         "SIM_INJECTED_NPZ_PATH",
         "SIM_INJECTED_EVENTS_PATH",
     }
+    assert _environment_keys(services["notifier"]) == set(DATABASE_ENV) | {
+        "NOTIFIER_POLL_SECONDS",
+        "NOTIFIER_LEASE_SECONDS",
+        "NOTIFIER_MAX_ATTEMPTS",
+        "NOTIFIER_CHART_MARGIN_MINUTES",
+        "NOTIFIER_MAX_EPISODE_AGE_MINUTES",
+    }
 
 
 def test_compose_scopes_live_bundle_list_to_bootstrap() -> None:
@@ -409,6 +417,14 @@ def test_cpu_compose_selects_cpu_and_routes_only_nginx_through_traefik() -> None
         assert "      INFERENCE_DEVICE: cpu" in services[name]
         assert '      OMP_NUM_THREADS: "${INFERENCE_CPU_THREADS:-1}"' in services[name]
         assert '      MKL_NUM_THREADS: "${INFERENCE_CPU_THREADS:-1}"' in services[name]
+
+    assert _environment_keys(services["notifier"]) == set(DATABASE_ENV) | {
+        "NOTIFIER_POLL_SECONDS",
+        "NOTIFIER_LEASE_SECONDS",
+        "NOTIFIER_MAX_ATTEMPTS",
+        "NOTIFIER_CHART_MARGIN_MINUTES",
+        "NOTIFIER_MAX_EPISODE_AGE_MINUTES",
+    }
 
     assert '    profiles: ["eda"]' in services["eda-worker"]
     assert "    ports:" not in services["nginx"]
@@ -548,9 +564,6 @@ def test_environment_example_documents_runtime_and_ingress_settings() -> None:
         "MQTT_CLIENT_ID",
         "MODEL_ARTIFACTS_DIR",
         "LIVE_MODEL_BUNDLE_ID",
-        "NOTIFICATIONS_ENABLED",
-        "SLACK_BOT_TOKEN",
-        "SLACK_CHANNEL_ID",
         "NOTIFIER_POLL_SECONDS",
         "NOTIFIER_LEASE_SECONDS",
         "NOTIFIER_MAX_ATTEMPTS",
@@ -604,6 +617,7 @@ def test_direct_dependencies_are_exactly_pinned() -> None:
         "sqlalchemy[asyncio]==2.0.51",
         "psycopg[binary]==3.3.2",
         "alembic==1.18.5",
+        "httpx==0.28.1",
         "numpy==2.4.6",
         "paho-mqtt==2.1.0",
     ]
@@ -624,7 +638,6 @@ def test_direct_dependencies_are_exactly_pinned() -> None:
     ]
     assert pyproject["project"]["optional-dependencies"]["notifier"] == [
         "matplotlib==3.11.0",
-        "httpx==0.28.1",
     ]
 
 

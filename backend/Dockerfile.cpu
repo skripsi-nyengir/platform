@@ -14,7 +14,7 @@ FROM base AS test
 
 ENV EDA_TOOLCHAIN_ROLE=api
 
-RUN pip install --disable-pip-version-check --no-cache-dir ".[test]"
+RUN pip install --disable-pip-version-check --no-cache-dir ".[test,notifier]"
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY tests ./tests

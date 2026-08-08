@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from anomaly_backend.config import Settings
 from anomaly_backend.db import create_database_engine
+from anomaly_backend.slack import Attachment, SlackClient, SlackError
 from anomaly_backend.sql.notifications import (
     EpisodeContext,
     PendingNotification,
@@ -31,13 +32,13 @@ from anomaly_backend.sql.notifications import (
     score_points,
     telemetry_points,
 )
+from anomaly_backend.sql.slack_settings import read_slack_settings
 from anomaly_worker.notifier_charts import (
     EmptyChartError,
     chart_window,
     score_chart,
     telemetry_chart,
 )
-from anomaly_worker.slack_client import Attachment, SlackClient, SlackError
 
 
 logger = logging.getLogger("anomaly_worker.notifier")
@@ -142,6 +143,9 @@ async def render(
 async def deliver_once(engine: AsyncEngine, settings: Settings) -> int:
     """One cycle: top up the outbox, then send whatever is claimable."""
     async with engine.connect() as connection:
+        slack_settings = await read_slack_settings(connection)
+        if not slack_settings.enabled:
+            return 0
         _ = await enqueue_missing(
             connection,
             max_episode_age_minutes=settings.notifier_max_episode_age_minutes,
@@ -155,14 +159,18 @@ async def deliver_once(engine: AsyncEngine, settings: Settings) -> int:
         return 0
 
     sent = 0
-    async with SlackClient(settings.slack_bot_token) as slack:
+    # The database constraint makes these non-null whenever enabled. Keeping the
+    # assertion next to use makes that invariant visible to the type checker too.
+    assert slack_settings.bot_token is not None
+    assert slack_settings.channel_id is not None
+    async with SlackClient(slack_settings.bot_token) as slack:
         for notification in claimed:
             try:
                 rendered = await render(engine, notification, settings=settings)
                 if rendered is None:
                     raise SlackError("episode no longer exists")
                 await slack.post_charts(
-                    channel_id=settings.slack_channel_id,
+                    channel_id=slack_settings.channel_id,
                     initial_comment=rendered.comment,
                     attachments=rendered.attachments,
                 )
@@ -209,13 +217,6 @@ async def run(settings: Settings, *, stop: asyncio.Event) -> None:
         await engine.dispose()
 
 
-async def _idle(stop: asyncio.Event) -> None:
-    # Compose restarts this service unless stopped, so exiting when notifications are
-    # switched off would produce a restart loop. Staying up and quiet is the honest
-    # representation of "configured off".
-    await stop.wait()
-
-
 def main() -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
@@ -230,11 +231,6 @@ def main() -> int:
 
     for received in (signal.SIGTERM, signal.SIGINT):
         _ = signal.signal(received, request_stop)
-
-    if not settings.notifications_enabled:
-        logger.info("NOTIFICATIONS_ENABLED is false; notifier is idle by configuration")
-        asyncio.run(_idle(stop))
-        return 0
 
     asyncio.run(run(settings, stop=stop))
     return 0

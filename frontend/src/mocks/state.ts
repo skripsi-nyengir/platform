@@ -2,6 +2,8 @@ import type { AlertEvent, AlertMutationResponse } from '../contracts/alerts'
 import { activeAlertSeedEvents } from './fixtures/alerts'
 import type { AppMockScenario } from './scenario'
 import type { ReplayJob } from '../contracts/preview'
+import type { SlackSettingsResponse, TestSlackSettingsRequest } from '../contracts/slackSettings'
+import { slackSettingsResponse } from './fixtures/slackSettings'
 
 export interface MockApiState {
   scenario: AppMockScenario
@@ -11,6 +13,8 @@ export interface MockApiState {
   replayJobs: Map<string, ReplayJob>
   edaRequestCounts: Map<string, number>
   signedIn: boolean
+  slackSettings: SlackSettingsResponse
+  slackTestRequests: TestSlackSettingsRequest[]
 }
 
 function scenarioSeedEvents(scenario: AppMockScenario): AlertEvent[] {
@@ -39,6 +43,8 @@ export const mockState: MockApiState = {
   replayJobs: new Map<string, ReplayJob>(),
   edaRequestCounts: new Map<string, number>(),
   signedIn: true,
+  slackSettings: structuredClone(slackSettingsResponse),
+  slackTestRequests: [],
 }
 
 export function resetMockState(scenario: AppMockScenario = 'normal'): void {
@@ -49,6 +55,8 @@ export function resetMockState(scenario: AppMockScenario = 'normal'): void {
   mockState.replayJobs.clear()
   mockState.edaRequestCounts.clear()
   mockState.signedIn = scenarioStartsSignedIn(scenario)
+  mockState.slackSettings = structuredClone(slackSettingsResponse)
+  mockState.slackTestRequests = []
 }
 
 export function setMockScenario(scenario: AppMockScenario): void {

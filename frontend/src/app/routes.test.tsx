@@ -14,6 +14,18 @@ describe('B02 routes', () => {
     expect(navigationItems.some((item) => item.path === '/simulation')).toBe(false)
   })
 
+  it('exposes Slack settings in system navigation and at its authenticated route', async () => {
+    expect(navigationItems).toContainEqual({
+      path: '/settings/slack',
+      label: 'Slack',
+      group: 'system',
+    })
+
+    renderApp('/settings/slack')
+    expect(await screen.findByRole('heading', { name: 'Slack' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Slack' })).toHaveAttribute('aria-current', 'page')
+  })
+
   it('renders the B02 sensor detail route', async () => {
     renderApp('/sensors/b02f3872-ruang-produksi')
     expect(await screen.findByRole('heading', { name: 'Sensor Detail & History' })).toBeVisible()

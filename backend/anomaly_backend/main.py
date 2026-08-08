@@ -19,6 +19,7 @@ from anomaly_backend.routes.offline_evaluations import router as offline_evaluat
 from anomaly_backend.routes.post_inference_bins import router as post_inference_bins_router
 from anomaly_backend.routes.preview import router as preview_router
 from anomaly_backend.routes.simulation import router as simulation_router
+from anomaly_backend.routes.slack_settings import router as slack_settings_router
 from anomaly_backend.routes.system import router as system_router
 from anomaly_backend.routes.telemetry import router as telemetry_router
 
@@ -53,6 +54,7 @@ _PRODUCTION_ROUTERS = (
     evaluations_router,
     model_registry_router,
     offline_evaluations_router,
+    slack_settings_router,
     system_router,
 )
 _production_engine = create_database_engine(Settings.from_environ())
