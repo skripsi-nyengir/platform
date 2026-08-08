@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/skripsi-nyengir/platform/compare/v0.3.0...v0.3.1) (2026-08-08)
+
+
+### Bug Fixes
+
+* **notifications:** allow controlled Slack egress ([3c19e39](https://github.com/skripsi-nyengir/platform/commit/3c19e3948c0284eee92eacba2337ca354b8fe251))
+
 ## [0.3.0](https://github.com/skripsi-nyengir/platform/compare/v0.2.0...v0.3.0) (2026-08-08)
 
 
