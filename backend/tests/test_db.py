@@ -268,6 +268,13 @@ def test_compose_defines_expected_services_and_public_nginx() -> None:
     assert '    profiles: ["eda-import"]' in services["eda-import"]
     assert "    profiles:" not in services["eda-worker"]
 
+    for name in ("api", "notifier"):
+        assert "      - backend" in services[name]
+        assert "      - egress" in services[name]
+    for name in set(services) - {"api", "notifier"}:
+        assert "      - egress" not in services[name]
+    assert "networks:\n  backend:\n    internal: true\n  egress:\n  public:" in compose
+
 
 def test_compose_enforces_the_database_seed_api_nginx_dependency_chain() -> None:
     project_root = Path(os.environ["PROJECT_ROOT"])
@@ -426,6 +433,12 @@ def test_cpu_compose_selects_cpu_and_routes_only_nginx_through_traefik() -> None
         "NOTIFIER_MAX_EPISODE_AGE_MINUTES",
     }
 
+    for name in ("api", "notifier"):
+        assert "      - backend" in services[name]
+        assert "      - egress" in services[name]
+    for name in set(services) - {"api", "notifier"}:
+        assert "      - egress" not in services[name]
+
     assert '    profiles: ["eda"]' in services["eda-worker"]
     assert "    ports:" not in services["nginx"]
     assert "      - backend" in services["nginx"]
@@ -438,6 +451,10 @@ def test_cpu_compose_selects_cpu_and_routes_only_nginx_through_traefik() -> None
         in services["nginx"]
     )
     assert "  reverse_proxy:\n    external: true\n    name: reverse_proxy" in compose
+    assert (
+        "networks:\n  backend:\n    internal: true\n  egress:\n  public:\n"
+        "  reverse_proxy:" in compose
+    )
 
 
 def test_cpu_and_cuda_builds_use_separate_dockerfiles() -> None:
@@ -532,7 +549,7 @@ def test_compose_uses_only_checked_in_build_contexts_and_private_backend_network
     assert "    build:\n      context: ./frontend" in services["nginx"]
     assert "      - backend" in services["nginx"]
     assert "      - public" in services["nginx"]
-    assert "networks:\n  backend:\n    internal: true\n  public:" in compose
+    assert "networks:\n  backend:\n    internal: true\n  egress:\n  public:" in compose
     for forbidden in ("../", "data/processed", "runs/", "test.npz"):
         assert forbidden not in compose
 
