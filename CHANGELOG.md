@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/skripsi-nyengir/platform/compare/v0.3.1...v0.3.2) (2026-08-08)
+
+
+### Bug Fixes
+
+* **live:** order durable anchors by ingress ([9bd6c04](https://github.com/skripsi-nyengir/platform/commit/9bd6c04db7cad979daa059586dc7e5e11a77da98))
+
 ## [0.3.1](https://github.com/skripsi-nyengir/platform/compare/v0.3.0...v0.3.1) (2026-08-08)
 
 
