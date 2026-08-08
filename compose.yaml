@@ -73,6 +73,7 @@ services:
       retries: 30
     networks:
       - backend
+      - egress
 
   worker:
     build:
@@ -307,7 +308,7 @@ services:
     restart: unless-stopped
     networks:
       - backend
-      - public
+      - egress
 
   nginx:
     build:
@@ -324,6 +325,7 @@ services:
 networks:
   backend:
     internal: true
+  egress:
   public:
 
 volumes:
