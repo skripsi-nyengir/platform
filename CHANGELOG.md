@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/skripsi-nyengir/platform/compare/v0.2.0...v0.3.0) (2026-08-08)
+
+
+### Features
+
+* **notifications:** configure Slack from the app ([ebaa233](https://github.com/skripsi-nyengir/platform/commit/ebaa23304456781176a13f23e416d8b74d47de5a))
+
 ## [0.2.0](https://github.com/skripsi-nyengir/platform/compare/v0.1.2...v0.2.0) (2026-08-08)
 
 
