@@ -431,19 +431,10 @@ def test_an_open_episode_message_says_so_instead_of_inventing_an_end() -> None:
     assert "still open" in compose_comment("opened", context)
 
 
-def test_enabling_notifications_without_slack_credentials_is_refused() -> None:
-    with patch.dict(
-        os.environ, {**DATABASE_ENV, "NOTIFICATIONS_ENABLED": "true"}, clear=True
-    ):
-        with pytest.raises(ValueError, match="SLACK_BOT_TOKEN"):
-            _ = Settings.from_environ()
-
-
-def test_notifier_defaults_are_off_and_sane() -> None:
+def test_notifier_tuning_defaults_are_sane() -> None:
     with patch.dict(os.environ, DATABASE_ENV, clear=True):
         settings = Settings.from_environ()
 
-    assert settings.notifications_enabled is False
     assert settings.notifier_poll_seconds == 15
     assert settings.notifier_max_attempts == 5
     assert settings.notifier_max_episode_age_minutes == 60

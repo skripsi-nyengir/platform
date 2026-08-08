@@ -33,9 +33,6 @@ class Settings:
     auth_session_ttl_seconds: int = 43_200
     auth_max_failed_attempts: int = 5
     auth_lockout_seconds: int = 900
-    notifications_enabled: bool = False
-    slack_bot_token: str = ""
-    slack_channel_id: str = ""
     notifier_poll_seconds: int = 15
     notifier_lease_seconds: int = 120
     notifier_max_attempts: int = 5
@@ -71,15 +68,6 @@ class Settings:
             raise ValueError("Notifier settings must be positive integers")
         if self.notifier_lease_seconds <= self.notifier_poll_seconds:
             raise ValueError("Notifier lease must be longer than its poll interval")
-        # Refusing here rather than starting quietly: a notifier that is enabled but
-        # cannot reach Slack looks healthy while every alert goes unsent.
-        if self.notifications_enabled and not (
-            self.slack_bot_token and self.slack_channel_id
-        ):
-            raise ValueError(
-                "SLACK_BOT_TOKEN and SLACK_CHANNEL_ID are required when "
-                "NOTIFICATIONS_ENABLED is true"
-            )
 
     @classmethod
     def from_environ(cls) -> "Settings":
@@ -109,9 +97,6 @@ class Settings:
                 os.environ.get("AUTH_MAX_FAILED_ATTEMPTS", "5")
             ),
             auth_lockout_seconds=int(os.environ.get("AUTH_LOCKOUT_SECONDS", "900")),
-            notifications_enabled=_boolean_environ("NOTIFICATIONS_ENABLED", False),
-            slack_bot_token=os.environ.get("SLACK_BOT_TOKEN", ""),
-            slack_channel_id=os.environ.get("SLACK_CHANNEL_ID", ""),
             notifier_poll_seconds=int(os.environ.get("NOTIFIER_POLL_SECONDS", "15")),
             notifier_lease_seconds=int(os.environ.get("NOTIFIER_LEASE_SECONDS", "120")),
             notifier_max_attempts=int(os.environ.get("NOTIFIER_MAX_ATTEMPTS", "5")),

@@ -63,9 +63,14 @@ if [[ $args == *" run --rm "* ]]; then
   exit 0
 fi
 if [[ $args == *" up -d "* ]]; then
+  printf '%s\n' "$args" >>"$FAKE_START_ARGS_FILE"
   count=0
   [[ -f ${FAKE_START_COUNT_FILE:-/nonexistent} ]] && read -r count <"$FAKE_START_COUNT_FILE"
   printf '%s\n' "$((count + 1))" >"$FAKE_START_COUNT_FILE"
+  exit 0
+fi
+if [[ $args == *" compose "*" stop "* ]]; then
+  printf '%s\n' "$args" >>"$FAKE_STOP_ARGS_FILE"
   exit 0
 fi
 exit 0
@@ -105,6 +110,7 @@ EOF
   export PATH="$fake_bin:/usr/bin:/bin"
   export ANOMALY_DEPLOY_TESTING=1 ANOMALY_STATE_DIR="$state_dir"
   export ANOMALY_HEALTH_TIMEOUT=1 FAKE_START_COUNT_FILE="$case_dir/start-count"
+  export FAKE_START_ARGS_FILE="$case_dir/start-args" FAKE_STOP_ARGS_FILE="$case_dir/stop-args"
   export FAKE_DB_VERIFY_FILE="$case_dir/db-verify" FAKE_MUTATION_FILE="$case_dir/mutations"
   export FAKE_LOGIN_FILE="$case_dir/logins"
   unset FAKE_DB_EXISTS FAKE_DB_VERIFY_MODE FAKE_HEALTH_MODE
@@ -117,6 +123,16 @@ run_deploy() {
 setup_case valid
 make_manifest v0.1.0 1 | run_deploy
 jq -e '.release == "v0.1.0"' "$state_dir/manifests/current.json" >/dev/null || fail "valid deploy"
+grep -Eq ' up -d .* api worker live-subscriber notifier nginx ' "$FAKE_START_ARGS_FILE" \
+  || fail "application start did not include notifier"
+
+setup_case failed_first_release_stops_notifier
+export FAKE_HEALTH_MODE=fail
+if make_manifest v0.1.0 1 | run_deploy >/dev/null 2>&1; then
+  fail "unhealthy first release reported success"
+fi
+grep -Eq ' stop api worker live-subscriber notifier nginx ' "$FAKE_STOP_ARGS_FILE" \
+  || fail "application stop did not include notifier"
 
 setup_case verify_authenticates
 make_manifest v0.1.0 1 | run_deploy

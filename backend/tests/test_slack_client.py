@@ -3,7 +3,14 @@ from typing import Any
 import httpx
 import pytest
 
-from anomaly_worker.slack_client import Attachment, SlackClient, SlackError
+from anomaly_backend.slack import (
+    Attachment,
+    SlackClient,
+    SlackConfigurationError,
+    SlackError,
+    SlackRateLimitError,
+    SlackTransientError,
+)
 
 
 TOKEN = "xoxb-super-secret-value"
@@ -40,6 +47,8 @@ class Recorder:
             return httpx.Response(200, text="OK")
         if "completeUploadExternal" in str(request.url):
             return httpx.Response(200, json={"ok": True, "files": []})
+        if "chat.postMessage" in str(request.url):
+            return httpx.Response(200, json={"ok": True, "ts": "1.0"})
         raise AssertionError(f"unexpected request to {request.url}")
 
     @property
@@ -135,7 +144,7 @@ async def test_a_failure_at_any_step_raises_rather_than_half_posting(
 
 
 @pytest.mark.anyio
-async def test_the_error_message_carries_slacks_code_but_not_the_token() -> None:
+async def test_the_error_message_is_sanitized_and_omits_the_token() -> None:
     recorder = Recorder(
         {"getUploadURLExternal": httpx.Response(200, json={"ok": False, "error": "invalid_auth"})}
     )
@@ -147,7 +156,7 @@ async def test_the_error_message_carries_slacks_code_but_not_the_token() -> None
             )
 
     message = str(failure.value)
-    assert "invalid_auth" in message
+    assert message == "Slack rejected the bot credentials"
     # This string is written to the outbox's last_error and to the log.
     assert TOKEN not in message
 
@@ -174,3 +183,57 @@ async def test_posting_nothing_is_refused() -> None:
             await slack.post_charts(
                 channel_id=CHANNEL, initial_comment="c", attachments=[]
             )
+
+
+@pytest.mark.anyio
+async def test_text_message_uses_chat_post_message() -> None:
+    recorder = Recorder()
+
+    async with _client(recorder) as slack:
+        await slack.post_message(channel_id=CHANNEL, text="integration test")
+
+    request = recorder.requests[0]
+    assert str(request.url).endswith("/chat.postMessage")
+    assert recorder.body(0) == {"channel": CHANNEL, "text": "integration test"}
+    assert request.headers["authorization"] == f"Bearer {TOKEN}"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("response", "error_type"),
+    [
+        (
+            httpx.Response(200, json={"ok": False, "error": "invalid_auth"}),
+            SlackConfigurationError,
+        ),
+        (
+            httpx.Response(200, json={"ok": False, "error": "missing_scope"}),
+            SlackConfigurationError,
+        ),
+        (
+            httpx.Response(200, json={"ok": False, "error": "not_in_channel"}),
+            SlackConfigurationError,
+        ),
+        (
+            httpx.Response(200, json={"ok": False, "error": "no_permission"}),
+            SlackConfigurationError,
+        ),
+        (
+            httpx.Response(429, headers={"Retry-After": "17"}),
+            SlackRateLimitError,
+        ),
+        (httpx.Response(503, text="unavailable"), SlackTransientError),
+    ],
+)
+async def test_text_message_failures_are_typed_and_sanitized(
+    response: httpx.Response, error_type: type[SlackError]
+) -> None:
+    recorder = Recorder({"chat.postMessage": response})
+
+    with pytest.raises(error_type) as failure:
+        async with _client(recorder) as slack:
+            await slack.post_message(channel_id=CHANNEL, text="test")
+
+    assert TOKEN not in str(failure.value)
+    if isinstance(failure.value, SlackRateLimitError):
+        assert failure.value.retry_after_seconds == 17

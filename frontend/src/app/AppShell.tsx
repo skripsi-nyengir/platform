@@ -24,6 +24,7 @@ const routeIconPaths: Record<NavigationItem['path'], string> = {
   '/model-evaluation': 'M4 3h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5l-3 3-3-3H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm2 12 3-4 3 2 4-6 2 1-5 8-3-2-2 3-2-2Z',
   '/simulation': 'M9 2v2h1v5.59L4.59 15A4 4 0 0 0 8 21h8a4 4 0 0 0 3.41-6L14 9.59V4h1V2H9Zm3 9.41V4h2v7.41L15 13H9l1-1.59V4h2v7.41Z',
   '/system-health': 'M3 12h4l2-6 4 12 2-6h6v2h-4.5L13 22 9 10l-.5 4H3v-2Z',
+  '/settings/slack': 'M5.04 15.17a2 2 0 1 1-2-2h2v2Zm1 0a2 2 0 0 1 4 0v5a2 2 0 1 1-4 0v-5Zm2-8.13a2 2 0 1 1 2-2v2h-2Zm0 1a2 2 0 0 1 0 4h-5a2 2 0 1 1 0-4h5Zm8.13 2a2 2 0 1 1 2-2v2h-2Zm-1 0a2 2 0 0 1-4 0v-5a2 2 0 1 1 4 0v5Zm-2 8.13a2 2 0 1 1-2 2v-2h2Zm0-1a2 2 0 0 1 0-4h5a2 2 0 1 1 0 4h-5Z',
 }
 
 export const SIDEBAR_COLLAPSED_STORAGE_KEY = 'adp-sidebar-collapsed'

@@ -9,6 +9,7 @@ dependencies = [
   "sqlalchemy[asyncio]==2.0.51",
   "psycopg[binary]==3.3.2",
   "alembic==1.18.5",
+  "httpx==0.28.1",
   "numpy==2.4.6",
   "paho-mqtt==2.1.0",
 ]
@@ -28,7 +29,6 @@ eda = [
 # groups, so the notifier introduces no version the repository does not already carry.
 notifier = [
   "matplotlib==3.11.0",
-  "httpx==0.28.1",
 ]
 test = [
   "pytest==9.1.0",

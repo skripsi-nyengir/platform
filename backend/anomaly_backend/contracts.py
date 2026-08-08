@@ -1095,6 +1095,34 @@ class LogoutResponse(StrictModel):
     request_id: str
 
 
+class SlackSettingsResponse(StrictModel):
+    request_id: str
+    enabled: bool
+    bot_token_configured: bool
+    channel_id: str | None
+    updated_at: OperationalInstant
+    updated_by_username: str | None
+
+
+class SlackSettingsUpdateRequest(StrictModel):
+    enabled: bool
+    channel_id: Annotated[str, Field(min_length=1, max_length=255)] | None
+    bot_token: Annotated[str, Field(min_length=1, max_length=4096)] | None = None
+
+
+class SlackTestRequest(StrictModel):
+    _optional_non_nullable_fields: ClassVar[frozenset[str]] = frozenset({"bot_token"})
+
+    channel_id: Annotated[str, Field(min_length=1, max_length=255)]
+    bot_token: Annotated[str, Field(min_length=1, max_length=4096)] | None = None
+
+
+class SlackTestResponse(StrictModel):
+    request_id: str
+    status: Literal["sent"]
+    sent_at: OperationalInstant
+
+
 class DeviceItem(StrictModel):
     device_id: SensorId
     display_name: Literal["TALPHA Ruang Produksi"]
