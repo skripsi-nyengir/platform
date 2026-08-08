@@ -202,6 +202,7 @@ class LiveService:
         self._identities: dict[int, LiveModelIdentity] = {}
         self._models: dict[int, LiveScoringModel] = {}
         self._last_durable_key: TelemetryKey | None = None
+        self._last_durable_order: tuple[datetime, int] | None = None
         self._last_received_at_utc: datetime | None = None
         self._ingress_lock = asyncio.Lock()
         self._process_lock = asyncio.Lock()
@@ -349,6 +350,14 @@ class LiveService:
                 (
                     cast(datetime, tail["received_ts"]),
                     cast(UUID, tail["telemetry_id"]),
+                )
+                if tail is not None
+                else None
+            )
+            self._last_durable_order = (
+                (
+                    cast(datetime, tail["received_ts"]),
+                    cast(int, tail["ingress_sequence"]),
                 )
                 if tail is not None
                 else None
@@ -627,8 +636,17 @@ class LiveService:
                 )
             if reason is not None:
                 self._segment_reasons.pop(effective_binding.continuity_epoch, None)
-            if self._last_durable_key is None or key > self._last_durable_key:
-                self._last_durable_key = key
+            durable_key = (
+                cast(datetime, row["received_ts"]),
+                cast(UUID, row["telemetry_id"]),
+            )
+            durable_order = (durable_key[0], cast(int, row["ingress_sequence"]))
+            if (
+                self._last_durable_order is None
+                or durable_order > self._last_durable_order
+            ):
+                self._last_durable_key = durable_key
+                self._last_durable_order = durable_order
             if (
                 self._last_received_at_utc is None
                 or reading.received_at_utc > self._last_received_at_utc

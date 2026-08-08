@@ -28,6 +28,7 @@ from anomaly_backend.sql.live import (
     LIVE_DEVICE_ID,
     BoundaryReason,
     live_activation_row,
+    read_live_cursor,
     request_live_activation,
 )
 from anomaly_worker import live_service as live_service_module
@@ -539,6 +540,58 @@ async def test_equal_second_sources_follow_uuid_total_order(
                 )
             )
         assert source_ids == ids
+    finally:
+        await service.stop()
+        await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_same_second_later_lower_uuid_anchors_following_gap(
+    task7_database: _Database,
+) -> None:
+    engine, service = await _start_service(task7_database, _Scorer())
+    start = datetime(2045, 2, 2, tzinfo=timezone.utc)
+    earlier_id = UUID(int=2)
+    later_id = UUID(int=1)
+    gap_id = UUID(int=3)
+    try:
+        await service.persist_reading(
+            _reading(start),
+            telemetry_id=earlier_id,
+        )
+        assert await service.process_pending() == 1
+
+        await service.persist_reading(
+            _reading(start + timedelta(microseconds=1)),
+            telemetry_id=later_id,
+        )
+        assert await service.process_pending() == 1
+
+        gap_row = await service.persist_reading(
+            _reading(start + timedelta(seconds=100)),
+            telemetry_id=gap_id,
+        )
+        assert await service.process_pending() == 1
+
+        async with engine.connect() as connection:
+            boundary = (
+                (
+                    await connection.execute(
+                        select(tables.live_processing_boundaries).where(
+                            tables.live_processing_boundaries.c.continuity_epoch
+                            == cast(int, gap_row["continuity_epoch"])
+                        )
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            cursor = await read_live_cursor(connection, device_id=LIVE_DEVICE_ID)
+
+        assert boundary["after_telemetry_id"] == later_id
+        assert cursor is not None
+        assert cursor["telemetry_id"] == gap_id
+        assert cursor["last_boundary_id"] == boundary["boundary_id"]
     finally:
         await service.stop()
         await engine.dispose()
