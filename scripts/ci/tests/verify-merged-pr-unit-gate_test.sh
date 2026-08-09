@@ -43,10 +43,25 @@ elif [[ $1 == api && $2 == "repos/example/project/actions/workflows/ci-release-d
   case "$TEST_CASE" in
     no_run) printf '{"workflow_runs":[]}\n' ;;
     active_run) jq -nc --arg head "$head_sha" '{workflow_runs:[{id:123,event:"pull_request",head_sha:$head,path:".github/workflows/ci-release-deploy.yml",status:"in_progress",conclusion:null,created_at:"2026-08-09T00:00:00Z"}]}' ;;
+    prefixed_active_then_success)
+      poll_count=0
+      [[ -f $FAKE_GH_STATE ]] && read -r poll_count < "$FAKE_GH_STATE"
+      poll_count=$((poll_count + 1))
+      printf '%s\n' "$poll_count" > "$FAKE_GH_STATE"
+      if [[ $poll_count -eq 1 ]]; then
+        jq -nc --arg head "$head_sha" '{workflow_runs:[{id:123,event:"pull_request",head_sha:$head,path:".github/workflows/ci-release-deploy.yml",status:"in_progress",conclusion:null,created_at:"2026-08-09T00:00:00Z"}]}'
+      else
+        jq -nc --arg head "$head_sha" '{workflow_runs:[{id:123,event:"pull_request",head_sha:$head,path:".github/workflows/ci-release-deploy.yml",status:"completed",conclusion:"success",created_at:"2026-08-09T00:00:00Z"}]}'
+      fi
+      ;;
     failed_run) jq -nc --arg head "$head_sha" '{workflow_runs:[{id:123,event:"pull_request",head_sha:$head,path:".github/workflows/ci-release-deploy.yml",status:"completed",conclusion:"failure",created_at:"2026-08-09T00:00:00Z"}]}' ;;
     cancelled_run) jq -nc --arg head "$head_sha" '{workflow_runs:[{id:123,event:"pull_request",head_sha:$head,path:".github/workflows/ci-release-deploy.yml",status:"completed",conclusion:"cancelled",created_at:"2026-08-09T00:00:00Z"}]}' ;;
+    newest_failed_run) jq -nc --arg head "$head_sha" '{workflow_runs:[{id:124,event:"pull_request",head_sha:$head,path:".github/workflows/ci-release-deploy.yml",status:"completed",conclusion:"failure",created_at:"2026-08-09T00:00:00Z"},{id:123,event:"pull_request",head_sha:$head,path:".github/workflows/ci-release-deploy.yml",status:"completed",conclusion:"success",created_at:"2026-08-08T00:00:00Z"}]}' ;;
+    newest_cancelled_run) jq -nc --arg head "$head_sha" '{workflow_runs:[{id:124,event:"pull_request",head_sha:$head,path:".github/workflows/ci-release-deploy.yml",status:"completed",conclusion:"cancelled",created_at:"2026-08-09T00:00:00Z"},{id:123,event:"pull_request",head_sha:$head,path:".github/workflows/ci-release-deploy.yml",status:"completed",conclusion:"success",created_at:"2026-08-08T00:00:00Z"}]}' ;;
     *) jq -nc --arg head "$head_sha" '{workflow_runs:[{id:122,event:"pull_request",head_sha:$head,path:".github/workflows/ci-release-deploy.yml",status:"completed",conclusion:"failure",created_at:"2026-08-08T00:00:00Z"},{id:123,event:"pull_request",head_sha:$head,path:".github/workflows/ci-release-deploy.yml",status:"completed",conclusion:"success",created_at:"2026-08-09T00:00:00Z"}]}' ;;
   esac
+elif [[ $1 == api && $2 == "repos/example/project/actions/workflows/../ci-release-deploy.yml/runs?event=pull_request&head_sha=$head_sha&per_page=100" ]]; then
+  jq -nc --arg head "$head_sha" '{workflow_runs:[{id:123,event:"pull_request",head_sha:$head,path:".github/workflows/../ci-release-deploy.yml",status:"completed",conclusion:"success",created_at:"2026-08-09T00:00:00Z"}]}'
 elif [[ $1 == run && $2 == download ]]; then
   [[ $3 == "$run_id" ]]
   shift 3
@@ -84,6 +99,8 @@ FAKE_GH
 run_case() {
   local name=$1
   local expected_status=$2
+  local workflow_path=${3:-ci-release-deploy.yml}
+  local timeout_seconds=${4:-0}
   local tmp_dir output_file status actual_output expected_output
   tmp_dir=$(mktemp -d)
   output_file="$tmp_dir/github-output"
@@ -92,9 +109,11 @@ run_case() {
 
   status=0
   TEST_CASE=$name \
+    FAKE_GH_STATE="$tmp_dir/poll-count" \
     GATE_REPOSITORY=example/project \
     GATE_COMMIT_SHA=$commit \
-    GATE_TIMEOUT_SECONDS=0 \
+    GATE_WORKFLOW_PATH=$workflow_path \
+    GATE_TIMEOUT_SECONDS=$timeout_seconds \
     GATE_POLL_SECONDS=0 \
     GATE_GH_BIN="$tmp_dir/gh" \
     GITHUB_OUTPUT="$output_file" \
@@ -127,6 +146,10 @@ run_case no_run failure
 run_case active_run failure
 run_case failed_run failure
 run_case cancelled_run failure
+run_case prefixed_active_then_success success .github/workflows/ci-release-deploy.yml 2
+run_case unsafe_nested_workflow failure ../ci-release-deploy.yml
+run_case newest_failed_run failure
+run_case newest_cancelled_run failure
 run_case malformed_evidence failure
 run_case stale_head failure
 run_case wrong_pr failure

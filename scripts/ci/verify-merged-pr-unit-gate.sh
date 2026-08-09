@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 repository=${GATE_REPOSITORY:-${GITHUB_REPOSITORY:-}}
 commit_sha=${GATE_COMMIT_SHA:-${GITHUB_SHA:-}}
-workflow_path=${GATE_WORKFLOW_PATH:-ci-release-deploy.yml}
+workflow_input=${GATE_WORKFLOW_PATH:-ci-release-deploy.yml}
 timeout_seconds=${GATE_TIMEOUT_SECONDS:-900}
 poll_seconds=${GATE_POLL_SECONDS:-15}
 gh_bin=${GATE_GH_BIN:-gh}
@@ -16,7 +16,11 @@ die() {
 
 [[ $repository =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die 'GATE_REPOSITORY must be OWNER/REPO'
 [[ $commit_sha =~ ^[0-9a-f]{40}$ ]] || die 'GATE_COMMIT_SHA must be a lowercase 40-hex SHA'
-[[ -n $workflow_path ]] || die 'GATE_WORKFLOW_PATH must not be empty'
+case "$workflow_input" in
+  .github/workflows/*) workflow_file=${workflow_input#\.github/workflows/} ;;
+  *) workflow_file=$workflow_input ;;
+esac
+[[ $workflow_file =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml$ ]] || die 'GATE_WORKFLOW_PATH must be a safe workflow filename or .github/workflows/<filename>'
 [[ $timeout_seconds =~ ^[0-9]+$ ]] || die 'GATE_TIMEOUT_SECONDS must be a non-negative integer'
 [[ $poll_seconds =~ ^[0-9]+$ ]] || die 'GATE_POLL_SECONDS must be a non-negative integer'
 [[ -n $gh_bin ]] || die 'GATE_GH_BIN must not be empty'
@@ -38,15 +42,12 @@ matching_prs=$(jq -ce --arg commit "$commit_sha" '
 pr_number=$(jq -er '.[0].number | select(type == "number" and . > 0 and floor == .)' <<<"$matching_prs") || die 'pull request number must be a positive integer'
 pr_head_sha=$(jq -er '.[0].head.sha | select(type == "string" and test("^[0-9a-f]{40}$"))' <<<"$matching_prs") || die 'pull request head SHA must be lowercase 40-hex'
 
-case "$workflow_path" in
-  .github/workflows/*) expected_run_path=$workflow_path ;;
-  *) expected_run_path=".github/workflows/$workflow_path" ;;
-esac
+expected_run_path=".github/workflows/$workflow_file"
 
 started_at=$SECONDS
 workflow_run_id=
 while :; do
-  runs_json=$("$gh_bin" api "repos/$repository/actions/workflows/$workflow_path/runs?event=pull_request&head_sha=$pr_head_sha&per_page=100")
+  runs_json=$("$gh_bin" api "repos/$repository/actions/workflows/$workflow_file/runs?event=pull_request&head_sha=$pr_head_sha&per_page=100")
   latest_run=$(jq -ce --arg head "$pr_head_sha" --arg path "$expected_run_path" '
     [ .workflow_runs[]
       | select(.event == "pull_request" and .head_sha == $head and .path == $path)
