@@ -4,7 +4,7 @@ set -Eeuo pipefail
 repository=${GITHUB_REPOSITORY:-}
 commit_sha=${GITHUB_SHA:-}
 github_output=${GITHUB_OUTPUT:-}
-release_created=${RELEASE_CREATED:-}
+release_created=${RELEASE_CREATED:-false}
 release_tag_name=${RELEASE_TAG_NAME:-}
 release_sha=${RELEASE_SHA:-}
 manifest_path=${RELEASE_MANIFEST_PATH:-.release-please-manifest.json}
