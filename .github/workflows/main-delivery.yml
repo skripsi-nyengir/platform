@@ -1,0 +1,252 @@
+name: Main delivery
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      pr_number: ${{ steps.gate.outputs.pr_number }}
+      pr_head_sha: ${{ steps.gate.outputs.pr_head_sha }}
+      pr_workflow_run_id: ${{ steps.gate.outputs.pr_workflow_run_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify merged PR unit gate evidence
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/ci/verify-merged-pr-unit-gate.sh
+
+  build-runtime:
+    needs: gate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: backend
+          file: backend/Dockerfile.cpu
+          target: runtime
+          push: true
+          tags: ghcr.io/skripsi-nyengir/platform-api:sha-${{ github.sha }}
+          cache-from: type=gha,scope=main-runtime
+          cache-to: type=gha,mode=max,scope=main-runtime
+
+  build-worker-cpu:
+    needs: gate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: backend
+          file: backend/Dockerfile.cpu
+          target: worker
+          push: true
+          tags: ghcr.io/skripsi-nyengir/platform-worker-cpu:sha-${{ github.sha }}
+          cache-from: type=gha,scope=main-worker-cpu
+          cache-to: type=gha,mode=max,scope=main-worker-cpu
+
+  build-web:
+    needs: gate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          push: true
+          tags: ghcr.io/skripsi-nyengir/platform-web:sha-${{ github.sha }}
+          cache-from: type=gha,scope=main-web
+          cache-to: type=gha,mode=max,scope=main-web
+
+  manifest:
+    needs: [build-runtime, build-worker-cpu, build-web]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Create immutable deployment manifest
+        env:
+          COMMIT: ${{ github.sha }}
+          RUNTIME_DIGEST: ${{ needs.build-runtime.outputs.digest }}
+          WORKER_DIGEST: ${{ needs.build-worker-cpu.outputs.digest }}
+          WEB_DIGEST: ${{ needs.build-web.outputs.digest }}
+        run: |
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$RUNTIME_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$WORKER_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$WEB_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          jq -n \
+            --arg deployment "sha-$COMMIT" \
+            --arg commit "$COMMIT" \
+            --arg runtime "ghcr.io/skripsi-nyengir/platform-api@$RUNTIME_DIGEST" \
+            --arg worker "ghcr.io/skripsi-nyengir/platform-worker-cpu@$WORKER_DIGEST" \
+            --arg web "ghcr.io/skripsi-nyengir/platform-web@$WEB_DIGEST" \
+            '{schema: 2, deployment: $deployment, commit: $commit, runtime: $runtime, worker: $worker, web: $web}' \
+            > deployment-manifest.json
+          jq -e '
+            (keys | sort) == ["commit", "deployment", "runtime", "schema", "web", "worker"]
+            and .schema == 2
+            and (.deployment | test("^sha-[0-9a-f]{40}$"))
+            and (.commit | test("^[0-9a-f]{40}$"))
+            and (.runtime | test("^ghcr\\.io/skripsi-nyengir/platform-api@sha256:[0-9a-f]{64}$"))
+            and (.worker | test("^ghcr\\.io/skripsi-nyengir/platform-worker-cpu@sha256:[0-9a-f]{64}$"))
+            and (.web | test("^ghcr\\.io/skripsi-nyengir/platform-web@sha256:[0-9a-f]{64}$"))
+          ' deployment-manifest.json >/dev/null
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: deployment-manifest-${{ github.sha }}
+          path: deployment-manifest.json
+          retention-days: 7
+
+  release:
+    needs: [build-runtime, build-worker-cpu, build-web, manifest]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+      pull-requests: write
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@8b8fd2cc23b2e18957157a9d923d75aa0c6f6ad5 # v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          skip-github-pull-request: true
+      - name: Set up Buildx for immutable aliases
+        if: steps.release.outputs.release_created == 'true'
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Log in to GHCR for immutable aliases
+        if: steps.release.outputs.release_created == 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Alias built images and publish release manifest
+        if: steps.release.outputs.release_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE: ${{ steps.release.outputs.tag_name }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          RUNTIME_DIGEST: ${{ needs.build-runtime.outputs.digest }}
+          WORKER_DIGEST: ${{ needs.build-worker-cpu.outputs.digest }}
+          WEB_DIGEST: ${{ needs.build-web.outputs.digest }}
+        run: |
+          [[ "$RELEASE_SHA" == "$GITHUB_SHA" ]] || { echo "Release SHA $RELEASE_SHA does not match pushed SHA $GITHUB_SHA" >&2; exit 1; }
+          [[ "$RELEASE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          docker buildx imagetools create --tag "ghcr.io/skripsi-nyengir/platform-api:$RELEASE" "ghcr.io/skripsi-nyengir/platform-api@$RUNTIME_DIGEST"
+          docker buildx imagetools create --tag "ghcr.io/skripsi-nyengir/platform-worker-cpu:$RELEASE" "ghcr.io/skripsi-nyengir/platform-worker-cpu@$WORKER_DIGEST"
+          docker buildx imagetools create --tag "ghcr.io/skripsi-nyengir/platform-web:$RELEASE" "ghcr.io/skripsi-nyengir/platform-web@$WEB_DIGEST"
+          jq -n \
+            --arg release "$RELEASE" \
+            --arg commit "$GITHUB_SHA" \
+            --arg runtime "ghcr.io/skripsi-nyengir/platform-api@$RUNTIME_DIGEST" \
+            --arg worker "ghcr.io/skripsi-nyengir/platform-worker-cpu@$WORKER_DIGEST" \
+            --arg web "ghcr.io/skripsi-nyengir/platform-web@$WEB_DIGEST" \
+            '{schema: 1, release: $release, commit: $commit, runtime: $runtime, worker: $worker, web: $web}' \
+            > release-manifest.json
+          jq -e '.commit == env.GITHUB_SHA and (.commit | test("^[0-9a-f]{40}$"))' release-manifest.json >/dev/null
+          gh release upload "$RELEASE" release-manifest.json --clobber
+
+  deploy-production:
+    needs: manifest
+    runs-on: ubuntu-24.04
+    environment: production
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Evaluate production deployment gate
+        id: deployment-gate
+        env:
+          DEPLOY_ENABLED: ${{ vars.PRODUCTION_DEPLOY_ENABLED }}
+        run: |
+          if [[ "$DEPLOY_ENABLED" == true ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Production deployment is disabled"
+          fi
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: steps.deployment-gate.outputs.enabled == 'true'
+        with:
+          name: deployment-manifest-${{ github.sha }}
+      - name: Deploy current immutable manifest through forced command
+        if: steps.deployment-gate.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          DEPLOY_HOST: ${{ vars.PRODUCTION_HOST }}
+          DEPLOY_USER: ${{ vars.PRODUCTION_USER }}
+          KNOWN_HOSTS: ${{ vars.PRODUCTION_SSH_KNOWN_HOSTS }}
+        run: |
+          current_main=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [[ "$current_main" != "$GITHUB_SHA" ]]; then
+            echo "::notice title=Superseded deployment::Skipping $GITHUB_SHA because main is now $current_main"
+            exit 0
+          fi
+          install -m 0700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 0600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            "$DEPLOY_USER@$DEPLOY_HOST" deploy < deployment-manifest.json

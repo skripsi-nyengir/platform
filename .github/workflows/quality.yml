@@ -96,8 +96,10 @@ jobs:
         run: |
           . .github/ci-tools.lock
           "$(go env GOPATH)/bin/actionlint"
-          docker run --rm -v "$PWD:/repo:ro" -w /repo "koalaman/shellcheck:v$SHELLCHECK_VERSION" scripts/ci/*.sh scripts/deploy/anomaly-platform-deploy scripts/deploy/anomaly-deploy-force-command scripts/deploy/install-vps.sh scripts/deploy/configure-github.sh scripts/deploy/tests/*.sh
+          docker run --rm -v "$PWD:/repo:ro" -w /repo "koalaman/shellcheck:v$SHELLCHECK_VERSION" scripts/ci/*.sh scripts/ci/tests/*.sh scripts/deploy/anomaly-platform-deploy scripts/deploy/anomaly-deploy-force-command scripts/deploy/install-vps.sh scripts/deploy/configure-github.sh scripts/deploy/tests/*.sh
       - name: Render CPU, production CPU, and GPU Compose contracts
         run: scripts/ci/render-compose-contracts.sh
       - name: Exercise deployment state machine with fake dependencies
         run: scripts/deploy/tests/deploy_test.sh
+      - name: Exercise merged PR unit gate with fake GitHub CLI
+        run: scripts/ci/tests/verify-merged-pr-unit-gate_test.sh
