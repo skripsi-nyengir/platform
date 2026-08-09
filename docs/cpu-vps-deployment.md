@@ -166,13 +166,47 @@ ssh -i /secure/path/deploy-key anomaly-deploy@195.35.6.80 preflight
 
 Only after DNS A records, Traefik, `reverse_proxy`, `.env`, MQTT CA, GHCR login,
 and model artifacts are verified, change `PRODUCTION_DEPLOY_ENABLED` to `true`.
-Merge the Release Please PR for `v0.1.0` only after that activation. Conventional
-Commits drive later SemVer releases.
 
-Production never builds on the VPS. The workflow publishes exactly three CPU
-images, records their immutable digests in `release-manifest.json`, attaches it
-to the GitHub Release, and invokes `deploy` over SSH. The EDA profile and CUDA
-image remain outside the v1 production release.
+## CI and delivery behavior
+
+Pull requests targeting `main` run the pragmatic unit gate only:
+
+- backend pytest with TimescaleDB;
+- the CPU worker test image target;
+- frontend unit tests.
+
+Ruff, Pyright, the migration and seed smoke test, frontend lint, build,
+production-dist verification and Chromium end-to-end tests, Actionlint,
+ShellCheck, Compose contract rendering, the deployment state-machine harness,
+and the merged-PR gate harness are deferred. They run daily at 09:00 WIB and on
+manual dispatch, and never deploy.
+
+A push to `main` passes the delivery gate only when the pushed commit is
+associated with exactly one merged pull request targeting `main` and the latest
+PR unit-gate run for that pull request's exact head SHA completed successfully.
+The workflow also validates the downloaded unit-gate evidence against the pull
+request, head SHA, and workflow run. Direct pushes and stale, missing, failed, or
+cancelled evidence fail before any image is published.
+
+Each accepted merge builds and publishes exactly three images: API, CPU worker,
+and web. They are tagged with the commit SHA, and their immutable digests are
+recorded in the schema-2 `deployment-manifest.json` artifact before deployment
+through the existing `production` environment and forced SSH command. Production
+still builds nothing on the VPS; the EDA profile and CUDA image remain outside
+production delivery.
+
+`PRODUCTION_DEPLOY_ENABLED=false` skips the SSH deployment step. It does not
+disable the accepted merge's image publication, schema-2 manifest artifact, or
+release workflow behavior. Production operations share one concurrency group
+and never cancel an active operation. Immediately before SSH, automatic delivery
+checks the current `main` tip and skips a superseded SHA, allowing the newest
+queued revision to win.
+
+Release Please is not a deployment trigger. When an accepted merge creates a
+semantic release, the workflow gives the already-built SHA images SemVer aliases
+and attaches a backward-compatible schema-1 `release-manifest.json` to the GitHub
+Release. It neither rebuilds the images nor redeploys them. Conventional Commits
+continue to drive SemVer releases.
 
 For local development, the standalone CPU and GPU entrypoints remain:
 
@@ -187,19 +221,22 @@ Do not combine those two entrypoints. Production always uses
 
 ## Deployment and rollback behavior
 
-The root deployer validates the fixed manifest schema and GHCR namespace,
+The root deployer accepts only the exact schema-1 semantic release manifest or
+the exact schema-2 SHA deployment manifest. Both schemas require digest-pinned
+API, CPU worker, and web images from the approved GHCR namespace. The deployer
 acquires a non-blocking `flock`, pulls all three digests, and creates a verified
 custom-format database backup when a database already exists. Seven backups are
 retained. It then runs migration, seed, and model bootstrap before recreating
-API, worker, subscriber, and Nginx in place.
+API, worker, subscriber, notifier, and Nginx in place.
 
 Health, readiness, and telemetry are polled over HTTPS for at most 180 seconds.
 `failed` or any `retrying` state fails deployment; `degraded` is logged as a
-warning. A failed release restores the current last-known-good images without
-running an old migration. On the first release, where no previous image exists,
-the application services stop and diagnostics are retained. Manual operations
-are restricted to deploying a tagged release manifest or swapping to the
-previous last-known-good manifest.
+warning. A failed deployment restores the current last-known-good images without
+running an old migration. On the first deployment, where no previous image exists,
+the application services stop and diagnostics are retained. Automatic and
+manual rollback may cross manifest schema versions. Manual production operations
+remain restricted to deploying a tagged schema-1 release manifest or swapping
+to the previous last-known-good manifest with `rollback-last`.
 
 Migrations follow expand-contract. A release may add compatible schema, but it
 must not drop, rename, or change a contract still used by the rollback target.

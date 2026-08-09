@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 repository_root=$(CDPATH='' cd -- "$(dirname -- "$0")/../../.." && pwd)
 deploy_script=$repository_root/scripts/deploy/anomaly-platform-deploy
+force_command_script=$repository_root/scripts/deploy/anomaly-deploy-force-command
 test_root=$(mktemp -d)
 trap 'rm -rf "$test_root"' EXIT HUP INT TERM
 
@@ -15,6 +16,12 @@ make_manifest() {
   local release=$1 digit=$2
   printf '{"schema":1,"release":"%s","commit":"%040d","runtime":"ghcr.io/skripsi-nyengir/platform-api@sha256:%064d","worker":"ghcr.io/skripsi-nyengir/platform-worker-cpu@sha256:%064d","web":"ghcr.io/skripsi-nyengir/platform-web@sha256:%064d"}\n' \
     "$release" "$digit" "$digit" "$digit" "$digit"
+}
+
+make_schema_2_manifest() {
+  local digit=$1
+  printf '{"schema":2,"deployment":"sha-%040d","commit":"%040d","runtime":"ghcr.io/skripsi-nyengir/platform-api@sha256:%064d","worker":"ghcr.io/skripsi-nyengir/platform-worker-cpu@sha256:%064d","web":"ghcr.io/skripsi-nyengir/platform-web@sha256:%064d"}\n' \
+    "$digit" "$digit" "$digit" "$digit" "$digit"
 }
 
 setup_case() {
@@ -46,6 +53,7 @@ EOF
   cat >"$fake_bin/docker" <<'EOF'
 #!/usr/bin/env bash
 set -eu
+printf '%s\n' "$*" >>"$FAKE_DOCKER_CALL_FILE"
 args=" $* "
 if [[ $args == *" ps --filter label=traefik.enable=true "* ]]; then echo traefik; exit 0; fi
 if [[ $args == *" compose version "* || $args == *" network inspect reverse_proxy "* || $args == *" compose "*" config "* ]]; then exit 0; fi
@@ -74,6 +82,15 @@ if [[ $args == *" compose "*" stop "* ]]; then
   exit 0
 fi
 exit 0
+EOF
+  cat >"$fake_bin/sudo" <<'EOF'
+#!/usr/bin/env bash
+set -eu
+[[ ${1:-} == -n ]] || exit 64
+shift
+[[ ${1:-} == /usr/local/sbin/anomaly-platform-deploy ]] || exit 64
+shift
+exec "$REAL_DEPLOY_SCRIPT" "$@"
 EOF
   cat >"$fake_bin/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -112,7 +129,8 @@ EOF
   export ANOMALY_HEALTH_TIMEOUT=1 FAKE_START_COUNT_FILE="$case_dir/start-count"
   export FAKE_START_ARGS_FILE="$case_dir/start-args" FAKE_STOP_ARGS_FILE="$case_dir/stop-args"
   export FAKE_DB_VERIFY_FILE="$case_dir/db-verify" FAKE_MUTATION_FILE="$case_dir/mutations"
-  export FAKE_LOGIN_FILE="$case_dir/logins"
+  export FAKE_LOGIN_FILE="$case_dir/logins" FAKE_DOCKER_CALL_FILE="$case_dir/docker-calls"
+  export REAL_DEPLOY_SCRIPT="$deploy_script"
   unset FAKE_DB_EXISTS FAKE_DB_VERIFY_MODE FAKE_HEALTH_MODE
 }
 
@@ -120,11 +138,60 @@ run_deploy() {
   "$deploy_script" deploy
 }
 
+assert_schema_2_rejected() {
+  local name=$1 filter=$2
+  setup_case "$name"
+  make_schema_2_manifest 2 | jq "$filter" >"$case_dir/candidate.json"
+  make_manifest v9.0.0 9 >"$state_dir/manifests/current.json"
+  make_manifest v8.0.0 8 >"$state_dir/manifests/previous.json"
+  cp "$state_dir/manifests/current.json" "$case_dir/current-before.json"
+  cp "$state_dir/manifests/previous.json" "$case_dir/previous-before.json"
+  if run_deploy <"$case_dir/candidate.json" >"$case_dir/output" 2>&1; then
+    fail "$name manifest accepted"
+  fi
+  [[ ! -e $FAKE_DOCKER_CALL_FILE ]] || fail "$name manifest reached Docker"
+  cmp -s "$case_dir/current-before.json" "$state_dir/manifests/current.json" \
+    || fail "$name manifest changed current last-known-good state"
+  cmp -s "$case_dir/previous-before.json" "$state_dir/manifests/previous.json" \
+    || fail "$name manifest changed previous last-known-good state"
+}
+
 setup_case valid
 make_manifest v0.1.0 1 | run_deploy
 jq -e '.release == "v0.1.0"' "$state_dir/manifests/current.json" >/dev/null || fail "valid deploy"
+grep -q 'deployment complete: v0.1.0' "$state_dir/logs/deploy.log" \
+  || fail "schema 1 deployment did not log its semantic release"
 grep -Eq ' up -d .* api worker live-subscriber notifier nginx ' "$FAKE_START_ARGS_FILE" \
   || fail "application start did not include notifier"
+
+setup_case valid_schema_2
+make_schema_2_manifest 2 | run_deploy
+jq -e '.schema == 2 and .deployment == "sha-0000000000000000000000000000000000000002"' \
+  "$state_dir/manifests/current.json" >/dev/null || fail "schema 2 deploy was not stored as current"
+grep -q 'deployment complete: sha-0000000000000000000000000000000000000002' \
+  "$state_dir/logs/deploy.log" || fail "schema 2 deployment identifier was not logged"
+
+setup_case forced_command_schema_2
+make_schema_2_manifest 3 \
+  | SSH_ORIGINAL_COMMAND=deploy "$force_command_script"
+jq -e '.schema == 2 and .deployment == "sha-0000000000000000000000000000000000000003"' \
+  "$state_dir/manifests/current.json" >/dev/null \
+  || fail "forced-command wrapper did not preserve schema 2 manifest stdin"
+
+assert_schema_2_rejected mismatched_deployment \
+  '.deployment = "sha-0000000000000000000000000000000000000003"'
+assert_schema_2_rejected uppercase_commit \
+  '.commit = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" | .deployment = ("sha-" + .commit)'
+assert_schema_2_rejected short_commit \
+  '.commit = "abcd" | .deployment = ("sha-" + .commit)'
+assert_schema_2_rejected extra_key '.extra = true'
+assert_schema_2_rejected missing_key 'del(.web)'
+assert_schema_2_rejected mutable_image_tag \
+  '.runtime = "ghcr.io/skripsi-nyengir/platform-api:latest"'
+assert_schema_2_rejected wrong_repository \
+  '.worker = "ghcr.io/skripsi-nyengir/platform-worker@sha256:2222222222222222222222222222222222222222222222222222222222222222"'
+assert_schema_2_rejected unknown_schema '.schema = 3'
+assert_schema_2_rejected wrong_schema_type '.schema = "2"'
 
 setup_case failed_first_release_stops_notifier
 export FAKE_HEALTH_MODE=fail
@@ -179,6 +246,32 @@ export FAKE_HEALTH_MODE=fail-first
 if make_manifest v0.2.0 2 | run_deploy >/dev/null 2>&1; then fail "failed release reported success"; fi
 [[ $(cat "$case_dir/start-count") -ge 2 ]] || fail "automatic rollback did not restart"
 jq -e '.release == "v0.1.0"' "$state_dir/manifests/current.json" >/dev/null || fail "rollback changed current manifest"
+
+setup_case schema_2_automatic_rollback
+make_schema_2_manifest 1 >"$state_dir/manifests/current.json"
+export FAKE_HEALTH_MODE=fail-first
+if make_manifest v0.2.0 2 | run_deploy >/dev/null 2>&1; then fail "failed release reported success"; fi
+[[ $(cat "$case_dir/start-count") -ge 2 ]] || fail "schema 2 automatic rollback did not restart"
+jq -e '.schema == 2 and .deployment == "sha-0000000000000000000000000000000000000001"' \
+  "$state_dir/manifests/current.json" >/dev/null || fail "automatic rollback changed schema 2 current manifest"
+
+setup_case mixed_history_manual_rollback
+make_manifest v0.1.0 1 >"$state_dir/manifests/current.json"
+make_schema_2_manifest 2 >"$state_dir/manifests/previous.json"
+"$deploy_script" rollback-last
+jq -e '.schema == 2 and .deployment == "sha-0000000000000000000000000000000000000002"' \
+  "$state_dir/manifests/current.json" >/dev/null || fail "manual rollback did not activate schema 2"
+jq -e '.schema == 1 and .release == "v0.1.0"' "$state_dir/manifests/previous.json" >/dev/null \
+  || fail "manual rollback did not retain schema 1 as previous"
+grep -q 'rollback complete: sha-0000000000000000000000000000000000000002' \
+  "$state_dir/logs/deploy.log" || fail "schema 2 rollback identifier was not logged"
+"$deploy_script" rollback-last
+jq -e '.schema == 1 and .release == "v0.1.0"' "$state_dir/manifests/current.json" >/dev/null \
+  || fail "reverse manual rollback did not reactivate schema 1"
+jq -e '.schema == 2 and .deployment == "sha-0000000000000000000000000000000000000002"' \
+  "$state_dir/manifests/previous.json" >/dev/null || fail "reverse rollback did not retain schema 2 as previous"
+grep -q 'rollback complete: v0.1.0' "$state_dir/logs/deploy.log" \
+  || fail "schema 1 rollback identifier was not logged"
 
 setup_case rollback_failure
 make_manifest v0.1.0 1 >"$state_dir/manifests/current.json"
