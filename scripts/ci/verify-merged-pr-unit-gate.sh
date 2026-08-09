@@ -34,6 +34,7 @@ matching_prs=$(jq -ce --arg commit "$commit_sha" '
         and .merged_at != null
         and .base.ref == "main"
         and .merge_commit_sha == $commit
+        and .head.sha != $commit
       )
   ]
 ' <<<"$pulls_json") || die 'associated pull request response is not valid JSON'

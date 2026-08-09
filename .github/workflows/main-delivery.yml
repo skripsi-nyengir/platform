@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: main-delivery
+  cancel-in-progress: false
+
 jobs:
   gate:
     runs-on: ubuntu-24.04
@@ -162,33 +166,42 @@ jobs:
       packages: write
       pull-requests: write
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
       - id: release
         uses: googleapis/release-please-action@8b8fd2cc23b2e18957157a9d923d75aa0c6f6ad5 # v4
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           skip-github-pull-request: true
+      - name: Resolve release reconciliation target
+        id: reconcile
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
+          RELEASE_TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: scripts/ci/resolve-release-reconciliation.sh
       - name: Set up Buildx for immutable aliases
-        if: steps.release.outputs.release_created == 'true'
+        if: steps.reconcile.outputs.release_tag != ''
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Log in to GHCR for immutable aliases
-        if: steps.release.outputs.release_created == 'true'
+        if: steps.reconcile.outputs.release_tag != ''
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Alias built images and publish release manifest
-        if: steps.release.outputs.release_created == 'true'
+        if: steps.reconcile.outputs.release_tag != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE: ${{ steps.release.outputs.tag_name }}
-          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          RELEASE: ${{ steps.reconcile.outputs.release_tag }}
           RUNTIME_DIGEST: ${{ needs.build-runtime.outputs.digest }}
           WORKER_DIGEST: ${{ needs.build-worker-cpu.outputs.digest }}
           WEB_DIGEST: ${{ needs.build-web.outputs.digest }}
         run: |
-          [[ "$RELEASE_SHA" == "$GITHUB_SHA" ]] || { echo "Release SHA $RELEASE_SHA does not match pushed SHA $GITHUB_SHA" >&2; exit 1; }
           [[ "$RELEASE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           docker buildx imagetools create --tag "ghcr.io/skripsi-nyengir/platform-api:$RELEASE" "ghcr.io/skripsi-nyengir/platform-api@$RUNTIME_DIGEST"
           docker buildx imagetools create --tag "ghcr.io/skripsi-nyengir/platform-worker-cpu:$RELEASE" "ghcr.io/skripsi-nyengir/platform-worker-cpu@$WORKER_DIGEST"

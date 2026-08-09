@@ -36,9 +36,12 @@ if [[ $1 == api && $2 == "repos/example/project/commits/$commit/pulls" ]]; then
     no_pr) printf '[]\n' ;;
     unmerged) jq -nc --arg commit "$commit" --arg head "$head_sha" '[{number:42,state:"closed",merged_at:null,base:{ref:"main"},merge_commit_sha:$commit,head:{sha:$head}}]' ;;
     wrong_base) jq -nc --arg commit "$commit" --arg head "$head_sha" '[{number:42,state:"closed",merged_at:"2026-08-09T00:00:00Z",base:{ref:"dev"},merge_commit_sha:$commit,head:{sha:$head}}]' ;;
+    direct_pushed) jq -nc --arg commit "$commit" '[{number:42,state:"closed",merged_at:"2026-08-09T00:00:00Z",base:{ref:"main"},merge_commit_sha:$commit,head:{sha:$commit}}]' ;;
     ambiguous) jq -nc --arg commit "$commit" --arg head "$head_sha" '[{number:42,state:"closed",merged_at:"2026-08-09T00:00:00Z",base:{ref:"main"},merge_commit_sha:$commit,head:{sha:$head}},{number:43,state:"closed",merged_at:"2026-08-09T00:01:00Z",base:{ref:"main"},merge_commit_sha:$commit,head:{sha:"cccccccccccccccccccccccccccccccccccccccc"}}]' ;;
     *) jq -nc --arg commit "$commit" --arg head "$head_sha" '[{number:42,state:"closed",merged_at:"2026-08-09T00:00:00Z",base:{ref:"main"},merge_commit_sha:$commit,head:{sha:$head}}]' ;;
   esac
+elif [[ $1 == api && $2 == "repos/example/project/actions/workflows/ci-release-deploy.yml/runs?event=pull_request&head_sha=$commit&per_page=100" && $TEST_CASE == direct_pushed ]]; then
+  jq -nc --arg commit "$commit" '{workflow_runs:[{id:123,event:"pull_request",head_sha:$commit,path:".github/workflows/ci-release-deploy.yml",status:"completed",conclusion:"success",created_at:"2026-08-09T00:00:00Z"}]}'
 elif [[ $1 == api && $2 == "repos/example/project/actions/workflows/ci-release-deploy.yml/runs?event=pull_request&head_sha=$head_sha&per_page=100" ]]; then
   case "$TEST_CASE" in
     no_run) printf '{"workflow_runs":[]}\n' ;;
@@ -84,6 +87,7 @@ elif [[ $1 == run && $2 == download ]]; then
     extra_key) jq -n --arg head "$head_sha" '{schema:1,pr_number:42,head_sha:$head,workflow_run_id:123,result:"success",extra:true}' > "$destination/pr-unit-gate.json" ;;
     missing_key) jq -n --arg head "$head_sha" '{schema:1,pr_number:42,head_sha:$head,result:"success"}' > "$destination/pr-unit-gate.json" ;;
     wrong_types) jq -n --arg head "$head_sha" '{schema:"1",pr_number:"42",head_sha:$head,workflow_run_id:"123",result:"success"}' > "$destination/pr-unit-gate.json" ;;
+    direct_pushed) jq -n --arg head "$commit" '{schema:1,pr_number:42,head_sha:$head,workflow_run_id:123,result:"success"}' > "$destination/pr-unit-gate.json" ;;
     *) jq -n --arg head "$head_sha" '{schema:1,pr_number:42,head_sha:$head,workflow_run_id:123,result:"success"}' > "$destination/pr-unit-gate.json" ;;
   esac
 else
@@ -141,6 +145,7 @@ run_case valid success
 run_case no_pr failure
 run_case unmerged failure
 run_case wrong_base failure
+run_case direct_pushed failure
 run_case ambiguous failure
 run_case no_run failure
 run_case active_run failure

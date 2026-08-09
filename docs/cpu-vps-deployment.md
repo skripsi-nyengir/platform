@@ -231,8 +231,8 @@ API, worker, subscriber, notifier, and Nginx in place.
 
 Health, readiness, and telemetry are polled over HTTPS for at most 180 seconds.
 `failed` or any `retrying` state fails deployment; `degraded` is logged as a
-warning. A failed release restores the current last-known-good images without
-running an old migration. On the first release, where no previous image exists,
+warning. A failed deployment restores the current last-known-good images without
+running an old migration. On the first deployment, where no previous image exists,
 the application services stop and diagnostics are retained. Automatic and
 manual rollback may cross manifest schema versions. Manual production operations
 remain restricted to deploying a tagged schema-1 release manifest or swapping

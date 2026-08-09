@@ -103,3 +103,7 @@ jobs:
         run: scripts/deploy/tests/deploy_test.sh
       - name: Exercise merged PR unit gate with fake GitHub CLI
         run: scripts/ci/tests/verify-merged-pr-unit-gate_test.sh
+      - name: Exercise release reconciliation with fake GitHub CLI
+        run: scripts/ci/tests/resolve-release-reconciliation_test.sh
+      - name: Assert main delivery concurrency and release contracts
+        run: python scripts/ci/tests/main-delivery-workflow-contract_test.py
