@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from typing import Any, cast
 from unittest.mock import patch
@@ -22,7 +22,7 @@ from anomaly_backend.sql.notifications import (
     score_points,
     telemetry_points,
 )
-from anomaly_worker.notifier_service import compose_comment
+from anomaly_worker.notifier_service import compose_comment, render
 
 # The live lineage an episode needs (device, corpus, model pair, activation, alert,
 # points) is already assembled by the live API fixture. Reusing it keeps this module
@@ -357,6 +357,8 @@ async def test_episode_context_and_chart_data_come_back_together(
     assert context.device_id == "b02f3872-ruang-produksi"
     assert context.max_severity == "critical"
     assert context.threshold > 0
+    assert context.latest_point_score_ts is not None
+    assert context.latest_point_score_ts >= context.started_score_ts
 
     wide_start = context.started_score_ts.replace(year=2000)
     wide_end = context.started_score_ts.replace(year=2100)
@@ -373,6 +375,43 @@ async def test_episode_context_and_chart_data_come_back_together(
         window_end=wide_end,
     )
     assert scores and telemetry
+
+
+@pytest.mark.anyio
+async def test_open_episode_render_uses_event_time_when_host_clock_is_behind(
+    episode: tuple[AsyncConnection, UUID, list[UUID]],
+) -> None:
+    connection, episode_id, _ = episode
+    context = await episode_context(connection, episode_id)
+    assert context is not None
+    assert context.ended_score_ts is None
+
+    class HostClockBehindEventTime:
+        @classmethod
+        def now(cls, timezone_info=None):
+            event_time = context.started_score_ts - timedelta(hours=7)
+            return event_time.replace(tzinfo=timezone_info)
+
+    notification = PendingNotification(
+        notification_id=UUID(int=1),
+        live_episode_id=episode_id,
+        kind="opened",
+        attempts=1,
+    )
+    with patch(
+        "anomaly_worker.notifier_service.datetime", HostClockBehindEventTime
+    ):
+        rendered = await render(
+            connection.engine,
+            notification,
+            settings=Settings.from_environ(),
+        )
+
+    assert rendered is not None
+    assert [attachment.filename for attachment in rendered.attachments] == [
+        "reconstruction-error.png",
+        "telemetry.png",
+    ]
 
 
 @pytest.mark.anyio
@@ -393,6 +432,7 @@ def test_the_message_states_values_without_diagnosing() -> None:
         close_reason="normal",
         started_score_ts=datetime(2026, 8, 8, 1, 0, 0),
         ended_score_ts=datetime(2026, 8, 8, 1, 5, 0),
+        latest_point_score_ts=datetime(2026, 8, 8, 1, 5, 0),
         peak_score=5.5e-4,
         latest_score=1.2e-4,
         threshold=2.657e-4,
@@ -421,6 +461,7 @@ def test_an_open_episode_message_says_so_instead_of_inventing_an_end() -> None:
         close_reason=None,
         started_score_ts=datetime(2026, 8, 8, 1, 0, 0),
         ended_score_ts=None,
+        latest_point_score_ts=datetime(2026, 8, 8, 1, 4, 0),
         peak_score=5.5e-4,
         latest_score=5.5e-4,
         threshold=2.657e-4,

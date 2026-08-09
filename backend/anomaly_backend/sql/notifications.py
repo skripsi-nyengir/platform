@@ -39,6 +39,7 @@ class EpisodeContext:
     close_reason: str | None
     started_score_ts: datetime
     ended_score_ts: datetime | None
+    latest_point_score_ts: datetime | None
     peak_score: float
     latest_score: float
     threshold: float
@@ -237,6 +238,7 @@ async def episode_context(
                     episodes.c.close_reason,
                     episodes.c.started_score_ts,
                     episodes.c.ended_score_ts,
+                    func.max(points.c.score_ts).label("latest_point_score_ts"),
                     alerts.c.peak_score,
                     alerts.c.latest_score,
                     alerts.c.threshold,
@@ -286,6 +288,7 @@ async def episode_context(
         close_reason=row["close_reason"],
         started_score_ts=row["started_score_ts"],
         ended_score_ts=row["ended_score_ts"],
+        latest_point_score_ts=row["latest_point_score_ts"],
         peak_score=row["peak_score"],
         latest_score=row["latest_score"],
         threshold=row["threshold"],

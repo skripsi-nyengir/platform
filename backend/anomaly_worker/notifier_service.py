@@ -92,7 +92,9 @@ async def render(
         context = await episode_context(connection, notification.live_episode_id)
         if context is None:
             return None
-        fallback_end = datetime.now(timezone.utc).replace(tzinfo=None)
+        fallback_end = context.latest_point_score_ts
+        if fallback_end is None:
+            fallback_end = datetime.now(timezone.utc).replace(tzinfo=None)
         window_start, window_end = chart_window(
             context.started_score_ts,
             context.ended_score_ts,
