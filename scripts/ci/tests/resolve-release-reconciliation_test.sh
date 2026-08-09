@@ -37,7 +37,7 @@ if [[ $1 == api && $2 == repos/example/project/releases/tags/v1.2.3 && $3 == --j
 elif [[ $1 == api && $2 == repos/example/project/commits/v1.2.3 && $3 == --jq && $4 == .sha ]]; then
   case "$TEST_CASE" in
     rerun_exact) printf '%s\n' "$commit" ;;
-    later_push) printf '%s\n' "$other_commit" ;;
+    later_push|empty_release_created) printf '%s\n' "$other_commit" ;;
     *) exit 92 ;;
   esac
 else
@@ -103,6 +103,7 @@ run_case() {
 run_case new_release true success v1.2.3 v1.2.3 "$commit"
 run_case rerun_exact false success v1.2.3
 run_case later_push false success ''
+run_case empty_release_created '' success ''
 run_case missing_release false success ''
 run_case api_error false failure
 run_case malformed_version false failure
