@@ -35,14 +35,27 @@ validate_manifest() {
   local manifest=$1
   jq -e '
     type == "object" and
-    (keys | sort) == ["commit", "release", "runtime", "schema", "web", "worker"] and
-    .schema == 1 and
-    (.release | test("^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$")) and
-    (.commit | test("^[0-9a-f]{40}$")) and
-    (.runtime | test("^ghcr\\.io/skripsi-nyengir/platform-api@sha256:[0-9a-f]{64}$")) and
-    (.worker | test("^ghcr\\.io/skripsi-nyengir/platform-worker-cpu@sha256:[0-9a-f]{64}$")) and
-    (.web | test("^ghcr\\.io/skripsi-nyengir/platform-web@sha256:[0-9a-f]{64}$"))
+    (
+      (
+        .schema == 1 and
+        (keys | sort) == ["commit", "release", "runtime", "schema", "web", "worker"] and
+        (.release | strings | test("^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))
+      ) or
+      (
+        .schema == 2 and
+        (keys | sort) == ["commit", "deployment", "runtime", "schema", "web", "worker"] and
+        (.deployment | strings) == ("sha-" + (.commit | strings))
+      )
+    ) and
+    (.commit | strings | test("^[0-9a-f]{40}$")) and
+    (.runtime | strings | test("^ghcr\\.io/skripsi-nyengir/platform-api@sha256:[0-9a-f]{64}$")) and
+    (.worker | strings | test("^ghcr\\.io/skripsi-nyengir/platform-worker-cpu@sha256:[0-9a-f]{64}$")) and
+    (.web | strings | test("^ghcr\\.io/skripsi-nyengir/platform-web@sha256:[0-9a-f]{64}$"))
   ' "$manifest" >/dev/null
+}
+
+manifest_identifier() {
+  jq -r 'if .schema == 1 then .release elif .schema == 2 then .deployment else empty end' "$1"
 }
 
 load_manifest_images() {
@@ -223,7 +236,7 @@ deploy() {
     cp -- "$current_manifest" "$previous_manifest"
   fi
   cp -- "$incoming" "$current_manifest"
-  log "deployment complete: $(jq -r '.release' "$current_manifest")"
+  log "deployment complete: $(manifest_identifier "$current_manifest")"
 }
 
 rollback_last() {
@@ -239,7 +252,7 @@ rollback_last() {
   cp -- "$previous_manifest" "$current_manifest"
   cp -- "$old_current" "$previous_manifest"
   rm -f "$old_current"
-  log "rollback complete: $(jq -r '.release' "$current_manifest")"
+  log "rollback complete: $(manifest_identifier "$current_manifest")"
 }
 
 exec 9>"$lock_file"
